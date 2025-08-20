@@ -56,7 +56,7 @@ func (m *Mapper) GetUserAccess(userGroups []string) (*AccessInfo, error) {
 	}
 
 	uniqueTenants := removeDuplicates(allTenants)
-	
+
 	return &AccessInfo{
 		Tenants:  uniqueTenants,
 		ReadOnly: readOnly,
@@ -77,6 +77,10 @@ func (m *Mapper) CanAccessTenant(userGroups []string, tenantID string) (bool, er
 }
 
 func (m *Mapper) FilterTenantsInQuery(userGroups []string, query string) (string, error) {
+	if strings.TrimSpace(query) == "" {
+		return "", fmt.Errorf("empty query provided")
+	}
+
 	access, err := m.GetUserAccess(userGroups)
 	if err != nil {
 		return "", fmt.Errorf("failed to get user access: %w", err)
@@ -99,14 +103,18 @@ func addTenantFilter(query string, allowedTenants []string) string {
 	}
 
 	tenantFilter := buildTenantRegex(allowedTenants)
-	
+
+	// Build VictoriaMetrics tenant filter
+	// For now, we only use vm_account_id. vm_project_id support can be added later if needed.
+	vmFilter := fmt.Sprintf("vm_account_id=~\"%s\"", tenantFilter)
+
 	if strings.Contains(query, "{") {
-		return strings.Replace(query, "{", fmt.Sprintf("{tenant_id=~\"%s\",", tenantFilter), 1)
+		return strings.Replace(query, "{", fmt.Sprintf("{%s,", vmFilter), 1)
 	}
 
 	metricNames := extractMetricNames(query)
 	for _, metric := range metricNames {
-		replacement := fmt.Sprintf("%s{tenant_id=~\"%s\"}", metric, tenantFilter)
+		replacement := fmt.Sprintf("%s{%s}", metric, vmFilter)
 		query = strings.Replace(query, metric, replacement, -1)
 	}
 
@@ -121,16 +129,21 @@ func buildTenantRegex(tenants []string) string {
 }
 
 func extractMetricNames(query string) []string {
-	words := strings.Fields(query)
 	var metrics []string
-	
+
+	// Simple regex to find metric names in PromQL queries
+	// This looks for words that could be metric names, excluding operators and functions
+	words := strings.FieldsFunc(query, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\n' || r == '(' || r == ')' || r == '[' || r == ']' || r == '{' || r == '}' || r == ',' || r == '+' || r == '-' || r == '*' || r == '/' || r == '%'
+	})
+
 	for _, word := range words {
 		word = strings.TrimSpace(word)
 		if isMetricName(word) && !contains(metrics, word) {
 			metrics = append(metrics, word)
 		}
 	}
-	
+
 	return metrics
 }
 
@@ -148,12 +161,12 @@ func isMetricName(word string) bool {
 	}
 
 	reservedWords := []string{
-		"and", "or", "unless", "by", "without", "on", "ignoring", 
+		"and", "or", "unless", "by", "without", "on", "ignoring",
 		"group_left", "group_right", "offset", "bool",
 		"sum", "min", "max", "avg", "count", "stddev", "stdvar",
 		"rate", "irate", "increase", "delta", "idelta",
 	}
-	
+
 	return !contains(reservedWords, strings.ToLower(word))
 }
 
@@ -171,15 +184,19 @@ func contains(slice []string, item string) bool {
 }
 
 func removeDuplicates(slice []string) []string {
+	if len(slice) == 0 {
+		return []string{}
+	}
+
 	keys := make(map[string]bool)
 	var result []string
-	
+
 	for _, item := range slice {
 		if !keys[item] {
 			keys[item] = true
 			result = append(result, item)
 		}
 	}
-	
+
 	return result
 }

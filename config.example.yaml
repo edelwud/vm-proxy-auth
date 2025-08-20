@@ -27,7 +27,7 @@ auth:
 
 tenant_mappings:
   - groups: ["developers", "platform-admin"]
-    tenants: ["*"] # Access to all tenants
+    tenants: ["1000"] # Access to all tenants
     read_only: false
 
   - groups: ["team-alpha", "dev-alpha"]

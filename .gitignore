@@ -211,3 +211,13 @@ coverage/
 
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
+
+# Gateway binary
+gateway
+prometheus-oauth-gateway
+
+# Test files
+/tmp/test*
+
+# Backup test files  
+*.go.bak

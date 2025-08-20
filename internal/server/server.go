@@ -53,12 +53,13 @@ func New(cfg *config.Config, logger *logrus.Logger) (*Server, error) {
 		RetryDelay:   cfg.Upstream.RetryDelay,
 		TenantHeader: cfg.Upstream.TenantHeader,
 	}
-	proxyHandler, err := proxy.New(proxyConfig, logger)
+	proxyHandler, err := proxy.NewWithTenantMapper(proxyConfig, logger, tenantMapper)
 	if err != nil {
 		return nil, err
 	}
 
 	handlers := NewHandlers(proxyHandler, tenantMapper, logger)
+	universalHandler := NewUniversalHandler(proxyHandler, tenantMapper, logger)
 
 	authMiddleware := middleware.NewAuthMiddleware(jwtVerifier, tenantMapper, cfg.Auth.UserGroupsClaim, logger)
 	metricsMiddleware := middleware.NewMetricsMiddleware()
@@ -73,12 +74,13 @@ func New(cfg *config.Config, logger *logrus.Logger) (*Server, error) {
 		router.Handle(cfg.Metrics.Path, promhttp.Handler()).Methods("GET")
 	}
 
-	apiRouter := router.PathPrefix("/").Subrouter()
-	apiRouter.Use(loggingMiddleware.LogRequests)
-	apiRouter.Use(metricsMiddleware.RecordMetrics)
-	apiRouter.Use(authMiddleware.Authenticate)
-
-	apiRouter.PathPrefix("/").HandlerFunc(handlers.PrometheusProxy)
+	// Setup universal VictoriaMetrics proxying
+	server := &Server{
+		config:   cfg,
+		handlers: handlers,
+		logger:   logger,
+	}
+	server.setupUniversalProxying(router, universalHandler, authMiddleware, metricsMiddleware, loggingMiddleware)
 
 	httpServer := &http.Server{
 		Addr:         cfg.Server.Address,
@@ -94,6 +96,27 @@ func New(cfg *config.Config, logger *logrus.Logger) (*Server, error) {
 		handlers: handlers,
 		logger:   logger,
 	}, nil
+}
+
+// setupUniversalProxying configures universal proxying for all VictoriaMetrics requests
+func (s *Server) setupUniversalProxying(
+	router *mux.Router,
+	universalHandler *UniversalHandler,
+	authMiddleware *middleware.AuthMiddleware,
+	metricsMiddleware *middleware.MetricsMiddleware,
+	loggingMiddleware *middleware.LoggingMiddleware,
+) {
+	// Create authenticated subrouter for all API endpoints
+	apiRouter := router.PathPrefix("/").Subrouter()
+	apiRouter.Use(loggingMiddleware.LogRequests)
+	apiRouter.Use(metricsMiddleware.RecordMetrics)
+	apiRouter.Use(authMiddleware.Authenticate)
+
+	// Universal handler for all VictoriaMetrics requests
+	// This catches all requests and handles them intelligently
+	apiRouter.PathPrefix("/").HandlerFunc(universalHandler.HandleRequest)
+
+	s.logger.Info("Configured universal VictoriaMetrics proxying - all requests will be proxied through intelligent detection")
 }
 
 func (s *Server) Start() error {

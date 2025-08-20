@@ -148,6 +148,12 @@ auth:
 				if got.Auth.JWKSURL != tt.want.Auth.JWKSURL {
 					t.Errorf("Auth.JWKSURL = %v, want %v", got.Auth.JWKSURL, tt.want.Auth.JWKSURL)
 				}
+				if got.Auth.RequiredIssuer != tt.want.Auth.RequiredIssuer {
+					t.Errorf("Auth.RequiredIssuer = %v, want %v", got.Auth.RequiredIssuer, tt.want.Auth.RequiredIssuer)
+				}
+				if got.Auth.UserGroupsClaim != tt.want.Auth.UserGroupsClaim {
+					t.Errorf("Auth.UserGroupsClaim = %v, want %v", got.Auth.UserGroupsClaim, tt.want.Auth.UserGroupsClaim)
+				}
 				if got.Logging.Level != tt.want.Logging.Level {
 					t.Errorf("Logging.Level = %v, want %v", got.Logging.Level, tt.want.Logging.Level)
 				}

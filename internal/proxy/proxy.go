@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/finlego/prometheus-oauth-gateway/pkg/tenant"
 	"github.com/sirupsen/logrus"
 )
 
@@ -22,13 +23,19 @@ type Config struct {
 }
 
 type Proxy struct {
-	config      *Config
-	client      *http.Client
-	upstreamURL *url.URL
-	logger      *logrus.Logger
+	config         *Config
+	client         *http.Client
+	upstreamURL    *url.URL
+	logger         *logrus.Logger
+	writeProcessor *WriteProcessor
+	tenantMapper   *tenant.Mapper
 }
 
 func New(config *Config, logger *logrus.Logger) (*Proxy, error) {
+	return NewWithTenantMapper(config, logger, nil)
+}
+
+func NewWithTenantMapper(config *Config, logger *logrus.Logger, tenantMapper *tenant.Mapper) (*Proxy, error) {
 	upstreamURL, err := url.Parse(config.UpstreamURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid upstream URL: %w", err)
@@ -43,11 +50,15 @@ func New(config *Config, logger *logrus.Logger) (*Proxy, error) {
 		},
 	}
 
+	writeProcessor := NewWriteProcessor(logger, "vm_account_id")
+
 	return &Proxy{
-		config:      config,
-		client:      client,
-		upstreamURL: upstreamURL,
-		logger:      logger,
+		config:         config,
+		client:         client,
+		upstreamURL:    upstreamURL,
+		logger:         logger,
+		writeProcessor: writeProcessor,
+		tenantMapper:   tenantMapper,
 	}, nil
 }
 
@@ -57,12 +68,18 @@ type ProxyRequest struct {
 	AllowedTenants  []string
 	UserID          string
 	ReadOnly        bool
+	TargetTenant    string // For write operations
+	UserGroups      []string // For tenant filtering
 }
 
 func (p *Proxy) ForwardRequest(ctx context.Context, proxyReq *ProxyRequest) (*http.Response, error) {
 	targetURL := *p.upstreamURL
-	targetURL.Path = targetURL.Path + proxyReq.OriginalRequest.URL.Path
-	targetURL.RawQuery = targetURL.RawQuery + proxyReq.OriginalRequest.URL.RawQuery
+	targetURL.Path = strings.TrimSuffix(targetURL.Path, "/") + proxyReq.OriginalRequest.URL.Path
+	if targetURL.RawQuery != "" && proxyReq.OriginalRequest.URL.RawQuery != "" {
+		targetURL.RawQuery = targetURL.RawQuery + "&" + proxyReq.OriginalRequest.URL.RawQuery
+	} else if proxyReq.OriginalRequest.URL.RawQuery != "" {
+		targetURL.RawQuery = proxyReq.OriginalRequest.URL.RawQuery
+	}
 
 	if proxyReq.ModifiedQuery != "" {
 		queryValues := targetURL.Query()
@@ -78,16 +95,59 @@ func (p *Proxy) ForwardRequest(ctx context.Context, proxyReq *ProxyRequest) (*ht
 		}
 		proxyReq.OriginalRequest.Body.Close()
 
-		if strings.Contains(proxyReq.OriginalRequest.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+		// Handle different content types
+		contentType := proxyReq.OriginalRequest.Header.Get("Content-Type")
+
+		if strings.Contains(contentType, "application/x-www-form-urlencoded") {
 			bodyStr := string(bodyBytes)
+			
+			// If we have a tenant mapper and user groups, try to filter the query from form data
+			if p.tenantMapper != nil && len(proxyReq.UserGroups) > 0 {
+				formValues, err := url.ParseQuery(bodyStr)
+				if err == nil {
+					if originalQuery := formValues.Get("query"); originalQuery != "" && proxyReq.ModifiedQuery == "" {
+						// Apply tenant filtering if no modified query was provided
+						if filteredQuery, err := p.tenantMapper.FilterTenantsInQuery(proxyReq.UserGroups, originalQuery); err == nil {
+							p.logger.WithFields(logrus.Fields{
+								"user_id": proxyReq.UserID,
+								"original_query": originalQuery,
+								"filtered_query": filteredQuery,
+								"source": "post_form_data",
+							}).Debug("Applied tenant filtering to POST query")
+							bodyStr = modifyFormQuery(bodyStr, filteredQuery)
+						} else {
+							p.logger.WithError(err).WithFields(logrus.Fields{
+								"user_id": proxyReq.UserID,
+								"query": originalQuery,
+							}).Warn("Failed to filter query from POST form data")
+						}
+					}
+				}
+			}
+			
 			if proxyReq.ModifiedQuery != "" {
 				bodyStr = modifyFormQuery(bodyStr, proxyReq.ModifiedQuery)
 			}
 			bodyReader = strings.NewReader(bodyStr)
+		} else if p.isWriteEndpoint(proxyReq.OriginalRequest.URL.Path) {
+			// Handle write operations with tenant injection
+			processedData, err := p.processWriteData(bodyBytes, proxyReq, contentType)
+			if err != nil {
+				return nil, fmt.Errorf("failed to process write data: %w", err)
+			}
+			bodyReader = bytes.NewReader(processedData)
 		} else {
 			bodyReader = bytes.NewReader(bodyBytes)
 		}
 	}
+
+	p.logger.WithFields(logrus.Fields{
+		"target_url":     targetURL.String(),
+		"original_query": proxyReq.OriginalRequest.URL.RawQuery,
+		"modified_query": proxyReq.ModifiedQuery != "",
+		"method":         proxyReq.OriginalRequest.Method,
+		"path":           proxyReq.OriginalRequest.URL.Path,
+	}).Debug("Forwarding request to upstream")
 
 	req, err := http.NewRequestWithContext(ctx, proxyReq.OriginalRequest.Method, targetURL.String(), bodyReader)
 	if err != nil {
@@ -177,4 +237,52 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// isWriteEndpoint checks if the endpoint is a write endpoint
+func (p *Proxy) isWriteEndpoint(path string) bool {
+	writeEndpoints := []string{
+		"/api/v1/write",
+		"/api/v1/import",
+		"/insert/",
+	}
+
+	for _, endpoint := range writeEndpoints {
+		if strings.HasPrefix(path, endpoint) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// processWriteData handles tenant injection for write operations
+func (p *Proxy) processWriteData(data []byte, proxyReq *ProxyRequest, contentType string) ([]byte, error) {
+	// Determine target tenant for write operation
+	targetTenant := proxyReq.TargetTenant
+
+	// If no specific tenant is set, use the first allowed tenant
+	// (assuming single-tenant write for simplicity)
+	if targetTenant == "" && len(proxyReq.AllowedTenants) > 0 {
+		if len(proxyReq.AllowedTenants) == 1 || contains(proxyReq.AllowedTenants, "*") {
+			targetTenant = proxyReq.AllowedTenants[0]
+		} else {
+			// Multiple tenants - this should be handled at handler level
+			p.logger.Warn("Write operation without specified tenant - using first allowed")
+			targetTenant = proxyReq.AllowedTenants[0]
+		}
+	}
+
+	// Detect data format
+	format := p.writeProcessor.DetectWriteFormat(data, contentType)
+
+	p.logger.WithFields(logrus.Fields{
+		"user_id":       proxyReq.UserID,
+		"target_tenant": targetTenant,
+		"format":        format,
+		"path":          proxyReq.OriginalRequest.URL.Path,
+	}).Debug("Processing write data")
+
+	// Process the data with tenant injection
+	return p.writeProcessor.ProcessWriteData(data, targetTenant, format)
 }

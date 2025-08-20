@@ -6,8 +6,11 @@ A secure authentication and authorization gateway for Prometheus/VictoriaMetrics
 
 - **JWT Authentication**: Support for JWKS and secret-based JWT token verification
 - **Multi-tenancy**: Automatic tenant isolation with query filtering
-- **Role-based Access Control**: Group-based tenant access management
+- **Role-based Access Control**: Group-based tenant access management  
 - **Query Modification**: Automatic injection of tenant filters into Prometheus queries
+- **Write Operations**: Automatic tenant injection for write operations (Prometheus, CSV formats)
+- **Comprehensive API Support**: Full VictoriaMetrics API proxying including admin endpoints
+- **Admin Access Control**: Fine-grained permissions for administrative operations
 - **Grafana Integration**: Seamless integration with Grafana's "Forward OAuth Identity" feature
 - **Metrics & Monitoring**: Built-in Prometheus metrics and comprehensive logging
 - **High Availability**: Retry mechanisms, health checks, and graceful shutdown
@@ -198,6 +201,82 @@ up
 Automatically transformed to:
 ```promql
 up{tenant_id=~"alpha|alpha-dev|alpha-staging"}
+```
+
+## 🔗 Supported VictoriaMetrics Endpoints
+
+### Read Endpoints (with tenant filtering)
+- `/api/v1/query` - PromQL queries
+- `/api/v1/query_range` - Range queries  
+- `/api/v1/query_exemplars` - Exemplar queries
+- `/api/v1/series` - Series metadata
+- `/api/v1/labels` - Label names
+- `/api/v1/label/{name}/values` - Label values
+- `/api/v1/metadata` - Metric metadata
+- `/select/{tenant_id}/prometheus/api/v1/*` - Multi-tenant endpoints
+
+### Write Endpoints (with tenant injection)
+- `/api/v1/write` - Remote write protocol
+- `/api/v1/import` - Generic import
+- `/api/v1/import/csv` - CSV format import
+- `/api/v1/import/prometheus` - Prometheus exposition format
+- `/api/v1/import/native` - VictoriaMetrics native format
+- `/insert/{tenant_id}/*` - Multi-tenant write endpoints
+
+### Admin Endpoints (require admin permissions)
+- `/api/v1/admin/tsdb/delete_series` - Delete series
+- `/api/v1/admin/tsdb/clean_tombstones` - Clean tombstones
+- `/api/v1/admin/tsdb/snapshot` - Create snapshots
+- `/api/v1/status/tsdb` - TSDB status
+- `/api/v1/status/flags` - Runtime flags
+- `/api/v1/status/config` - Configuration
+
+### Status Endpoints (public access)
+- `/health` - Gateway health check
+- `/readiness` - Gateway readiness
+- `/metrics` - Prometheus metrics
+- `/api/v1/status/buildinfo` - Build information
+- `/api/v1/status/runtimeinfo` - Runtime information
+
+## 💾 Write Operations & Tenant Injection
+
+The gateway automatically injects tenant labels into write operations:
+
+### Prometheus Exposition Format
+```
+# Original metric
+http_requests_total{method="GET"} 100
+
+# After tenant injection (tenant: alpha)  
+http_requests_total{method="GET",tenant_id="alpha"} 100
+```
+
+### CSV Format
+```
+# Original: metric,labels,timestamp,value
+http_requests_total,method=GET,1234567890,100
+
+# After injection
+http_requests_total,method=GET;tenant_id=alpha,1234567890,100
+```
+
+### Multi-tenant Write Access
+For users with access to multiple tenants, specify the target tenant:
+
+```bash
+# Using X-Target-Tenant header
+curl -X POST \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "X-Target-Tenant: alpha" \
+  -H "Content-Type: text/plain" \
+  --data-raw 'my_metric{job="test"} 42' \
+  http://gateway:8080/api/v1/import/prometheus
+
+# Using tenant query parameter  
+curl -X POST \
+  "http://gateway:8080/api/v1/import/prometheus?tenant=alpha" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  --data-raw 'my_metric{job="test"} 42'
 ```
 
 ## 📊 Monitoring

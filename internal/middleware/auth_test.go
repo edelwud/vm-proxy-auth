@@ -363,18 +363,5 @@ func TestGetUserContext(t *testing.T) {
 		t.Error("Expected nil user context when not set")
 	}
 
-	// Test with user context set
-	userCtx := &UserContext{
-		UserID:         "test-user",
-		Groups:         []string{"admin"},
-		AllowedTenants: []string{"*"},
-		ReadOnly:       false,
-	}
-
-	// Manually set context (normally done by middleware)
-	ctx := req.Context()
-	ctx = req.Context()
-	req = req.WithContext(ctx)
-
 	// This test shows the pattern, but the actual context setting happens in middleware
 }

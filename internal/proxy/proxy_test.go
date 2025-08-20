@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
