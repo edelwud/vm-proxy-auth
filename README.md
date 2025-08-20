@@ -1,6 +1,6 @@
-# Prometheus OAuth Gateway
+# VM Proxy Auth
 
-A production-ready authentication and authorization gateway for Prometheus/VictoriaMetrics with multi-tenant support and advanced PromQL query filtering.
+A production-ready authentication and authorization proxy for VictoriaMetrics with multi-tenant support and advanced PromQL query filtering.
 
 ## Features
 
@@ -26,17 +26,17 @@ A production-ready authentication and authorization gateway for Prometheus/Victo
 
 ### Build
 ```bash
-go build -o prometheus-oauth-gateway ./cmd/gateway
+go build -o vm-proxy-auth ./cmd/gateway
 ```
 
 ### Run
 ```bash
-./prometheus-oauth-gateway --config config.yaml
+./vm-proxy-auth --config config.yaml
 ```
 
 ### Command Line Options
 ```bash
-./prometheus-oauth-gateway --help
+./vm-proxy-auth --help
   -config string
         Path to configuration file
   -log-level string
@@ -266,7 +266,7 @@ go test ./...
 ### Building for Production
 ```bash
 # Build with version info
-go build -ldflags "-X main.version=1.0.0 -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.gitCommit=$(git rev-parse HEAD)" -o prometheus-oauth-gateway ./cmd/gateway
+go build -ldflags "-X main.version=1.0.0 -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.gitCommit=$(git rev-parse HEAD)" -o vm-proxy-auth ./cmd/gateway
 ```
 
 ## Deployment
@@ -276,14 +276,14 @@ go build -ldflags "-X main.version=1.0.0 -X main.buildTime=$(date -u +%Y-%m-%dT%
 FROM golang:1.21-alpine AS builder
 WORKDIR /app
 COPY . .
-RUN go build -o prometheus-oauth-gateway ./cmd/gateway
+RUN go build -o vm-proxy-auth ./cmd/gateway
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates
 WORKDIR /root/
-COPY --from=builder /app/prometheus-oauth-gateway .
+COPY --from=builder /app/vm-proxy-auth .
 COPY config.yaml .
-CMD ["./prometheus-oauth-gateway", "--config", "config.yaml"]
+CMD ["./vm-proxy-auth", "--config", "config.yaml"]
 ```
 
 ### Kubernetes
@@ -291,20 +291,20 @@ CMD ["./prometheus-oauth-gateway", "--config", "config.yaml"]
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: prometheus-oauth-gateway
+  name: vm-proxy-auth
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: prometheus-oauth-gateway
+      app: vm-proxy-auth
   template:
     metadata:
       labels:
-        app: prometheus-oauth-gateway
+        app: vm-proxy-auth
     spec:
       containers:
       - name: gateway
-        image: prometheus-oauth-gateway:latest
+        image: vm-proxy-auth:latest
         ports:
         - containerPort: 8080
         env:

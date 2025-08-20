@@ -10,15 +10,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/finlego/prometheus-oauth-gateway/internal/config"
-	"github.com/finlego/prometheus-oauth-gateway/internal/domain"
-	"github.com/finlego/prometheus-oauth-gateway/internal/handlers"
-	"github.com/finlego/prometheus-oauth-gateway/internal/infrastructure/logger"
-	"github.com/finlego/prometheus-oauth-gateway/internal/services/access"
-	"github.com/finlego/prometheus-oauth-gateway/internal/services/auth"
-	"github.com/finlego/prometheus-oauth-gateway/internal/services/metrics"
-	"github.com/finlego/prometheus-oauth-gateway/internal/services/proxy"
-	"github.com/finlego/prometheus-oauth-gateway/internal/services/tenant"
+	"github.com/finlego/vm-proxy-auth/internal/config"
+	"github.com/finlego/vm-proxy-auth/internal/domain"
+	"github.com/finlego/vm-proxy-auth/internal/handlers"
+	"github.com/finlego/vm-proxy-auth/internal/infrastructure/logger"
+	"github.com/finlego/vm-proxy-auth/internal/services/access"
+	"github.com/finlego/vm-proxy-auth/internal/services/auth"
+	"github.com/finlego/vm-proxy-auth/internal/services/metrics"
+	"github.com/finlego/vm-proxy-auth/internal/services/proxy"
+	"github.com/finlego/vm-proxy-auth/internal/services/tenant"
 )
 
 var (
@@ -37,7 +37,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("prometheus-oauth-gateway (clean architecture)\n")
+		fmt.Printf("vm-proxy-auth (VictoriaMetrics Proxy with Authentication)\n")
 		fmt.Printf("Version: %s\n", version)
 		fmt.Printf("Build time: %s\n", buildTime)
 		fmt.Printf("Git commit: %s\n", gitCommit)
@@ -65,7 +65,7 @@ func main() {
 	// Initialize logger
 	appLogger := logger.NewStructuredLogger(cfg.Logging.Level, cfg.Logging.Format)
 
-	appLogger.Info("Starting prometheus-oauth-gateway (clean architecture)",
+	appLogger.Info("Starting vm-proxy-auth (VictoriaMetrics Proxy with Authentication)",
 		domain.Field{Key: "version", Value: version},
 		domain.Field{Key: "build_time", Value: buildTime},
 		domain.Field{Key: "git_commit", Value: gitCommit},

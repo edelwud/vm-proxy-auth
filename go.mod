@@ -1,4 +1,4 @@
-module github.com/finlego/prometheus-oauth-gateway
+module github.com/finlego/vm-proxy-auth
 
 go 1.23.0
 

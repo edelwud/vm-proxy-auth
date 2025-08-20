@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/finlego/prometheus-oauth-gateway/internal/domain"
-	loggerPkg "github.com/finlego/prometheus-oauth-gateway/internal/infrastructure/logger"
+	"github.com/finlego/vm-proxy-auth/internal/domain"
+	loggerPkg "github.com/finlego/vm-proxy-auth/internal/infrastructure/logger"
 )
 
 // GatewayHandler handles all proxy requests using clean architecture

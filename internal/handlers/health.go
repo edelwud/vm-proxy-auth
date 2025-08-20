@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/finlego/prometheus-oauth-gateway/internal/domain"
+	"github.com/finlego/vm-proxy-auth/internal/domain"
 )
 
 // HealthHandler handles health check endpoints

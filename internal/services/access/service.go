@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/finlego/prometheus-oauth-gateway/internal/domain"
+	"github.com/finlego/vm-proxy-auth/internal/domain"
 )
 
 // Service implements domain.AccessControlService

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/finlego/prometheus-oauth-gateway/internal/config"
-	"github.com/finlego/prometheus-oauth-gateway/internal/domain"
+	"github.com/finlego/vm-proxy-auth/internal/config"
+	"github.com/finlego/vm-proxy-auth/internal/domain"
 )
 
 // Service implements domain.TenantService using clean architecture with production-ready PromQL parsing

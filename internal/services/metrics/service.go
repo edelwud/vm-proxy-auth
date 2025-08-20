@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/finlego/prometheus-oauth-gateway/internal/domain"
+	"github.com/finlego/vm-proxy-auth/internal/domain"
 )
 
 // Service implements domain.MetricsService

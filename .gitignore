@@ -220,3 +220,4 @@ prometheus-oauth-gateway
 
 # Backup test files
 *.go.bak
+vm-proxy-auth

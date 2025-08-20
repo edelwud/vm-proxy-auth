@@ -1,7 +1,7 @@
 package logger
 
 import (
-	"github.com/finlego/prometheus-oauth-gateway/internal/domain"
+	"github.com/finlego/vm-proxy-auth/internal/domain"
 	"github.com/sirupsen/logrus"
 )
 
