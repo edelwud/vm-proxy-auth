@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/finlego/vm-proxy-auth/internal/config"
-	"github.com/finlego/vm-proxy-auth/internal/domain"
+	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
 // Service implements domain.AuthService using clean architecture

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/finlego/vm-proxy-auth/internal/domain"
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
 // mockLogger implements domain.Logger for testing

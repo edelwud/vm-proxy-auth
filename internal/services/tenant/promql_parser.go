@@ -5,8 +5,8 @@ import (
 
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/finlego/vm-proxy-auth/internal/config"
-	"github.com/finlego/vm-proxy-auth/internal/domain"
+	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
 // PromQLTenantInjector provides production-ready PromQL parsing and tenant injection

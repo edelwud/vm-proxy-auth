@@ -1,0 +1,74 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# GitHub 
+.github
+
+# Documentation
+README.md
+docs/
+*.md
+
+# CI/CD
+.github/
+Makefile
+docker-compose.yml
+
+# Development
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+coverage.out
+*.test
+test_*
+*_test.go
+
+# Build artifacts
+vm-proxy-auth
+prometheus-oauth-gateway
+*.exe
+*.dll
+*.so
+*.dylib
+dist/
+bin/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+.tmp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor files
+*.sublime-project
+*.sublime-workspace
+
+# Local environment files
+.env
+.env.local
+.env.production
+.env.test
+
+# Grafana (not needed in container)
+grafana/
+
+# Example configurations (already copied via COPY)
+# We want to include examples/ since we copy it explicitly

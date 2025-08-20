@@ -8,7 +8,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/finlego/vm-proxy-auth/internal/domain"
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
 var (

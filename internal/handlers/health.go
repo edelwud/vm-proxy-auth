@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/finlego/vm-proxy-auth/internal/domain"
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
 // HealthHandler handles health check endpoints

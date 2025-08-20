@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/finlego/vm-proxy-auth/internal/config"
-	"github.com/finlego/vm-proxy-auth/internal/domain"
-	"github.com/finlego/vm-proxy-auth/internal/services/auth"
-	"github.com/finlego/vm-proxy-auth/internal/services/access"
-	"github.com/finlego/vm-proxy-auth/internal/services/metrics"
-	"github.com/finlego/vm-proxy-auth/internal/services/proxy"
-	"github.com/finlego/vm-proxy-auth/internal/services/tenant"
+	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
+	"github.com/edelwud/vm-proxy-auth/internal/services/auth"
+	"github.com/edelwud/vm-proxy-auth/internal/services/access"
+	"github.com/edelwud/vm-proxy-auth/internal/services/metrics"
+	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
+	"github.com/edelwud/vm-proxy-auth/internal/services/tenant"
 )
 
 // mockLogger implements domain.Logger for testing

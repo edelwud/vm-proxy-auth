@@ -5,7 +5,7 @@ server:
   idle_timeout: "60s"
 
 upstream:
-  url: "https://vmselect.monitoring.finlego.com"
+  url: "https://vmselect.example.com"
   timeout: "30s"
   max_retries: 3
   retry_delay: "1s"
@@ -14,12 +14,12 @@ upstream:
 
 auth:
   type: "jwt"
-  jwks_url: "https://auth.st.finlego.com/realms/staff/protocol/openid-connect/certs"
+  jwks_url: "https://keycloak.example.com/realms/staff/protocol/openid-connect/certs"
   # jwt_secret: "your-secret-key"  # Alternative to JWKS
   jwt_algorithm: "RS256"
   validate_audience: false
   validate_issuer: true
-  required_issuer: "https://auth.st.finlego.com/realms/staff"
+  required_issuer: "https://keycloak.example.com/realms/staff"
   required_audience: []
   token_ttl: "1h"
   cache_ttl: "5m"

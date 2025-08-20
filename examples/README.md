@@ -7,90 +7,93 @@ This directory contains configuration examples for different deployment scenario
 Choose the configuration that matches your deployment needs:
 
 ```bash
-# Basic JWT authentication with shared secret
-./vm-proxy-auth --config examples/config.example.yaml
+# Development/testing with shared secret
+./vm-proxy-auth --config examples/config.test.yaml
 
-# RS256 JWT with JWKS endpoint
-./vm-proxy-auth --config examples/config.rs256.example.yaml
+# Production deployment with JWKS authentication  
+./vm-proxy-auth --config examples/config.example.yaml
 
 # VictoriaMetrics multi-tenancy setup
 ./vm-proxy-auth --config examples/config.vm-multitenancy.yaml
 
-# Development/testing with metrics enabled
+# Observability-focused with metrics
 ./vm-proxy-auth --config examples/config.metrics.example.yaml
+
+# Minimal testing setup
+./vm-proxy-auth --config examples/test-metrics-config.yaml
 ```
 
 ## 📋 Available Configurations
 
-### `config.example.yaml` - Basic Setup
-**Use Case**: Simple deployments with shared JWT secrets
+### `config.test.yaml` - Development/Testing
+**Use Case**: Local development and CI/CD testing environments
 
 **Features**:
 - HS256 JWT authentication with shared secret
-- Basic tenant mapping
-- Single VictoriaMetrics instance
-- Minimal logging configuration
+- Group-based access control (admin, developers, viewers)
+- Comprehensive tenant mappings for testing
+- Debug-friendly logging configuration
 
 **Best For**:
-- Development environments
-- Small deployments
+- Local development environments
+- Integration testing and CI/CD
 - Getting started quickly
 
-### `config.rs256.example.yaml` - Production Security
-**Use Case**: Production environments with proper key management
+### `config.example.yaml` - Production Ready
+**Use Case**: Production environments with JWKS authentication
 
 **Features**:
-- RS256 JWT with JWKS endpoint
-- Automatic key rotation support
-- Enhanced security configuration
-- Production logging settings
+- RS256 JWT with JWKS endpoint (Keycloak integration)
+- Group-based tenant access control  
+- Read-only and read-write permission levels
+- Production logging and metrics
 
 **Best For**:
 - Production deployments
-- Integration with OAuth2/OIDC providers
-- Enterprise security requirements
+- Integration with OAuth2/OIDC providers  
+- Standard tenant isolation requirements
 
-### `config.vm-multitenancy.yaml` - Multi-Tenant Setup
-**Use Case**: Complex multi-tenant VictoriaMetrics deployments
-
-**Features**:
-- Multiple tenant configurations
-- Project-level isolation (`vm_project_id`)
-- Complex tenant mapping rules
-- Advanced query filtering
-
-**Best For**:
-- Multi-tenant SaaS applications
-- Enterprise deployments
-- Complex organizational structures
-
-### `config.metrics.example.yaml` - Observability Focus
-**Use Case**: Deployments requiring comprehensive monitoring
+### `config.vm-multitenancy.yaml` - VictoriaMetrics Multi-Tenant
+**Use Case**: Production VictoriaMetrics with advanced multi-tenancy
 
 **Features**:
-- Prometheus metrics enabled
-- Detailed configuration examples
-- Performance monitoring setup
-- Complete observability stack
+- RS256 JWT with JWKS (Keycloak integration)
+- VictoriaMetrics account and project-level isolation
+- vm_account_id and vm_project_id label injection
+- Enhanced tenant security with use_project_id
 
 **Best For**:
-- Production monitoring
-- Performance analysis
-- Compliance and auditing
+- Enterprise VictoriaMetrics deployments
+- Multi-tenant SaaS with strict isolation
+- Account/project-based organizational structures
 
-### `config.test.yaml` - Testing Configuration
-**Use Case**: Automated testing and validation
+### `config.metrics.example.yaml` - Metrics & Observability
+**Use Case**: Focused on monitoring and observability
 
 **Features**:
-- Minimal configuration for tests
-- Fast startup settings
-- Debug logging enabled
-- Test-friendly defaults
+- VictoriaMetrics integration with tenant mapping
+- User-specific tenant configurations
+- Prometheus metrics endpoint enabled
+- Account and project ID support
 
 **Best For**:
-- CI/CD pipelines
-- Integration testing
-- Development validation
+- Production monitoring setups
+- Performance analysis and debugging
+- Comprehensive observability requirements
+
+### `test-metrics-config.yaml` - Minimal Testing
+**Use Case**: Testing metrics endpoint with minimal configuration
+
+**Features**:
+- Minimal configuration for CI/CD
+- Metrics endpoint enabled only
+- No authentication for testing
+- Basic server configuration
+
+**Best For**:
+- Automated testing pipelines
+- Metrics endpoint validation
+- Minimal resource testing
 
 ## 🔧 Configuration Modes
 
@@ -201,8 +204,8 @@ metrics:
 
 ### Development Setup
 ```bash
-# Start with basic config for development
-./vm-proxy-auth --config examples/config.example.yaml --log-level debug
+# Start with test config for development
+./vm-proxy-auth --config examples/config.test.yaml --log-level debug
 
 # Test with metrics enabled
 ./vm-proxy-auth --config examples/config.metrics.example.yaml
@@ -210,42 +213,58 @@ metrics:
 
 ### Production Deployment
 ```bash
-# Secure production setup
-./vm-proxy-auth --config examples/config.rs256.example.yaml
+# Standard production setup
+./vm-proxy-auth --config examples/config.example.yaml
 
-# Multi-tenant production
+# Multi-tenant production with VictoriaMetrics
 ./vm-proxy-auth --config examples/config.vm-multitenancy.yaml
 ```
 
 ### Testing & Validation
 ```bash
-# Validate configuration
-./vm-proxy-auth --config examples/config.test.yaml --validate-config
+# Validate configuration files
+./vm-proxy-auth --validate-config --config examples/config.test.yaml
+./vm-proxy-auth --validate-config --config examples/config.vm-multitenancy.yaml
 
-# Test with specific log level
-./vm-proxy-auth --config examples/config.example.yaml --log-level debug
+# Test minimal metrics setup
+./vm-proxy-auth --config examples/test-metrics-config.yaml
 ```
 
 ## 🛠️ Customization Guide
 
-### 1. Modify Tenant Mappings
-Edit the `tenant_maps` section to match your organization structure:
+### 1. Group-Based Tenant Mappings (Standard)
+For most deployments, use group-based mappings in `tenant_mappings`:
 
 ```yaml
-tenant_maps:
-  - user_claim: "email"
-    user_value: "admin@company.com"
-    vm_tenants:
-      - account_id: "admin"
-  
-  - user_claim: "department" 
-    user_value: "engineering"
-    vm_tenants:
-      - account_id: "1000"
-      - account_id: "1001"
+tenant_mappings:
+  - groups: ["platform-admin", "sre"]
+    tenants: ["*"]  # Access to all tenants
+    read_only: false
+    
+  - groups: ["team-alpha-dev"]
+    tenants: ["alpha-dev", "alpha-staging"] 
+    read_only: false
+    
+  - groups: ["auditors", "read-only-users"]
+    tenants: ["alpha", "beta", "prod"]
+    read_only: true
 ```
 
-### 2. Configure VictoriaMetrics Integration
+### 2. VictoriaMetrics VM Tenant Mappings (Advanced)
+For VictoriaMetrics multi-tenancy, use `vm_tenants` in `tenant_mappings`:
+
+```yaml
+tenant_mappings:
+  - groups: ["developers"]
+    vm_tenants:
+      - account_id: "2000"
+        project_id: "dev"  # Optional project isolation
+      - account_id: "2000" 
+        project_id: "staging"
+    read_only: false
+```
+
+### 3. Configure VictoriaMetrics Integration
 Adjust upstream settings for your VictoriaMetrics setup:
 
 ```yaml
@@ -257,7 +276,7 @@ upstream:
   tenant_header: "X-Tenant-ID"       # Custom tenant header
 ```
 
-### 3. Security Configuration
+### 4. Security Configuration
 Configure authentication for your environment:
 
 ```yaml
@@ -271,7 +290,7 @@ auth:
   cache_ttl: "5m"
 ```
 
-### 4. Performance Tuning
+### 5. Performance Tuning
 Optimize for your load patterns:
 
 ```yaml

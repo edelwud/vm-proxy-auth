@@ -1,0 +1,341 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  merge_group:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: '1.25.0'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.25.0']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+        cache: true
+        
+    - name: Download dependencies
+      run: go mod download
+      
+    - name: Verify dependencies
+      run: go mod verify
+      
+    - name: Build
+      run: go build -v ./...
+      
+    - name: Run tests with coverage
+      run: |
+        go test -v -race -coverprofile=coverage.out -covermode=atomic -coverpkg=./... ./...
+        go tool cover -html=coverage.out -o coverage.html
+        
+    - name: Calculate coverage percentage
+      id: coverage
+      run: |
+        COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+        echo "percentage=$COVERAGE" >> $GITHUB_OUTPUT
+        echo "Coverage: $COVERAGE%"
+        
+        # Set coverage color based on percentage
+        if (( $(echo "$COVERAGE >= 80" | bc -l) )); then
+          echo "color=green" >> $GITHUB_OUTPUT
+        elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then
+          echo "color=yellow" >> $GITHUB_OUTPUT
+        else
+          echo "color=red" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Generate coverage report
+      run: |
+        echo "## 📊 Coverage Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Overall Coverage: ${{ steps.coverage.outputs.percentage }}%**" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Detailed Coverage by Package" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        go tool cover -func=coverage.out >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "📈 [View detailed HTML report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+        
+    - name: Coverage threshold check
+      run: |
+        COVERAGE=${{ steps.coverage.outputs.percentage }}
+        THRESHOLD=70
+        
+        echo "Coverage: $COVERAGE%, Threshold: $THRESHOLD%"
+        
+        if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+          echo "❌ Coverage $COVERAGE% is below threshold $THRESHOLD%"
+          echo "::warning::Coverage $COVERAGE% is below the required threshold of $THRESHOLD%"
+        else
+          echo "✅ Coverage $COVERAGE% meets the threshold of $THRESHOLD%"
+        fi
+        
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-reports-${{ github.sha }}
+        path: |
+          coverage.out
+          coverage.html
+        retention-days: 30
+        
+    - name: Comment coverage on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const coverage = '${{ steps.coverage.outputs.percentage }}';
+          const color = '${{ steps.coverage.outputs.color }}';
+          
+          // Generate coverage badge
+          const badge = `![Coverage](https://img.shields.io/badge/coverage-${coverage}%25-${color})`;
+          
+          // Get detailed coverage
+          const { execSync } = require('child_process');
+          const coverageDetails = execSync('go tool cover -func=coverage.out').toString();
+          
+          const comment = `## 📊 Coverage Report
+          
+          ${badge}
+          
+          **Overall Coverage: ${coverage}%**
+          
+          <details>
+          <summary>📋 Detailed Coverage by Package</summary>
+          
+          \`\`\`
+          ${coverageDetails}
+          \`\`\`
+          
+          </details>
+          
+          > Coverage threshold: 70% ${coverage >= 70 ? '✅' : '❌'}
+          `;
+          
+          // Find existing coverage comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          
+          const existingComment = comments.find(comment => 
+            comment.body.includes('📊 Coverage Report') && comment.user.login === 'github-actions[bot]'
+          );
+          
+          if (existingComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingComment.id,
+              body: comment
+            });
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+          }
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+        
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v4
+      with:
+        version: latest
+        args: --timeout=5m
+        
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+        
+    - name: Run Gosec Security Scanner
+      uses: securecodewarrior/github-action-gosec@master
+      with:
+        args: '-fmt sarif -out gosec.sarif ./...'
+        
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: gosec.sarif
+        
+  validate-config:
+    name: Validate Configurations
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+        
+    - name: Build binary
+      run: go build -o vm-proxy-auth ./cmd/gateway
+      
+    - name: Validate test config
+      run: ./vm-proxy-auth --validate-config --config examples/config.test.yaml
+      
+    - name: Validate production config  
+      run: ./vm-proxy-auth --validate-config --config examples/config.example.yaml
+      
+    - name: Validate VM multitenancy config
+      run: ./vm-proxy-auth --validate-config --config examples/config.vm-multitenancy.yaml
+      
+    - name: Validate metrics config
+      run: ./vm-proxy-auth --validate-config --config examples/config.metrics.example.yaml
+
+  docker:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      security-events: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Log in to Container Registry
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: |
+          ${{ github.event_name == 'pull_request' && 'vm-proxy-auth' || format('{0}/{1}', env.REGISTRY, env.IMAGE_NAME) }}
+        tags: |
+          # For main branch - create edge tag
+          type=edge,branch=main,enable=${{ github.ref == 'refs/heads/main' }}
+          # For develop branch
+          type=ref,event=branch,suffix=-{{date 'YYYYMMDD'}},enable=${{ github.ref == 'refs/heads/develop' }}
+          # For pull requests
+          type=ref,event=pr
+          # For commits - create SHA-based tag
+          type=sha,prefix=ci-,enable=${{ github.event_name == 'push' }}
+          # Test tag for PRs
+          type=raw,value=test,enable=${{ github.event_name == 'pull_request' }}
+        labels: |
+          org.opencontainers.image.title=VM Proxy Auth
+          org.opencontainers.image.description=VictoriaMetrics Proxy with Authentication and Multi-tenant Support
+          org.opencontainers.image.url=https://github.com/edelwud/vm-proxy-auth
+          org.opencontainers.image.source=https://github.com/edelwud/vm-proxy-auth
+          org.opencontainers.image.vendor=Edelwud
+          org.opencontainers.image.licenses=MIT
+          
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        # Full multiplatform for main/develop, single platform for PRs
+        platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64,linux/arm/v7' }}
+        push: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
+          BUILD_TIME=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+          GIT_COMMIT=${{ github.sha }}
+        cache-from: type=gha,scope=${{ github.workflow }}
+        cache-to: type=gha,scope=${{ github.workflow }},mode=max
+        sbom: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') }}
+        provenance: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') }}
+        
+    - name: Test Docker image
+      if: github.event_name == 'pull_request'
+      run: |
+        docker run --rm vm-proxy-auth:test --version
+        
+    - name: Run Trivy vulnerability scanner
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        
+    - name: Upload Trivy scan results
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: 'trivy-results.sarif'
+        
+    - name: Generate SBOM
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+      uses: anchore/sbom-action@v0
+      with:
+        image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+        format: spdx-json
+        output-file: sbom.spdx.json
+        
+    - name: Upload SBOM
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom-${{ github.sha }}
+        path: sbom.spdx.json

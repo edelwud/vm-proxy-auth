@@ -1,6 +1,6 @@
 # Variables
-APP_NAME := prometheus-oauth-gateway
-DOCKER_IMAGE := finlego/$(APP_NAME)
+APP_NAME := vm-proxy-auth
+DOCKER_IMAGE := edelwud/$(APP_NAME)
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME := $(shell date +%Y-%m-%dT%H:%M:%S%z)
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -164,7 +164,7 @@ docker-compose-down:
 
 # View Docker Compose logs
 docker-compose-logs:
-	docker-compose logs -f prometheus-oauth-gateway
+	docker-compose logs -f vm-proxy-auth
 
 # Install development tools
 install-tools:

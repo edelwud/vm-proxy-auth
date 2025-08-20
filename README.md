@@ -1,5 +1,12 @@
 # VM Proxy Auth
 
+[![CI](https://github.com/edelwud/vm-proxy-auth/actions/workflows/ci.yml/badge.svg)](https://github.com/edelwud/vm-proxy-auth/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)](https://github.com/edelwud/vm-proxy-auth/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/edelwud/vm-proxy-auth)](https://goreportcard.com/report/github.com/edelwud/vm-proxy-auth)
+[![Docker Pulls](https://img.shields.io/docker/pulls/edelwud/vm-proxy-auth)](https://ghcr.io/edelwud/vm-proxy-auth)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/edelwud/vm-proxy-auth)](https://golang.org)
+
 A production-ready authentication and authorization proxy for VictoriaMetrics with multi-tenant support and advanced PromQL query filtering.
 
 ## Features
@@ -337,7 +344,7 @@ go build -ldflags "-X main.version=1.0.0 -X main.buildTime=$(date -u +%Y-%m-%dT%
 
 ### Docker
 ```dockerfile
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 WORKDIR /app
 COPY . .
 RUN go build -o vm-proxy-auth ./cmd/gateway

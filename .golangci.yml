@@ -1,0 +1,228 @@
+run:
+  timeout: 5m
+  go: '1.25'
+  modules-download-mode: readonly
+  
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  uniq-by-line: true
+
+linters-settings:
+  # errcheck
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+    exclude-functions:
+      - fmt.Print
+      - fmt.Println
+      - fmt.Printf
+
+  # gocritic
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport # https://github.com/go-critic/go-critic/issues/845
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
+      - wrapperFunc
+
+  # gocyclo
+  gocyclo:
+    min-complexity: 15
+
+  # goimports
+  goimports:
+    local-prefixes: github.com/edelwud/vm-proxy-auth
+
+  # gomnd
+  gomnd:
+    settings:
+      mnd:
+        checks: [argument, case, condition, operation, return, assign]
+
+  # govet
+  govet:
+    check-shadowing: true
+    settings:
+      printf:
+        funcs:
+          - (github.com/sirupsen/logrus.FieldLogger).Infof
+          - (github.com/sirupsen/logrus.FieldLogger).Warnf
+          - (github.com/sirupsen/logrus.FieldLogger).Errorf
+          - (github.com/sirupsen/logrus.FieldLogger).Fatalf
+
+  # lll
+  lll:
+    line-length: 140
+
+  # misspell
+  misspell:
+    locale: US
+
+  # nolintlint
+  nolintlint:
+    allow-leading-space: true # don't require machine-readable nolint directives (i.e. with no leading space)
+    allow-unused: false # report any unused nolint directives
+    require-explanation: false # don't require an explanation for nolint directives
+    require-specific: false # don't require nolint directives to be specific about which linter is being skipped
+
+  # revive
+  revive:
+    min-confidence: 0
+    rules:
+      - name: atomic
+      - name: line-length-limit
+        severity: error
+        arguments: [140]
+      - name: unhandled-error
+        arguments : ["fmt.Printf", "fmt.Println", "fmt.Print"]
+
+  # unparam
+  unparam:
+    check-exported: false
+
+  # unused
+  unused:
+    check-exported: false
+
+  # whitespace
+  whitespace:
+    multi-if: false   # Enforces newlines (or comments) after every multi-line if statement
+    multi-func: false # Enforces newlines (or comments) after every multi-line function signature
+
+linters:
+  # please, do not use `enable-all`: it's deprecated and will be removed soon.
+  # inverted configuration with `enable-all` and `disable` is not scalable during updates of golangci-lint
+  disable-all: true
+  enable:
+    # enabled by default linters:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+    
+    # additional linters:
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - contextcheck
+    - cyclop
+    - dupl
+    - durationcheck
+    - errorlint
+    - execinquery
+    - exportloopref
+    - forbidigo
+    - funlen
+    - gci
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - gofmt
+    - gofumpt
+    - goheader
+    - goimports
+    - gomnd
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - grouper
+    - importas
+    - lll
+    - maintidx
+    - makezero
+    - misspell
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnil
+    - nlreturn
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - promlinter
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - stylecheck
+    - tenv
+    - testpackage
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - wastedassign
+    - whitespace
+    - wrapcheck
+
+issues:
+  # Excluding configuration per-path, per-linter, per-text and per-source
+  exclude-rules:
+    # Exclude some linters from running on tests files.
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - funlen
+        - gocognit
+        - maintidx
+        - wrapcheck
+
+    # Exclude known linters from partially hard-to-fix issues
+    - path: cmd/gateway/main\.go
+      linters:
+        - gocyclo # main function complexity is acceptable
+        - funlen  # main function length is acceptable
+
+    # Exclude shadow checking on the variable named err
+    - text: "shadow: declaration of \"err\""
+      linters:
+        - govet
+
+    # Exclude linting of magic numbers in tests
+    - path: _test\.go
+      text: "Magic number"
+      linters:
+        - gomnd
+
+    # Exclude some staticcheck messages
+    - linters:
+        - staticcheck
+      text: "SA9003:"
+
+    # Exclude some gosec messages
+    - linters:
+        - gosec
+      text: "G304:" # file path provided as taint input
+
+  # Show only new issues created after git revision `REV`
+  # new-from-rev: origin/main
+
+  # Maximum issues count per one linter. Set to 0 to disable. Default is 50.
+  max-issues-per-linter: 0
+
+  # Maximum count of issues with the same text. Set to 0 to disable. Default is 3.
+  max-same-issues: 0
+
+  # Show only new issues created in git patch with set file path.
+  # new-from-patch: path/to/patch/file

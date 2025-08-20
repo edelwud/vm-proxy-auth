@@ -1,53 +1,72 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
-WORKDIR /app
-
-# Install git and ca-certificates (needed for go mod download and HTTPS)
+# Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
+
+# Create non-root user for running the application
+RUN adduser -D -g '' appuser
+
+# Set working directory
+WORKDIR /app
 
 # Copy go mod files
 COPY go.mod go.sum ./
 
 # Download dependencies
-RUN go mod download
+RUN go mod download && go mod verify
 
 # Copy source code
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags='-w -s -extldflags "-static"' \
+# Build arguments for version info
+ARG VERSION=dev
+ARG BUILD_TIME
+ARG GIT_COMMIT
+ARG TARGETARCH
+
+# Build the binary
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build \
+    -ldflags="-s -w -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT}" \
     -a -installsuffix cgo \
-    -o prometheus-oauth-gateway \
-    ./cmd/gateway
+    -o vm-proxy-auth ./cmd/gateway
 
 # Final stage
-FROM alpine:3.19
+FROM scratch
 
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates tzdata
+# Copy certificates and timezone data from builder
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 
-WORKDIR /root/
+# Copy user from builder
+COPY --from=builder /etc/passwd /etc/passwd
 
-# Copy the binary from builder stage
-COPY --from=builder /app/prometheus-oauth-gateway .
+# Copy binary from builder
+COPY --from=builder /app/vm-proxy-auth /vm-proxy-auth
 
-# Copy example config (optional)
-COPY --from=builder /app/config.example.yaml .
+# Copy example configurations
+COPY --from=builder /app/examples /examples
 
-# Create a non-root user
-RUN adduser -D -s /bin/sh gateway
+# Use non-root user
+USER appuser
 
-# Change ownership and switch to non-root user
-RUN chown -R gateway:gateway /root
-USER gateway
-
+# Expose port
 EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+    CMD ["/vm-proxy-auth", "--health-check"]
 
-ENTRYPOINT ["./prometheus-oauth-gateway"]
-CMD ["--config", "config.example.yaml"]
+# Set entrypoint
+ENTRYPOINT ["/vm-proxy-auth"]
+CMD ["--config", "/examples/config.example.yaml"]
+
+# Labels following OCI image spec
+LABEL org.opencontainers.image.title="VM Proxy Auth"
+LABEL org.opencontainers.image.description="VictoriaMetrics Proxy with Authentication and Multi-tenant Support"
+LABEL org.opencontainers.image.url="https://github.com/edelwud/vm-proxy-auth"
+LABEL org.opencontainers.image.source="https://github.com/edelwud/vm-proxy-auth"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.created="${BUILD_TIME}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
