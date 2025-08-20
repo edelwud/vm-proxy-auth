@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  prometheus-oauth-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.example.yaml:/root/config.yaml:ro
+    environment:
+      - SERVER_ADDRESS=0.0.0.0:8080
+      - UPSTREAM_URL=http://victoriametrics:8428
+      - AUTH_JWKS_URL=https://keycloak.example.com/auth/realms/myrealm/protocol/openid-connect/certs
+      - AUTH_REQUIRED_ISSUER=https://keycloak.example.com/auth/realms/myrealm
+      - LOG_LEVEL=info
+    command: ["--config", "/root/config.yaml"]
+    networks:
+      - monitoring
+    depends_on:
+      - victoriametrics
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Example VictoriaMetrics instance (for testing)
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.95.1
+    ports:
+      - "8428:8428"
+    volumes:
+      - vm-data:/victoria-metrics-data
+    command:
+      - '--storageDataPath=/victoria-metrics-data'
+      - '--httpListenAddr=:8428'
+      - '--retentionPeriod=1y'
+      - '--maxConcurrentInserts=8'
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # Example Grafana instance with forward auth
+  grafana:
+    image: grafana/grafana:10.2.2
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_OAUTH_AUTO_LOGIN=true
+      - GF_AUTH_OAUTH_ALLOW_SIGN_UP=true
+      - GF_AUTH_OAUTH_NAME=OAuth
+      - GF_AUTH_OAUTH_CLIENT_ID=grafana
+      - GF_AUTH_OAUTH_CLIENT_SECRET=grafana-secret
+      - GF_AUTH_OAUTH_SCOPES=openid email profile groups
+      - GF_AUTH_OAUTH_AUTH_URL=https://keycloak.example.com/auth/realms/myrealm/protocol/openid-connect/auth
+      - GF_AUTH_OAUTH_TOKEN_URL=https://keycloak.example.com/auth/realms/myrealm/protocol/openid-connect/token
+      - GF_AUTH_OAUTH_API_URL=https://keycloak.example.com/auth/realms/myrealm/protocol/openid-connect/userinfo
+      - GF_AUTH_OAUTH_ROLE_ATTRIBUTE_PATH=contains(groups[*], 'admin') && 'Admin' || 'Viewer'
+      - GF_AUTH_SIGNOUT_REDIRECT_URL=https://keycloak.example.com/auth/realms/myrealm/protocol/openid-connect/logout
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus-oauth-gateway
+    restart: unless-stopped
+
+  # Example Keycloak for OAuth (for development/testing)
+  keycloak:
+    image: quay.io/keycloak/keycloak:22.0.5
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_DB=dev-file
+      - KC_HOSTNAME_STRICT=false
+      - KC_HOSTNAME_STRICT_HTTPS=false
+      - KC_HTTP_ENABLED=true
+    ports:
+      - "8081:8080"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+    command:
+      - start-dev
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+volumes:
+  vm-data:
+    driver: local
+  grafana-data:
+    driver: local
+  keycloak-data:
+    driver: local
+
+networks:
+  monitoring:
+    driver: bridge

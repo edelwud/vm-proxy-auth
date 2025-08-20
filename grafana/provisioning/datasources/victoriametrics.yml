@@ -1,0 +1,41 @@
+apiVersion: 1
+
+datasources:
+  - name: VictoriaMetrics-OAuth
+    type: prometheus
+    access: proxy
+    url: http://prometheus-oauth-gateway:8080
+    isDefault: true
+    editable: false
+    
+    # Forward OAuth identity - это ключевая настройка для работы с gateway
+    jsonData:
+      # HTTP метод для передачи авторизации
+      httpMethod: GET
+      # Максимальное количество строк в ответе
+      maxLines: 1000
+      # Timeout для запросов
+      timeout: 60s
+      # Custom headers не требуются, так как OAuth токен передается автоматически
+      
+    # Важно: НЕ указывать basicAuth или другие методы аутентификации
+    # OAuth токен будет автоматически передан от Grafana к gateway
+    
+    uid: victoriametrics-oauth
+    version: 1
+    
+  # Дополнительный datasource для прямого доступа (для администраторов)
+  - name: VictoriaMetrics-Direct
+    type: prometheus  
+    access: proxy
+    url: http://victoriametrics:8428
+    editable: true
+    
+    jsonData:
+      httpMethod: GET
+      timeout: 60s
+      
+    # Ограничиваем доступ только для админов
+    # (это можно настроить через team permissions в Grafana)
+    uid: victoriametrics-direct
+    version: 1

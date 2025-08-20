@@ -1,0 +1,227 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Prometheus OAuth Gateway Monitoring",
+    "tags": ["prometheus", "oauth", "gateway", "monitoring"],
+    "style": "dark",
+    "timezone": "browser",
+    "editable": true,
+    "hideControls": false,
+    "graphTooltip": 1,
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {
+      "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "instance",
+          "type": "query",
+          "query": "label_values(prometheus_oauth_gateway_requests_total, instance)",
+          "refresh": 1,
+          "includeAll": false,
+          "multi": false
+        },
+        {
+          "name": "tenant",
+          "type": "query", 
+          "query": "label_values(prometheus_oauth_gateway_requests_total, tenant)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(prometheus_oauth_gateway_requests_total{instance=\"$instance\"}[5m])",
+            "legendFormat": "{{method}} {{path}} - {{status_code}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Requests/sec"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Response Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(prometheus_oauth_gateway_request_duration_seconds_bucket{instance=\"$instance\"}[5m]))",
+            "legendFormat": "95th percentile"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(prometheus_oauth_gateway_request_duration_seconds_bucket{instance=\"$instance\"}[5m]))",
+            "legendFormat": "50th percentile"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Seconds"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Authentication Success Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(prometheus_oauth_gateway_authentication_total{instance=\"$instance\", result=\"success\"}[5m]) / rate(prometheus_oauth_gateway_authentication_total{instance=\"$instance\"}[5m]) * 100",
+            "legendFormat": "Success Rate %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 95},
+                {"color": "green", "value": 99}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Active Connections",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "prometheus_oauth_gateway_active_connections{instance=\"$instance\"}",
+            "legendFormat": "Connections"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Upstream Request Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(prometheus_oauth_gateway_upstream_requests_total{instance=\"$instance\"}[5m])",
+            "legendFormat": "Upstream Req/s"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "JWKS Cache Hit Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(prometheus_oauth_gateway_token_cache_hits_total{instance=\"$instance\"}[5m]) / (rate(prometheus_oauth_gateway_token_cache_hits_total{instance=\"$instance\"}[5m]) + rate(prometheus_oauth_gateway_token_cache_misses_total{instance=\"$instance\"}[5m])) * 100",
+            "legendFormat": "Cache Hit Rate %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 8}
+      },
+      {
+        "id": 7,
+        "title": "Query Filters Applied by Tenant",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(prometheus_oauth_gateway_query_filters_applied_total{instance=\"$instance\", tenant=~\"$tenant\"}[5m])",
+            "legendFormat": "{{tenant}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Filters/sec"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12}
+      },
+      {
+        "id": 8,
+        "title": "Tenant Access Denied Events",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(prometheus_oauth_gateway_tenant_access_denied_total{instance=\"$instance\"}[5m])",
+            "legendFormat": "{{user_id}} -> {{requested_tenant}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Denials/sec"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12}
+      },
+      {
+        "id": 9,
+        "title": "Request Status Codes",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "increase(prometheus_oauth_gateway_requests_total{instance=\"$instance\"}[1h])",
+            "legendFormat": "{{status_code}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 20}
+      },
+      {
+        "id": 10,
+        "title": "Top Users by Request Volume",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, sum by (user_id) (increase(prometheus_oauth_gateway_authentication_total{instance=\"$instance\", result=\"success\"}[1h])))",
+            "format": "table"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 20}
+      },
+      {
+        "id": 11,
+        "title": "JWKS Fetch Duration",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(prometheus_oauth_gateway_jwks_fetch_duration_seconds_bucket{instance=\"$instance\"}[5m]))",
+            "legendFormat": "95th percentile"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(prometheus_oauth_gateway_jwks_fetch_duration_seconds_bucket{instance=\"$instance\"}[5m]))",
+            "legendFormat": "50th percentile"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Seconds"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 20}
+      }
+    ],
+    "refresh": "30s",
+    "schemaVersion": 16,
+    "version": 1
+  },
+  "overwrite": true
+}
