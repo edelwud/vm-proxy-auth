@@ -344,7 +344,7 @@ go build -ldflags "-X main.version=1.0.0 -X main.buildTime=$(date -u +%Y-%m-%dT%
 
 ### Docker
 ```dockerfile
-FROM golang:1.25-alpine AS builder
+FROM golang:1.24-alpine AS builder
 WORKDIR /app
 COPY . .
 RUN go build -o vm-proxy-auth ./cmd/gateway
