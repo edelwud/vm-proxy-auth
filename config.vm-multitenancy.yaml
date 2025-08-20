@@ -5,12 +5,15 @@ server:
   idle_timeout: "60s"
 
 upstream:
-  url: "https://vmselect.monitoring.finlego.com"
+  url: "https://vmselect.monitoring.finlego.com" # VictoriaMetrics single-node
   timeout: "30s"
   max_retries: 3
   retry_delay: "1s"
   tenant_header: "X-Prometheus-Tenant"
-  tenant_label: "tenant_id"
+  # VictoriaMetrics multi-tenancy configuration
+  tenant_label: "vm_account_id" # Account ID label
+  project_label: "vm_project_id" # Project ID label (optional)
+  use_project_id: true # Enable account:project filtering
 
 auth:
   type: "jwt"
@@ -26,26 +29,15 @@ auth:
   user_groups_claim: "groups"
 
 tenant_mappings:
-  - groups: ["developers", "platform-admin"]
-    tenants: ["2000"] # Access to all tenants
+  - groups: ["developers"]
+    vm_tenants: # VictoriaMetrics specific
+      - account_id: "2000"
     read_only: false
-
-  - groups: ["team-alpha", "dev-alpha"]
-    tenants: ["alpha", "alpha-dev", "alpha-staging"]
-    read_only: false
-
-  - groups: ["team-beta"]
-    tenants: ["beta", "beta-prod"]
-    read_only: false
-
-  - groups: ["readonly-users", "auditors"]
-    tenants: ["alpha", "beta"]
-    read_only: true
 
 metrics:
   enabled: true
   path: "/metrics"
 
 logging:
-  level: "info"
+  level: "debug" # More verbose for testing
   format: "json"

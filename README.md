@@ -1,87 +1,58 @@
 # Prometheus OAuth Gateway
 
-A secure authentication and authorization gateway for Prometheus/VictoriaMetrics in multi-tenant environments. This project provides JWT-based authentication with role-based access control and automatic query filtering based on tenant mappings.
+A production-ready authentication and authorization gateway for Prometheus/VictoriaMetrics with multi-tenant support and advanced PromQL query filtering.
 
-## 🚀 Features
+## Features
 
-- **JWT Authentication**: Support for JWKS and secret-based JWT token verification
-- **Multi-tenancy**: Automatic tenant isolation with query filtering
-- **Role-based Access Control**: Group-based tenant access management  
-- **Query Modification**: Automatic injection of tenant filters into Prometheus queries
-- **Write Operations**: Automatic tenant injection for write operations (Prometheus, CSV formats)
-- **Comprehensive API Support**: Full VictoriaMetrics API proxying including admin endpoints
-- **Admin Access Control**: Fine-grained permissions for administrative operations
-- **Grafana Integration**: Seamless integration with Grafana's "Forward OAuth Identity" feature
-- **Metrics & Monitoring**: Built-in Prometheus metrics and comprehensive logging
-- **High Availability**: Retry mechanisms, health checks, and graceful shutdown
+### 🔐 Authentication & Authorization
+- **JWT Authentication** with RS256 and JWKS support
+- **Multi-tenant isolation** using VictoriaMetrics tenant system
+- **Role-based access control** with configurable tenant mappings
+- **Header-based tenant selection** for write operations
 
-## 🏗️ Architecture
+### 🎯 Advanced Query Filtering
+- **Production-ready PromQL parsing** using official Prometheus library
+- **AST-based tenant injection** - ensures ALL metrics in complex queries get filtered
+- **Binary operation support** - correctly handles `sum(metric1) / sum(metric2)` type queries
+- **VictoriaMetrics compatibility** - eliminates "missing tag filters" errors
 
-```
-┌─────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Grafana   │───▶│ OAuth Gateway    │───▶│ VictoriaMetrics │
-│             │    │                  │    │                 │
-│ Forward     │    │ • JWT Verify     │    │ Multi-tenant    │
-│ OAuth       │    │ • Tenant Filter  │    │ Storage         │
-│ Identity    │    │ • Query Modify   │    │                 │
-└─────────────┘    └──────────────────┘    └─────────────────┘
-                              │
-                              ▼
-                   ┌──────────────────┐
-                   │   Keycloak/      │
-                   │   OAuth Provider │
-                   └──────────────────┘
-```
+### 🏗️ Clean Architecture
+- **Domain-driven design** with clear separation of concerns
+- **Dependency injection** for easy testing and maintenance
+- **Structured logging** with configurable levels and formats
+- **Graceful shutdown** with proper resource cleanup
 
-## 📦 Installation
+## Quick Start
 
-### Using Docker Compose (Recommended)
-
-1. Clone the repository:
+### Build
 ```bash
-git clone https://github.com/finlego/prometheus-oauth-gateway.git
-cd prometheus-oauth-gateway
+go build -o prometheus-oauth-gateway ./cmd/gateway
 ```
 
-2. Copy and configure the example configuration:
+### Run
 ```bash
-cp config.example.yaml config.yaml
-# Edit config.yaml with your settings
+./prometheus-oauth-gateway --config config.yaml
 ```
 
-3. Start the services:
+### Command Line Options
 ```bash
-docker-compose up -d
+./prometheus-oauth-gateway --help
+  -config string
+        Path to configuration file
+  -log-level string
+        Log level (debug, info, warn, error)
+  -validate-config
+        Validate configuration and exit
+  -version
+        Show version information
 ```
 
-### Building from Source
+## Configuration
 
-Requirements:
-- Go 1.21 or later
-- Make (optional)
-
-```bash
-# Clone and build
-git clone https://github.com/finlego/prometheus-oauth-gateway.git
-cd prometheus-oauth-gateway
-
-# Using Make
-make build
-
-# Or directly with Go
-go build -o bin/prometheus-oauth-gateway ./cmd/gateway
-
-# Run
-./bin/prometheus-oauth-gateway --config config.yaml
-```
-
-## ⚙️ Configuration
-
-### Example Configuration
-
+### Basic Configuration
 ```yaml
 server:
-  address: "0.0.0.0:8080"
+  address: ":8080"
   read_timeout: "30s"
   write_timeout: "30s"
   idle_timeout: "60s"
@@ -89,371 +60,301 @@ server:
 upstream:
   url: "http://victoriametrics:8428"
   timeout: "30s"
-  max_retries: 3
-  retry_delay: "1s"
-  tenant_header: "X-Prometheus-Tenant"
-  tenant_label: "tenant_id"
+  tenant_label: "vm_account_id"
+  project_label: "vm_project_id"
+  use_project_id: false
 
 auth:
-  type: "jwt"
-  jwks_url: "https://keycloak.example.com/auth/realms/myrealm/protocol/openid-connect/certs"
-  jwt_algorithm: "RS256"
-  validate_issuer: true
-  required_issuer: "https://keycloak.example.com/auth/realms/myrealm"
-  token_ttl: "1h"
-  cache_ttl: "5m"
-  user_groups_claim: "groups"
-
-tenant_mappings:
-  - groups: ["admin", "platform-admin"]
-    tenants: ["*"]  # Access to all tenants
-    read_only: false
-    
-  - groups: ["team-alpha", "dev-alpha"]
-    tenants: ["alpha", "alpha-dev", "alpha-staging"]
-    read_only: false
-    
-  - groups: ["readonly-users", "auditors"]
-    tenants: ["alpha", "beta"]
-    read_only: true
-
-metrics:
-  enabled: true
-  path: "/metrics"
+  jwt:
+    jwks_url: "https://your-auth-provider.com/.well-known/jwks.json"
+    issuer: "https://your-auth-provider.com/"
+    audience: "your-prometheus-gateway"
 
 logging:
   level: "info"
   format: "json"
+
+tenant_maps:
+  - user_claim: "sub"
+    user_value: "user@example.com"
+    vm_tenants:
+      - account_id: "1000"
+        project_id: "main"
 ```
 
-### Environment Variables
+### VictoriaMetrics Integration
 
-All configuration options can be overridden using environment variables:
-
-```bash
-SERVER_ADDRESS=0.0.0.0:8080
-UPSTREAM_URL=http://victoriametrics:8428
-AUTH_JWKS_URL=https://keycloak.example.com/jwks
-AUTH_REQUIRED_ISSUER=https://keycloak.example.com/auth/realms/myrealm
-AUTH_USER_GROUPS_CLAIM=groups
-LOG_LEVEL=info
-```
-
-## 🔧 Grafana Integration
-
-### Datasource Configuration
-
-1. Create a Prometheus datasource in Grafana
-2. Set the URL to your OAuth Gateway: `http://prometheus-oauth-gateway:8080`
-3. **Enable "Forward OAuth Identity"** - This is crucial for passing the user's JWT token
-
-### Example Datasource (provisioning):
+The gateway seamlessly integrates with VictoriaMetrics multi-tenant setup:
 
 ```yaml
-apiVersion: 1
-datasources:
-  - name: VictoriaMetrics-OAuth
-    type: prometheus
-    access: proxy
-    url: http://prometheus-oauth-gateway:8080
-    isDefault: true
-    jsonData:
-      httpMethod: GET
-      timeout: 60s
+upstream:
+  url: "http://victoriametrics:8428"
+  tenant_label: "vm_account_id"     # Default tenant label
+  project_label: "vm_project_id"    # Optional project label
+  use_project_id: true              # Enable project-level isolation
 ```
 
-### OAuth Configuration in Grafana
+### Tenant Mapping
 
-Configure Grafana to use your OAuth provider (Keycloak, Auth0, etc.):
+Configure how JWT claims map to VictoriaMetrics tenants:
 
-```bash
-GF_AUTH_OAUTH_AUTO_LOGIN=true
-GF_AUTH_OAUTH_ALLOW_SIGN_UP=true
-GF_AUTH_OAUTH_CLIENT_ID=grafana
-GF_AUTH_OAUTH_CLIENT_SECRET=grafana-secret
-GF_AUTH_OAUTH_SCOPES=openid email profile groups
-GF_AUTH_OAUTH_AUTH_URL=https://keycloak.example.com/auth/realms/myrealm/protocol/openid-connect/auth
-GF_AUTH_OAUTH_TOKEN_URL=https://keycloak.example.com/auth/realms/myrealm/protocol/openid-connect/token
+```yaml
+tenant_maps:
+  - user_claim: "sub"
+    user_value: "team-a@company.com"
+    vm_tenants:
+      - account_id: "1000"
+        project_id: "production"
+      - account_id: "1001" 
+        project_id: "staging"
+  
+  - user_claim: "department"
+    user_value: "engineering"
+    vm_tenants:
+      - account_id: "2000"
 ```
 
-## 🔒 Security Features
+## Architecture
 
-### JWT Token Validation
+### Clean Architecture Layers
 
-- **Algorithm Support**: RS256, HS256, ES256
-- **JWKS Integration**: Automatic public key fetching and caching
-- **Claims Validation**: Issuer, audience, expiration checks
-- **Token Caching**: Configurable TTL for performance
+```
+┌─────────────────────────────────────────┐
+│               Handlers                  │  HTTP Layer
+├─────────────────────────────────────────┤
+│              Services                   │  Business Logic
+│  ┌─────────┬─────────┬─────────────────┐│
+│  │  Auth   │ Tenant  │ Proxy/Access    ││
+│  └─────────┴─────────┴─────────────────┘│
+├─────────────────────────────────────────┤
+│             Domain                      │  Core Business Rules
+├─────────────────────────────────────────┤
+│          Infrastructure                 │  External Dependencies
+│  ┌─────────┬─────────┬─────────────────┐│
+│  │ Logger  │ Config  │    HTTP Client  ││
+│  └─────────┴─────────┴─────────────────┘│
+└─────────────────────────────────────────┘
+```
 
-### Tenant Isolation
+### Query Processing Flow
 
-- **Automatic Query Filtering**: Injects `tenant_id` filters into PromQL queries
-- **Multi-tenant Support**: Users can access multiple tenants based on group membership
-- **Read-only Access**: Configurable read-only permissions per group
+1. **Authentication**: JWT validation and user extraction
+2. **Authorization**: Tenant access validation
+3. **Query Parsing**: PromQL AST parsing using Prometheus library
+4. **Tenant Injection**: Systematic tenant label injection to ALL metrics
+5. **Proxy**: Forward filtered query to VictoriaMetrics
+6. **Response**: Return results to client
 
-### Example Query Transformation
+## Advanced Features
 
-Original query from user in `team-alpha` group:
+### PromQL Query Filtering
+
+The gateway uses the official Prometheus parser to ensure accurate tenant filtering:
+
+**Input Query:**
 ```promql
-up
+sum(kube_pod_info{cluster=~".*"}) / sum(machine_cores{cluster=~".*"})
 ```
 
-Automatically transformed to:
+**Filtered Output:**
 ```promql
-up{tenant_id=~"alpha|alpha-dev|alpha-staging"}
+sum(kube_pod_info{vm_account_id="1000",cluster=~".*"}) / sum(machine_cores{vm_account_id="1000",cluster=~".*"})
 ```
 
-## 🔗 Supported VictoriaMetrics Endpoints
+**Supported Query Types:**
+- ✅ Simple metrics: `up`, `cpu_usage`
+- ✅ Metrics with labels: `http_requests{job="api"}`
+- ✅ Functions: `rate()`, `increase()`, `histogram_quantile()`
+- ✅ Aggregations: `sum by (instance) (metric)`
+- ✅ Binary operations: `metric1 + metric2`, `rate(a) / rate(b)`
+- ✅ Complex nested queries with parentheses
+- ✅ Subqueries: `metric[5m:30s]`
 
-### Read Endpoints (with tenant filtering)
-- `/api/v1/query` - PromQL queries
-- `/api/v1/query_range` - Range queries  
-- `/api/v1/query_exemplars` - Exemplar queries
-- `/api/v1/series` - Series metadata
-- `/api/v1/labels` - Label names
-- `/api/v1/label/{name}/values` - Label values
-- `/api/v1/metadata` - Metric metadata
-- `/select/{tenant_id}/prometheus/api/v1/*` - Multi-tenant endpoints
+### Multi-Tenant Support
 
-### Write Endpoints (with tenant injection)
-- `/api/v1/write` - Remote write protocol
-- `/api/v1/import` - Generic import
-- `/api/v1/import/csv` - CSV format import
-- `/api/v1/import/prometheus` - Prometheus exposition format
-- `/api/v1/import/native` - VictoriaMetrics native format
-- `/insert/{tenant_id}/*` - Multi-tenant write endpoints
-
-### Admin Endpoints (require admin permissions)
-- `/api/v1/admin/tsdb/delete_series` - Delete series
-- `/api/v1/admin/tsdb/clean_tombstones` - Clean tombstones
-- `/api/v1/admin/tsdb/snapshot` - Create snapshots
-- `/api/v1/status/tsdb` - TSDB status
-- `/api/v1/status/flags` - Runtime flags
-- `/api/v1/status/config` - Configuration
-
-### Status Endpoints (public access)
-- `/health` - Gateway health check
-- `/readiness` - Gateway readiness
-- `/metrics` - Prometheus metrics
-- `/api/v1/status/buildinfo` - Build information
-- `/api/v1/status/runtimeinfo` - Runtime information
-
-## 💾 Write Operations & Tenant Injection
-
-The gateway automatically injects tenant labels into write operations:
-
-### Prometheus Exposition Format
-```
-# Original metric
-http_requests_total{method="GET"} 100
-
-# After tenant injection (tenant: alpha)  
-http_requests_total{method="GET",tenant_id="alpha"} 100
+**VictoriaMetrics Tenant Isolation:**
+```go
+type VMTenant struct {
+    AccountID string `json:"account_id"`
+    ProjectID string `json:"project_id,omitempty"`
+}
 ```
 
-### CSV Format
-```
-# Original: metric,labels,timestamp,value
-http_requests_total,method=GET,1234567890,100
+**Query Filtering Examples:**
+- Single tenant: `{vm_account_id="1000"}`
+- With project: `{vm_account_id="1000",vm_project_id="prod"}`
+- Multiple tenants: Uses first tenant (extensible for OR logic)
 
-# After injection
-http_requests_total,method=GET;tenant_id=alpha,1234567890,100
-```
-
-### Multi-tenant Write Access
-For users with access to multiple tenants, specify the target tenant:
-
-```bash
-# Using X-Target-Tenant header
-curl -X POST \
-  -H "Authorization: Bearer $JWT_TOKEN" \
-  -H "X-Target-Tenant: alpha" \
-  -H "Content-Type: text/plain" \
-  --data-raw 'my_metric{job="test"} 42' \
-  http://gateway:8080/api/v1/import/prometheus
-
-# Using tenant query parameter  
-curl -X POST \
-  "http://gateway:8080/api/v1/import/prometheus?tenant=alpha" \
-  -H "Authorization: Bearer $JWT_TOKEN" \
-  --data-raw 'my_metric{job="test"} 42'
-```
-
-## 📊 Monitoring
-
-The gateway exposes comprehensive metrics at `/metrics`:
-
-### Key Metrics
-
-- `prometheus_oauth_gateway_requests_total` - Total requests processed
-- `prometheus_oauth_gateway_request_duration_seconds` - Request latency
-- `prometheus_oauth_gateway_authentication_total` - Authentication attempts
-- `prometheus_oauth_gateway_query_filters_applied_total` - Query filters applied
-- `prometheus_oauth_gateway_tenant_access_denied_total` - Access denied events
-- `prometheus_oauth_gateway_upstream_requests_total` - Upstream requests
-
-### Sample Dashboard
-
-A complete Grafana dashboard is included in `grafana/dashboards/oauth-gateway-dashboard.json` with:
-
-- Request rates and response times
-- Authentication success rates
-- Tenant access patterns
-- Query filtering statistics
-- JWKS cache performance
-
-## 🧪 Testing
-
-Run the comprehensive test suite:
-
-```bash
-# Run all tests
-make test
-
-# Run tests with coverage
-make coverage
-
-# Run tests with race detector
-make test-race
-
-# Run benchmarks
-make benchmark
-```
-
-### Test Coverage
-
-The project includes extensive tests covering:
-
-- JWT token verification and parsing
-- Tenant mapping and access control
-- Query filtering and transformation
-- HTTP middleware and handlers
-- Configuration loading and validation
-- Proxy functionality and retry logic
-
-## 🚀 Development
-
-### Prerequisites
-
-- Go 1.21+
-- Docker & Docker Compose
-- Make
-
-### Development Setup
-
-```bash
-# Install development tools
-make install-tools
-
-# Run in development mode (with auto-reload)
-make dev
-
-# Run linting and security checks
-make lint
-make security
-make vet
-
-# Build for multiple platforms
-make build-all
-```
-
-### Project Structure
-
-```
-├── cmd/gateway/          # Application entrypoint
-├── internal/
-│   ├── auth/            # JWT authentication logic
-│   ├── config/          # Configuration management
-│   ├── middleware/      # HTTP middleware components
-│   ├── metrics/         # Prometheus metrics
-│   ├── proxy/           # Upstream proxy logic
-│   └── server/          # HTTP server and handlers
-├── pkg/
-│   ├── tenant/          # Tenant mapping logic
-│   └── utils/           # Utility functions
-├── grafana/             # Grafana configuration
-├── docker-compose.yml   # Development environment
-├── Dockerfile           # Container image
-└── Makefile            # Build automation
-```
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **"User context not found"**
-   - Ensure Grafana has "Forward OAuth Identity" enabled
-   - Check that JWT tokens are being passed in the Authorization header
-
-2. **"Token verification failed"**
-   - Verify JWKS URL is accessible
-   - Check JWT algorithm matches your OAuth provider
-   - Ensure token is not expired
-
-3. **"Query access denied"**
-   - Check user groups in JWT token match tenant mappings
-   - Verify `user_groups_claim` configuration matches your JWT structure
-
-4. **"Failed to forward request"**
-   - Check upstream URL and connectivity
-   - Verify retry configuration
-   - Check upstream service health
-
-### Debug Mode
-
-Enable debug logging for detailed troubleshooting:
-
-```bash
-export LOG_LEVEL=debug
-./prometheus-oauth-gateway --config config.yaml
-```
+## API Endpoints
 
 ### Health Checks
+```bash
+GET /health   # Health check
+GET /ready    # Readiness check
+```
 
-- **Health**: `GET /health` - Basic service health
-- **Readiness**: `GET /readiness` - Service readiness including upstream checks
+### Prometheus API Proxy
+All Prometheus API endpoints are proxied with tenant filtering:
 
-## 📈 Performance
+```bash
+# Query
+GET /api/v1/query?query=up
 
-### Benchmarks
+# Query Range  
+GET /api/v1/query_range?query=up&start=...&end=...
 
-Typical performance characteristics:
+# Series
+GET /api/v1/series?match[]=up
 
-- **Request Latency**: ~5ms average (excluding upstream)
-- **Authentication**: ~2ms average (with JWKS caching)
-- **Query Filtering**: ~1ms average
-- **Memory Usage**: ~50MB base + JWT cache
-- **Throughput**: 1000+ RPS per core
+# Labels
+GET /api/v1/labels
 
-### Optimization Tips
+# Write (with tenant header)
+POST /api/v1/write
+X-Tenant-ID: 1000
+```
 
-1. **Enable JWKS Caching**: Set appropriate `cache_ttl` (default 5m)
-2. **Tune Retry Parameters**: Adjust `max_retries` and `retry_delay` for your network
-3. **Connection Pooling**: Configure upstream HTTP client settings
-4. **Resource Limits**: Set appropriate Docker memory/CPU limits
+## Monitoring & Observability
 
-## 🤝 Contributing
+### Structured Logging
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Commit your changes: `git commit -m 'Add amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
+The gateway provides comprehensive structured logging:
 
-### Development Guidelines
+```json
+{
+  "level": "info",
+  "time": "2025-01-20T10:30:00Z",
+  "msg": "TENANT FILTER RESULT",
+  "user_id": "user@example.com",
+  "original_query": "sum(cpu_usage) / sum(memory_total)",
+  "filtered_query": "sum(cpu_usage{vm_account_id=\"1000\"}) / sum(memory_total{vm_account_id=\"1000\"})",
+  "filter_applied": true,
+  "used_production_parser": true
+}
+```
 
-- Follow Go best practices and formatting (`make fmt`)
-- Add tests for new functionality (`make test`)
-- Update documentation as needed
-- Run security scans (`make security`)
+### Log Levels
+- **DEBUG**: Detailed parsing and tenant injection logs
+- **INFO**: Request/response and tenant filtering results
+- **WARN**: Authentication failures and misconfigurations  
+- **ERROR**: System errors and parsing failures
 
-## 📄 License
+## Development
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+### Project Structure
+```
+├── cmd/gateway/           # Application entrypoint
+├── internal/
+│   ├── config/           # Configuration management
+│   ├── domain/           # Core business logic and interfaces
+│   ├── handlers/         # HTTP handlers
+│   ├── infrastructure/   # External dependencies
+│   └── services/         # Business logic implementation
+│       ├── auth/         # JWT authentication
+│       ├── tenant/       # Tenant filtering and PromQL parsing
+│       ├── proxy/        # HTTP proxying
+│       └── access/       # Authorization logic
+├── config.example.yaml   # Example configuration
+└── README.md
+```
 
-## 🙏 Acknowledgments
+### Running Tests
+```bash
+go test ./...
+```
 
-- [VictoriaMetrics](https://victoriametrics.com/) - High-performance monitoring solution
-- [Grafana](https://grafana.com/) - Observability platform
-- [Keycloak](https://www.keycloak.org/) - Identity and access management
-- [Prometheus](https://prometheus.io/) - Monitoring system and time series database
+### Building for Production
+```bash
+# Build with version info
+go build -ldflags "-X main.version=1.0.0 -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.gitCommit=$(git rev-parse HEAD)" -o prometheus-oauth-gateway ./cmd/gateway
+```
+
+## Deployment
+
+### Docker
+```dockerfile
+FROM golang:1.21-alpine AS builder
+WORKDIR /app
+COPY . .
+RUN go build -o prometheus-oauth-gateway ./cmd/gateway
+
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /root/
+COPY --from=builder /app/prometheus-oauth-gateway .
+COPY config.yaml .
+CMD ["./prometheus-oauth-gateway", "--config", "config.yaml"]
+```
+
+### Kubernetes
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-oauth-gateway
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: prometheus-oauth-gateway
+  template:
+    metadata:
+      labels:
+        app: prometheus-oauth-gateway
+    spec:
+      containers:
+      - name: gateway
+        image: prometheus-oauth-gateway:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: LOG_LEVEL
+          value: "info"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/gateway
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+      volumes:
+      - name: config
+        configMap:
+          name: gateway-config
+```
+
+## Security Considerations
+
+- ✅ **JWT Validation**: Comprehensive token validation with JWKS
+- ✅ **Tenant Isolation**: Strict query filtering prevents cross-tenant data access
+- ✅ **No Secret Logging**: Sensitive data is never logged
+- ✅ **Graceful Error Handling**: Fails secure with proper error messages
+- ✅ **HTTPS Ready**: TLS termination at load balancer level
+- ✅ **Rate Limiting**: Can be implemented at reverse proxy level
+
+## Performance
+
+- **Low Latency**: Efficient PromQL parsing with minimal overhead
+- **Memory Efficient**: Streaming proxy with bounded memory usage
+- **Concurrent**: Handles multiple requests simultaneously
+- **Production Ready**: Tested with complex real-world PromQL queries
+
+## Contributing
+
+1. Follow clean architecture principles
+2. Add tests for new features
+3. Update documentation
+4. Use structured logging
+5. Ensure VictoriaMetrics compatibility
+
+## License
+
+MIT License - see LICENSE file for details.
+
+---
+
+**Built with ❤️ for secure, multi-tenant Prometheus/VictoriaMetrics deployments**

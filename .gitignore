@@ -91,7 +91,7 @@ air_tmp/
 # Grafana data
 grafana-data/
 
-# VictoriaMetrics data  
+# VictoriaMetrics data
 vm-data/
 
 # Keycloak data
@@ -150,7 +150,7 @@ tramp
 
 # Local env files
 .env.local
-.env.development.local  
+.env.development.local
 .env.test.local
 .env.production.local
 
@@ -213,11 +213,10 @@ coverage/
 .vscode-test
 
 # Gateway binary
-gateway
 prometheus-oauth-gateway
 
 # Test files
 /tmp/test*
 
-# Backup test files  
+# Backup test files
 *.go.bak

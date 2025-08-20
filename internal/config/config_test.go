@@ -32,10 +32,10 @@ func TestLoad(t *testing.T) {
 					TenantLabel:  "tenant_id",
 				},
 				Auth: AuthConfig{
-					JWTAlgorithm:     "RS256",
-					TokenTTL:         time.Hour,
-					CacheTTL:         5 * time.Minute,
-					UserGroupsClaim:  "groups",
+					JWTAlgorithm:    "RS256",
+					TokenTTL:        time.Hour,
+					CacheTTL:        5 * time.Minute,
+					UserGroupsClaim: "groups",
 				},
 				Metrics: MetricsConfig{
 					Enabled: true,
@@ -49,8 +49,8 @@ func TestLoad(t *testing.T) {
 			wantErr: true, // missing required upstream URL
 		},
 		{
-			name:   "missing upstream URL should fail",
-			config: "",
+			name:    "missing upstream URL should fail",
+			config:  "",
 			wantErr: true,
 		},
 		{
@@ -66,11 +66,11 @@ auth:
 `,
 			env: map[string]string{
 				"SERVER_ADDRESS":         "0.0.0.0:8080",
-				"UPSTREAM_URL":          "http://localhost:8428",
-				"AUTH_JWKS_URL":         "https://keycloak.local/jwks",
-				"AUTH_REQUIRED_ISSUER":  "https://keycloak.local",
+				"UPSTREAM_URL":           "http://localhost:8428",
+				"AUTH_JWKS_URL":          "https://keycloak.local/jwks",
+				"AUTH_REQUIRED_ISSUER":   "https://keycloak.local",
 				"AUTH_USER_GROUPS_CLAIM": "realm_access.roles",
-				"LOG_LEVEL":             "debug",
+				"LOG_LEVEL":              "debug",
 			},
 			want: &Config{
 				Server: ServerConfig{
@@ -88,13 +88,13 @@ auth:
 					TenantLabel:  "tenant_id",
 				},
 				Auth: AuthConfig{
-					Type:             "jwt",
-					JWKSURL:          "https://keycloak.local", // overridden by env
-					JWTAlgorithm:     "RS256",
-					RequiredIssuer:   "https://keycloak.local", // from env
-					TokenTTL:         time.Hour,
-					CacheTTL:         5 * time.Minute,
-					UserGroupsClaim:  "realm_access.roles", // overridden by env
+					Type:            "jwt",
+					JWKSURL:         "https://keycloak.local/jwks", // overridden by env
+					JWTAlgorithm:    "RS256",
+					RequiredIssuer:  "https://keycloak.local", // from env
+					TokenTTL:        time.Hour,
+					CacheTTL:        5 * time.Minute,
+					UserGroupsClaim: "realm_access.roles", // overridden by env
 				},
 				Metrics: MetricsConfig{
 					Enabled: true,
