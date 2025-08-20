@@ -31,7 +31,14 @@ go build -o vm-proxy-auth ./cmd/gateway
 
 ### Run
 ```bash
-./vm-proxy-auth --config config.yaml
+# Basic setup
+./vm-proxy-auth --config examples/config.example.yaml
+
+# Production with RS256 JWT
+./vm-proxy-auth --config examples/config.rs256.example.yaml
+
+# Multi-tenant setup
+./vm-proxy-auth --config examples/config.vm-multitenancy.yaml
 ```
 
 ### Command Line Options
@@ -48,6 +55,16 @@ go build -o vm-proxy-auth ./cmd/gateway
 ```
 
 ## Configuration
+
+> 📁 **See [examples/](examples/) directory for complete configuration examples and deployment guides**
+
+The service supports multiple configuration modes for different deployment scenarios:
+
+- **[Basic Setup](examples/config.example.yaml)** - HS256 JWT with shared secrets
+- **[Production Security](examples/config.rs256.example.yaml)** - RS256 JWT with JWKS
+- **[Multi-Tenant](examples/config.vm-multitenancy.yaml)** - Complex tenant isolation  
+- **[Full Observability](examples/config.metrics.example.yaml)** - Metrics and monitoring
+- **[Testing](examples/config.test.yaml)** - Minimal test configuration
 
 ### Basic Configuration
 ```yaml
