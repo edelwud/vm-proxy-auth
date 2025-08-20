@@ -14,70 +14,70 @@ jobs:
     name: Update Coverage Badge
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'push'
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.25.0'
-        cache: true
-        
-    - name: Run tests and calculate coverage
-      run: |
-        go test -v -race -coverprofile=coverage.out -covermode=atomic -coverpkg=./... ./...
-        COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
-        echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
-        
-        # Set coverage color
-        if (( $(echo "$COVERAGE >= 80" | bc -l) )); then
-          echo "COLOR=brightgreen" >> $GITHUB_ENV
-        elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then
-          echo "COLOR=yellow" >> $GITHUB_ENV
-        elif (( $(echo "$COVERAGE >= 40" | bc -l) )); then
-          echo "COLOR=orange" >> $GITHUB_ENV
-        else
-          echo "COLOR=red" >> $GITHUB_ENV
-        fi
-        
-    - name: Create coverage badge
-      uses: schneegans/dynamic-badges-action@v1.7.0
-      with:
-        auth: ${{ secrets.GITHUB_TOKEN }}
-        gistID: ${{ secrets.GIST_ID }}
-        filename: vm-proxy-auth-coverage.json
-        label: coverage
-        message: ${{ env.COVERAGE }}%
-        color: ${{ env.COLOR }}
-        
-    - name: Update README with coverage badge
-      run: |
-        # Check if coverage badge exists in README
-        if ! grep -q "coverage-${{ env.COVERAGE }}%25-${{ env.COLOR }}" README.md; then
-          # Update or add coverage badge
-          sed -i.bak 's|\[\!\[Coverage\]([^)]*)\]([^)]*)|[![Coverage](https://img.shields.io/badge/coverage-${{ env.COVERAGE }}%25-${{ env.COLOR }})](https://github.com/edelwud/vm-proxy-auth/actions/workflows/ci.yml)|g' README.md
-          
-          # If no coverage badge found, add it after CI badge
-          if ! grep -q "Coverage" README.md; then
-            sed -i.bak '/\[\!\[CI\]/a [![Coverage](https://img.shields.io/badge/coverage-${{ env.COVERAGE }}%25-${{ env.COLOR }})](https://github.com/edelwud/vm-proxy-auth/actions/workflows/ci.yml)' README.md
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.0"
+          cache: true
+
+      - name: Run tests and calculate coverage
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic -coverpkg=./... ./...
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
+
+          # Set coverage color
+          if (( $(echo "$COVERAGE >= 80" | bc -l) )); then
+            echo "COLOR=brightgreen" >> $GITHUB_ENV
+          elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then
+            echo "COLOR=yellow" >> $GITHUB_ENV
+          elif (( $(echo "$COVERAGE >= 40" | bc -l) )); then
+            echo "COLOR=orange" >> $GITHUB_ENV
+          else
+            echo "COLOR=red" >> $GITHUB_ENV
           fi
-          
-          rm -f README.md.bak
-        fi
-        
-    - name: Commit coverage badge update
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        
-        if git diff --quiet README.md; then
-          echo "No changes to commit"
-        else
-          git add README.md
-          git commit -m "docs: update coverage badge to ${{ env.COVERAGE }}%"
-          git push
-        fi
+
+      - name: Create coverage badge
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GITHUB_TOKEN }}
+          gistID: ${{ secrets.GIST_ID }}
+          filename: vm-proxy-auth-coverage.json
+          label: coverage
+          message: ${{ env.COVERAGE }}%
+          color: ${{ env.COLOR }}
+
+      - name: Update README with coverage badge
+        run: |
+          # Check if coverage badge exists in README
+          if ! grep -q "coverage-${{ env.COVERAGE }}%25-${{ env.COLOR }}" README.md; then
+            # Update or add coverage badge
+            sed -i.bak 's|\[\!\[Coverage\]([^)]*)\]([^)]*)|[![Coverage](https://img.shields.io/badge/coverage-${{ env.COVERAGE }}%25-${{ env.COLOR }})](https://github.com/edelwud/vm-proxy-auth/actions/workflows/ci.yml)|g' README.md
+
+            # If no coverage badge found, add it after CI badge
+            if ! grep -q "Coverage" README.md; then
+              sed -i.bak '/\[\!\[CI\]/a [![Coverage](https://img.shields.io/badge/coverage-${{ env.COVERAGE }}%25-${{ env.COLOR }})](https://github.com/edelwud/vm-proxy-auth/actions/workflows/ci.yml)' README.md
+            fi
+
+            rm -f README.md.bak
+          fi
+
+      - name: Commit coverage badge update
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+          if git diff --quiet README.md; then
+            echo "No changes to commit"
+          else
+            git add README.md
+            git commit -m "docs: update coverage badge to ${{ env.COVERAGE }}%"
+            git push
+          fi
