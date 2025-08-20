@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
 var (
@@ -94,7 +94,7 @@ type Service struct {
 // NewService creates a new metrics service
 func NewService(logger domain.Logger) *Service {
 	registry := prometheus.NewRegistry()
-	
+
 	// Register all metrics
 	registry.MustRegister(
 		httpRequestsTotal,

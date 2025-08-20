@@ -1,11 +1,19 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
+)
+
+var (
+	ErrUpstreamURLRequired = errors.New(domain.ErrUpstreamURLRequired)
+	ErrAuthConfigRequired  = errors.New(domain.ErrAuthConfigRequired)
 )
 
 type Config struct {
@@ -18,58 +26,58 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Address      string        `yaml:"address" default:"0.0.0.0:8080"`
-	ReadTimeout  time.Duration `yaml:"read_timeout" default:"30s"`
+	Address      string        `yaml:"address"       default:"0.0.0.0:8080"`
+	ReadTimeout  time.Duration `yaml:"read_timeout"  default:"30s"`
 	WriteTimeout time.Duration `yaml:"write_timeout" default:"30s"`
-	IdleTimeout  time.Duration `yaml:"idle_timeout" default:"60s"`
+	IdleTimeout  time.Duration `yaml:"idle_timeout"  default:"60s"`
 }
 
 type UpstreamConfig struct {
 	URL          string        `yaml:"url"`
-	Timeout      time.Duration `yaml:"timeout" default:"30s"`
-	MaxRetries   int           `yaml:"max_retries" default:"3"`
-	RetryDelay   time.Duration `yaml:"retry_delay" default:"1s"`
-	TenantHeader string        `yaml:"tenant_header" default:"X-Prometheus-Tenant"`
+	Timeout      time.Duration `yaml:"timeout"        default:"30s"`
+	MaxRetries   int           `yaml:"max_retries"    default:"3"`
+	RetryDelay   time.Duration `yaml:"retry_delay"    default:"1s"`
+	TenantHeader string        `yaml:"tenant_header"  default:"X-Prometheus-Tenant"`
 	// VictoriaMetrics multi-tenancy labels
-	TenantLabel    string `yaml:"tenant_label" default:"vm_account_id"`
-	ProjectLabel   string `yaml:"project_label" default:"vm_project_id"`
-	UseProjectID   bool   `yaml:"use_project_id" default:"false"`
+	TenantLabel  string `yaml:"tenant_label"   default:"vm_account_id"`
+	ProjectLabel string `yaml:"project_label"  default:"vm_project_id"`
+	UseProjectID bool   `yaml:"use_project_id" default:"false"`
 }
 
 type AuthConfig struct {
-	Type             string        `yaml:"type" default:"jwt"`
+	Type             string        `yaml:"type"              default:"jwt"`
 	JWKSURL          string        `yaml:"jwks_url"`
 	JWTSecret        string        `yaml:"jwt_secret"`
-	JWTAlgorithm     string        `yaml:"jwt_algorithm" default:"RS256"`
+	JWTAlgorithm     string        `yaml:"jwt_algorithm"     default:"RS256"`
 	ValidateAudience bool          `yaml:"validate_audience" default:"false"`
-	ValidateIssuer   bool          `yaml:"validate_issuer" default:"false"`
+	ValidateIssuer   bool          `yaml:"validate_issuer"   default:"false"`
 	RequiredIssuer   string        `yaml:"required_issuer"`
 	RequiredAudience []string      `yaml:"required_audience"`
-	TokenTTL         time.Duration `yaml:"token_ttl" default:"1h"`
-	CacheTTL         time.Duration `yaml:"cache_ttl" default:"5m"`
+	TokenTTL         time.Duration `yaml:"token_ttl"         default:"1h"`
+	CacheTTL         time.Duration `yaml:"cache_ttl"         default:"5m"`
 	UserGroupsClaim  string        `yaml:"user_groups_claim" default:"groups"`
 }
 
 type TenantMapping struct {
 	Groups   []string          `yaml:"groups"`
 	Tenants  []string          `yaml:"tenants"`
-	ReadOnly bool              `yaml:"read_only" default:"false"`
+	ReadOnly bool              `yaml:"read_only"   default:"false"`
 	// VictoriaMetrics specific
 	VMTenants []VMTenantMapping `yaml:"vm_tenants,omitempty"`
 }
 
 type VMTenantMapping struct {
 	AccountID string `yaml:"account_id"`
-	ProjectID string `yaml:"project_id,omitempty"`  // Optional
+	ProjectID string `yaml:"project_id,omitempty"` // Optional
 }
 
 type MetricsConfig struct {
 	Enabled bool   `yaml:"enabled" default:"true"`
-	Path    string `yaml:"path" default:"/metrics"`
+	Path    string `yaml:"path"    default:"/metrics"`
 }
 
 type LoggingConfig struct {
-	Level  string `yaml:"level" default:"info"`
+	Level  string `yaml:"level"  default:"info"`
 	Format string `yaml:"format" default:"json"`
 }
 
@@ -134,82 +142,86 @@ func loadFromEnv(config *Config) error {
 
 func validate(config *Config) error {
 	if config.Upstream.URL == "" {
-		return fmt.Errorf("upstream.url is required")
+		return ErrUpstreamURLRequired
 	}
 
 	if config.Auth.Type == "jwt" && config.Auth.JWKSURL == "" && config.Auth.JWTSecret == "" {
-		return fmt.Errorf("either auth.jwks_url or auth.jwt_secret must be provided for JWT authentication")
+		return ErrAuthConfigRequired
 	}
 
 	return nil
 }
 
 func setDefaults(config *Config) {
-	if config.Server.Address == "" {
-		config.Server.Address = "0.0.0.0:8080"
-	}
+	setServerDefaults(&config.Server)
+	setUpstreamDefaults(&config.Upstream)
+	setAuthDefaults(&config.Auth)
+	setMetricsDefaults(&config.Metrics)
+	setLoggingDefaults(&config.Logging)
+}
 
-	if config.Server.ReadTimeout == 0 {
-		config.Server.ReadTimeout = 30 * time.Second
+func setServerDefaults(server *ServerConfig) {
+	if server.Address == "" {
+		server.Address = "0.0.0.0:8080"
 	}
-
-	if config.Server.WriteTimeout == 0 {
-		config.Server.WriteTimeout = 30 * time.Second
+	if server.ReadTimeout == 0 {
+		server.ReadTimeout = domain.DefaultReadTimeout
 	}
-
-	if config.Server.IdleTimeout == 0 {
-		config.Server.IdleTimeout = 60 * time.Second
+	if server.WriteTimeout == 0 {
+		server.WriteTimeout = domain.DefaultWriteTimeout
 	}
-
-	if config.Upstream.Timeout == 0 {
-		config.Upstream.Timeout = 30 * time.Second
+	if server.IdleTimeout == 0 {
+		server.IdleTimeout = domain.DefaultIdleTimeout
 	}
+}
 
-	if config.Upstream.MaxRetries == 0 {
-		config.Upstream.MaxRetries = 3
+func setUpstreamDefaults(upstream *UpstreamConfig) {
+	if upstream.Timeout == 0 {
+		upstream.Timeout = domain.DefaultTimeout
 	}
-
-	if config.Upstream.RetryDelay == 0 {
-		config.Upstream.RetryDelay = time.Second
+	if upstream.MaxRetries == 0 {
+		upstream.MaxRetries = domain.DefaultMaxRetries
 	}
-
-	if config.Upstream.TenantHeader == "" {
-		config.Upstream.TenantHeader = "X-Prometheus-Tenant"
+	if upstream.RetryDelay == 0 {
+		upstream.RetryDelay = domain.DefaultRetryDelay
 	}
-
-	if config.Upstream.TenantLabel == "" {
-		config.Upstream.TenantLabel = "vm_account_id"
+	if upstream.TenantHeader == "" {
+		upstream.TenantHeader = "X-Prometheus-Tenant"
 	}
-
-	if config.Upstream.ProjectLabel == "" {
-		config.Upstream.ProjectLabel = "vm_project_id"
+	if upstream.TenantLabel == "" {
+		upstream.TenantLabel = "vm_account_id"
 	}
-
-	if config.Auth.JWTAlgorithm == "" {
-		config.Auth.JWTAlgorithm = "RS256"
+	if upstream.ProjectLabel == "" {
+		upstream.ProjectLabel = "vm_project_id"
 	}
+}
 
-	if config.Auth.TokenTTL == 0 {
-		config.Auth.TokenTTL = time.Hour
+func setAuthDefaults(auth *AuthConfig) {
+	if auth.JWTAlgorithm == "" {
+		auth.JWTAlgorithm = "RS256"
 	}
-
-	if config.Auth.CacheTTL == 0 {
-		config.Auth.CacheTTL = 5 * time.Minute
+	if auth.TokenTTL == 0 {
+		auth.TokenTTL = domain.DefaultTokenTTL
 	}
-
-	if config.Auth.UserGroupsClaim == "" {
-		config.Auth.UserGroupsClaim = "groups"
+	if auth.CacheTTL == 0 {
+		auth.CacheTTL = domain.DefaultCacheTTL
 	}
-
-	if config.Metrics.Path == "" {
-		config.Metrics.Path = "/metrics"
+	if auth.UserGroupsClaim == "" {
+		auth.UserGroupsClaim = "groups"
 	}
+}
 
-	if config.Logging.Level == "" {
-		config.Logging.Level = "info"
+func setMetricsDefaults(metrics *MetricsConfig) {
+	if metrics.Path == "" {
+		metrics.Path = "/metrics"
 	}
+}
 
-	if config.Logging.Format == "" {
-		config.Logging.Format = "json"
+func setLoggingDefaults(logging *LoggingConfig) {
+	if logging.Level == "" {
+		logging.Level = "info"
+	}
+	if logging.Format == "" {
+		logging.Format = "json"
 	}
 }

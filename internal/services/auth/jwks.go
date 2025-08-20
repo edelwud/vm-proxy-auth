@@ -9,6 +9,8 @@ import (
 	"math/big"
 	"net/http"
 	"time"
+
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
 // JWKS represents the JSON Web Key Set structure
@@ -28,18 +30,18 @@ type JWK struct {
 
 // JWKSFetcher handles fetching and caching JWKS
 type JWKSFetcher struct {
-	client     *http.Client
-	jwksURL    string
-	cache      map[string]*rsa.PublicKey
-	cacheTime  time.Time
-	cacheTTL   time.Duration
+	client    *http.Client
+	jwksURL   string
+	cache     map[string]*rsa.PublicKey
+	cacheTime time.Time
+	cacheTTL  time.Duration
 }
 
 // NewJWKSFetcher creates a new JWKS fetcher
 func NewJWKSFetcher(jwksURL string, cacheTTL time.Duration) *JWKSFetcher {
 	return &JWKSFetcher{
 		client: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: domain.DefaultTimeout,
 		},
 		jwksURL:  jwksURL,
 		cache:    make(map[string]*rsa.PublicKey),

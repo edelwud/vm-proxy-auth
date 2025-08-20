@@ -1,18 +1,19 @@
 package logger
 
 import (
-	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/sirupsen/logrus"
+
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
-// StructuredLogger wraps logrus to implement domain.Logger interface
+// StructuredLogger wraps logrus to implement domain.Logger interface.
 type StructuredLogger struct {
 	logger *logrus.Logger
 	fields logrus.Fields
 }
 
-// NewStructuredLogger creates a new structured logger
-func NewStructuredLogger(level string, format string) domain.Logger {
+// NewStructuredLogger creates a new structured logger.
+func NewStructuredLogger(level, format string) domain.Logger {
 	logger := logrus.New()
 
 	// Set log level
@@ -78,7 +79,7 @@ func (l *StructuredLogger) With(fields ...domain.Field) domain.Logger {
 	for _, field := range fields {
 		newFields[field.Key] = field.Value
 	}
-	
+
 	return &StructuredLogger{
 		logger: l.logger,
 		fields: newFields,
@@ -87,16 +88,16 @@ func (l *StructuredLogger) With(fields ...domain.Field) domain.Logger {
 
 func (l *StructuredLogger) logWithFields(level logrus.Level, msg string, fields ...domain.Field) {
 	entry := l.logger.WithFields(l.fields)
-	
+
 	// Add fields from parameters
 	for _, field := range fields {
 		entry = entry.WithField(field.Key, field.Value)
 	}
-	
+
 	entry.Log(level, msg)
 }
 
-// Field helpers for common patterns
+// Field helpers for common patterns.
 func String(key, value string) domain.Field {
 	return domain.Field{Key: key, Value: value}
 }
@@ -113,6 +114,7 @@ func Error(err error) domain.Field {
 	if err == nil {
 		return domain.Field{Key: "error", Value: nil}
 	}
+
 	return domain.Field{Key: "error", Value: err.Error()}
 }
 

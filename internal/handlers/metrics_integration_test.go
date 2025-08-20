@@ -9,20 +9,20 @@ import (
 
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
-	"github.com/edelwud/vm-proxy-auth/internal/services/auth"
 	"github.com/edelwud/vm-proxy-auth/internal/services/access"
+	"github.com/edelwud/vm-proxy-auth/internal/services/auth"
 	"github.com/edelwud/vm-proxy-auth/internal/services/metrics"
 	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/services/tenant"
 )
 
-// mockLogger implements domain.Logger for testing
+// mockLogger implements domain.Logger for testing.
 type testLogger struct{}
 
-func (m *testLogger) Debug(msg string, fields ...domain.Field) {}
-func (m *testLogger) Info(msg string, fields ...domain.Field)  {}
-func (m *testLogger) Warn(msg string, fields ...domain.Field)  {}
-func (m *testLogger) Error(msg string, fields ...domain.Field) {}
+func (m *testLogger) Debug(msg string, fields ...domain.Field)  {}
+func (m *testLogger) Info(msg string, fields ...domain.Field)   {}
+func (m *testLogger) Warn(msg string, fields ...domain.Field)   {}
+func (m *testLogger) Error(msg string, fields ...domain.Field)  {}
 func (m *testLogger) With(fields ...domain.Field) domain.Logger { return m }
 
 func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
@@ -41,7 +41,7 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 		TenantLabel:  "vm_account_id",
 		ProjectLabel: "vm_project_id",
 	}
-	tenantService := tenant.NewService(upstreamConfig, logger, metricsService)
+	tenantService := tenant.NewService(&upstreamConfig, logger, metricsService)
 	accessService := access.NewService(logger)
 	proxyService := proxy.NewService("http://localhost:8428", 30*time.Second, logger, metricsService)
 
@@ -203,12 +203,12 @@ func TestMetricsIntegration_MetricValues(t *testing.T) {
 	}
 
 	// Record multiple requests to test counter increments
-	for i := 0; i < 5; i++ {
+	for _ = range domain.DefaultTestRetries {
 		metricsService.RecordRequest(ctx, "GET", "/api/v1/query", "200", 100*time.Millisecond, user)
 	}
 
 	// Record failed requests
-	for i := 0; i < 3; i++ {
+	for _ = range domain.DefaultTestCount {
 		metricsService.RecordRequest(ctx, "GET", "/api/v1/query", "500", 100*time.Millisecond, user)
 	}
 
@@ -234,14 +234,14 @@ func TestMetricsIntegration_MetricValues(t *testing.T) {
 	}
 }
 
-// containsMetric checks if metrics output contains a specific metric name or label
+// containsMetric checks if metrics output contains a specific metric name or label.
 func containsMetric(metricsOutput, searchString string) bool {
-	return len(metricsOutput) > 0 && 
-		   len(searchString) > 0 && 
-		   findInString(metricsOutput, searchString)
+	return len(metricsOutput) > 0 &&
+		len(searchString) > 0 &&
+		findInString(metricsOutput, searchString)
 }
 
-// Simple string search helper
+// Simple string search helper.
 func findInString(haystack, needle string) bool {
 	if len(needle) == 0 {
 		return true
@@ -249,7 +249,7 @@ func findInString(haystack, needle string) bool {
 	if len(haystack) == 0 {
 		return false
 	}
-	
+
 	for i := 0; i <= len(haystack)-len(needle); i++ {
 		if haystack[i:i+len(needle)] == needle {
 			return true

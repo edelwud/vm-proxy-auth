@@ -12,15 +12,15 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
-// Service implements domain.AuthService using clean architecture
+// Service implements domain.AuthService using clean architecture.
 type Service struct {
-	config       config.AuthConfig
-	tenantMaps   []config.TenantMapping
-	verifier     *JWTVerifier
-	logger       domain.Logger
-	metrics      domain.MetricsService
-	userCache    sync.Map
-	cacheTTL     time.Duration
+	config     config.AuthConfig
+	tenantMaps []config.TenantMapping
+	verifier   *JWTVerifier
+	logger     domain.Logger
+	metrics    domain.MetricsService
+	userCache  sync.Map
+	cacheTTL   time.Duration
 }
 
 type cachedUser struct {
@@ -28,11 +28,16 @@ type cachedUser struct {
 	expiresAt time.Time
 }
 
-// NewService creates a new auth service
-func NewService(cfg config.AuthConfig, tenantMaps []config.TenantMapping, logger domain.Logger, metrics domain.MetricsService) domain.AuthService {
+// NewService creates a new auth service.
+func NewService(
+	cfg config.AuthConfig,
+	tenantMaps []config.TenantMapping,
+	logger domain.Logger,
+	metrics domain.MetricsService,
+) domain.AuthService {
 	// Initialize JWT verifier based on configuration
 	var verifier *JWTVerifier
-	
+
 	if cfg.JWTSecret != "" {
 		// Use secret-based verification (typically HS256)
 		verifier = NewJWTVerifier(nil, []byte(cfg.JWTSecret), cfg.JWTAlgorithm)
@@ -54,7 +59,7 @@ func NewService(cfg config.AuthConfig, tenantMaps []config.TenantMapping, logger
 	}
 }
 
-// Authenticate validates a token and returns user information
+// Authenticate validates a token and returns user information.
 func (s *Service) Authenticate(ctx context.Context, token string) (*domain.User, error) {
 	if token == "" {
 		return nil, &domain.AppError{
@@ -65,18 +70,19 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*domain.User,
 	}
 
 	// Remove "Bearer " prefix if present
-	if strings.HasPrefix(token, "Bearer ") {
-		token = token[7:]
-	}
+	token = strings.TrimPrefix(token, "Bearer ")
 
 	// Check cache first
 	if cached, ok := s.userCache.Load(token); ok {
-		cachedUser := cached.(cachedUser)
-		if time.Now().Before(cachedUser.expiresAt) {
+		cachedUser, ok := cached.(cachedUser)
+		if !ok {
+			s.userCache.Delete(token) // Remove invalid cache entry
+		} else if time.Now().Before(cachedUser.expiresAt) {
 			return cachedUser.user, nil
+		} else {
+			// Remove expired entry
+			s.userCache.Delete(token)
 		}
-		// Remove expired entry
-		s.userCache.Delete(token)
 	}
 
 	// Verify token
@@ -84,8 +90,9 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*domain.User,
 	if err != nil {
 		// Record failed authentication attempt
 		s.metrics.RecordAuthAttempt(ctx, "unknown", "failed")
-		
+
 		s.logger.Warn("Token verification failed", domain.Field{Key: "error", Value: err.Error()})
+
 		return nil, &domain.AppError{
 			Code:       "invalid_token",
 			Message:    "Invalid or expired token",
@@ -128,7 +135,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*domain.User,
 	return user, nil
 }
 
-// extractGroups extracts group information from JWT claims
+// extractGroups extracts group information from JWT claims.
 func (s *Service) extractGroups(claims *Claims) []string {
 	if len(claims.Groups) > 0 {
 		return claims.Groups
@@ -137,7 +144,7 @@ func (s *Service) extractGroups(claims *Claims) []string {
 	return []string{"default"}
 }
 
-// determineUserPermissions maps user groups to tenant permissions
+// determineUserPermissions maps user groups to tenant permissions.
 func (s *Service) determineUserPermissions(userGroups []string) ([]string, []domain.VMTenant, bool) {
 	var allowedTenants []string
 	var vmTenants []domain.VMTenant
@@ -147,7 +154,7 @@ func (s *Service) determineUserPermissions(userGroups []string) ([]string, []dom
 		if s.hasGroupMatch(userGroups, mapping.Groups) {
 			// Add legacy tenants from this mapping
 			allowedTenants = append(allowedTenants, mapping.Tenants...)
-			
+
 			// Add VictoriaMetrics tenants if specified
 			for _, vmMapping := range mapping.VMTenants {
 				vmTenants = append(vmTenants, domain.VMTenant{
@@ -155,7 +162,7 @@ func (s *Service) determineUserPermissions(userGroups []string) ([]string, []dom
 					ProjectID: vmMapping.ProjectID,
 				})
 			}
-			
+
 			// If any mapping allows write access, user gets write access
 			if !mapping.ReadOnly {
 				readOnly = false
@@ -172,7 +179,7 @@ func (s *Service) determineUserPermissions(userGroups []string) ([]string, []dom
 	return s.removeDuplicates(allowedTenants), s.removeDuplicateVMTenants(vmTenants), readOnly
 }
 
-// hasGroupMatch checks if user has any of the required groups
+// hasGroupMatch checks if user has any of the required groups.
 func (s *Service) hasGroupMatch(userGroups, requiredGroups []string) bool {
 	for _, userGroup := range userGroups {
 		for _, requiredGroup := range requiredGroups {
@@ -181,10 +188,11 @@ func (s *Service) hasGroupMatch(userGroups, requiredGroups []string) bool {
 			}
 		}
 	}
+
 	return false
 }
 
-// removeDuplicates removes duplicate tenant IDs
+// removeDuplicates removes duplicate tenant IDs.
 func (s *Service) removeDuplicates(slice []string) []string {
 	keys := make(map[string]bool)
 	result := []string{}
@@ -194,10 +202,11 @@ func (s *Service) removeDuplicates(slice []string) []string {
 			result = append(result, item)
 		}
 	}
+
 	return result
 }
 
-// removeDuplicateVMTenants removes duplicate VM tenants
+// removeDuplicateVMTenants removes duplicate VM tenants.
 func (s *Service) removeDuplicateVMTenants(tenants []domain.VMTenant) []domain.VMTenant {
 	keys := make(map[string]bool)
 	result := []domain.VMTenant{}
@@ -208,17 +217,24 @@ func (s *Service) removeDuplicateVMTenants(tenants []domain.VMTenant) []domain.V
 			result = append(result, tenant)
 		}
 	}
+
 	return result
 }
 
-// CleanupCache removes expired entries from the cache
+// CleanupCache removes expired entries from the cache.
 func (s *Service) CleanupCache() {
 	now := time.Now()
 	s.userCache.Range(func(key, value interface{}) bool {
-		cached := value.(cachedUser)
+		cached, ok := value.(cachedUser)
+		if !ok {
+			s.userCache.Delete(key) // Remove invalid cache entry
+
+			return true
+		}
 		if now.After(cached.expiresAt) {
 			s.userCache.Delete(key)
 		}
+
 		return true
 	})
 }

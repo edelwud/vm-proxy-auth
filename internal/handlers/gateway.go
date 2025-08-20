@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,14 +15,19 @@ import (
 	loggerPkg "github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
 )
 
+// Define custom type for context keys to avoid collisions
+type contextKey string
+
+const requestIDKey contextKey = "request_id"
+
 // GatewayHandler handles all proxy requests using clean architecture
 type GatewayHandler struct {
-	authService   domain.AuthService
-	tenantService domain.TenantService
-	accessService domain.AccessControlService
-	proxyService  domain.ProxyService
+	authService    domain.AuthService
+	tenantService  domain.TenantService
+	accessService  domain.AccessControlService
+	proxyService   domain.ProxyService
 	metricsService domain.MetricsService
-	logger        domain.Logger
+	logger         domain.Logger
 }
 
 // NewGatewayHandler creates a new gateway handler
@@ -35,12 +40,12 @@ func NewGatewayHandler(
 	logger domain.Logger,
 ) *GatewayHandler {
 	return &GatewayHandler{
-		authService:   authService,
-		tenantService: tenantService,
-		accessService: accessService,
-		proxyService:  proxyService,
+		authService:    authService,
+		tenantService:  tenantService,
+		accessService:  accessService,
+		proxyService:   proxyService,
 		metricsService: metricsService,
-		logger:        logger,
+		logger:         logger,
 	}
 }
 
@@ -48,8 +53,8 @@ func NewGatewayHandler(
 func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	requestID := generateRequestID()
-	
-	ctx := context.WithValue(r.Context(), "request_id", requestID)
+
+	ctx := context.WithValue(r.Context(), requestIDKey, requestID)
 	r = r.WithContext(ctx)
 
 	reqLogger := h.logger.With(
@@ -63,8 +68,9 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Extract token from request
 	token := h.extractToken(r)
 	if token == "" {
-		h.writeError(w, domain.ErrUnauthorized, )
-		h.recordMetrics(r.Method, r.URL.Path, "401", time.Since(startTime), nil)
+		h.writeError(w, domain.ErrUnauthorized)
+		h.recordMetrics(ctx, r.Method, r.URL.Path, "401", time.Since(startTime), nil)
+
 		return
 	}
 
@@ -73,12 +79,13 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		reqLogger.Warn("Authentication failed", loggerPkg.Error(err))
 		if appErr, ok := err.(*domain.AppError); ok {
-			h.writeError(w, appErr, )
-			h.recordMetrics(r.Method, r.URL.Path, fmt.Sprintf("%d", appErr.HTTPStatus), time.Since(startTime), nil)
+			h.writeError(w, appErr)
+			h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), nil)
 		} else {
-			h.writeError(w, domain.ErrUnauthorized, )
-			h.recordMetrics(r.Method, r.URL.Path, "401", time.Since(startTime), nil)
+			h.writeError(w, domain.ErrUnauthorized)
+			h.recordMetrics(ctx, r.Method, r.URL.Path, "401", time.Since(startTime), nil)
 		}
+
 		return
 	}
 
@@ -88,12 +95,13 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := h.accessService.CanAccess(ctx, user, r.URL.Path, r.Method); err != nil {
 		userLogger.Warn("Access denied", loggerPkg.Error(err))
 		if appErr, ok := err.(*domain.AppError); ok {
-			h.writeError(w, appErr, )
-			h.recordMetrics(r.Method, r.URL.Path, fmt.Sprintf("%d", appErr.HTTPStatus), time.Since(startTime), user)
+			h.writeError(w, appErr)
+			h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), user)
 		} else {
-			h.writeError(w, domain.ErrForbidden, )
-			h.recordMetrics(r.Method, r.URL.Path, "403", time.Since(startTime), user)
+			h.writeError(w, domain.ErrForbidden)
+			h.recordMetrics(ctx, r.Method, r.URL.Path, "403", time.Since(startTime), user)
 		}
+
 		return
 	}
 
@@ -106,43 +114,47 @@ func (h *GatewayHandler) processRequest(w http.ResponseWriter, r *http.Request, 
 
 	// Determine if this is a query endpoint that needs filtering
 	var filteredQuery string
-	requestID := ctx.Value("request_id").(string)
+	requestID, ok := ctx.Value(requestIDKey).(string)
+	if !ok {
+		requestID = "unknown"
+	}
 	userLogger := h.logger.With(
 		loggerPkg.RequestID(requestID),
 		loggerPkg.UserID(user.ID),
 		loggerPkg.Path(r.URL.Path),
 		loggerPkg.Method(r.Method),
 	)
-	
+
 	userLogger.Info("Processing request",
 		domain.Field{Key: "path", Value: r.URL.Path},
 		domain.Field{Key: "method", Value: r.Method},
 		domain.Field{Key: "is_query_endpoint", Value: h.isQueryEndpoint(r.URL.Path)})
-	
+
 	if h.isQueryEndpoint(r.URL.Path) {
 		originalQuery := h.extractQuery(r)
 		userLogger.Info("Extracted query from request",
 			domain.Field{Key: "original_query", Value: originalQuery},
 			domain.Field{Key: "query_empty", Value: originalQuery == ""})
-		
+
 		if originalQuery != "" {
 			userLogger.Info("Calling FilterQuery function",
 				domain.Field{Key: "original_query", Value: originalQuery})
-			
+
 			var err error
 			filteredQuery, err = h.tenantService.FilterQuery(ctx, user, originalQuery)
 			if err != nil {
 				userLogger.Error("Query filtering failed", loggerPkg.Error(err))
 				if appErr, ok := err.(*domain.AppError); ok {
 					h.writeError(w, appErr)
-					h.recordMetrics(r.Method, r.URL.Path, fmt.Sprintf("%d", appErr.HTTPStatus), time.Since(startTime), user)
+					h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), user)
 				} else {
 					h.writeError(w, domain.ErrForbidden)
-					h.recordMetrics(r.Method, r.URL.Path, "403", time.Since(startTime), user)
+					h.recordMetrics(ctx, r.Method, r.URL.Path, "403", time.Since(startTime), user)
 				}
+
 				return
 			}
-			
+
 			userLogger.Info("Query filtering completed",
 				domain.Field{Key: "original_query", Value: originalQuery},
 				domain.Field{Key: "filtered_query", Value: filteredQuery},
@@ -161,11 +173,12 @@ func (h *GatewayHandler) processRequest(w http.ResponseWriter, r *http.Request, 
 			h.logger.Error("Failed to determine target tenant", loggerPkg.Error(err))
 			if appErr, ok := err.(*domain.AppError); ok {
 				h.writeError(w, appErr)
-				h.recordMetrics(r.Method, r.URL.Path, fmt.Sprintf("%d", appErr.HTTPStatus), time.Since(startTime), user)
+				h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), user)
 			} else {
 				h.writeError(w, domain.ErrTenantRequired)
-				h.recordMetrics(r.Method, r.URL.Path, "400", time.Since(startTime), user)
+				h.recordMetrics(ctx, r.Method, r.URL.Path, "400", time.Since(startTime), user)
 			}
+
 			return
 		}
 	}
@@ -184,17 +197,18 @@ func (h *GatewayHandler) processRequest(w http.ResponseWriter, r *http.Request, 
 		h.logger.Error("Upstream request failed", loggerPkg.Error(err))
 		if appErr, ok := err.(*domain.AppError); ok {
 			h.writeError(w, appErr)
-			h.recordMetrics(r.Method, r.URL.Path, fmt.Sprintf("%d", appErr.HTTPStatus), time.Since(startTime), user)
+			h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), user)
 		} else {
 			h.writeError(w, domain.ErrUpstreamUnavailable)
-			h.recordMetrics(r.Method, r.URL.Path, "502", time.Since(startTime), user)
+			h.recordMetrics(ctx, r.Method, r.URL.Path, "502", time.Since(startTime), user)
 		}
+
 		return
 	}
 
 	// Write response
 	h.writeResponse(w, response)
-	h.recordMetrics(r.Method, r.URL.Path, fmt.Sprintf("%d", response.StatusCode), time.Since(startTime), user)
+	h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(response.StatusCode), time.Since(startTime), user)
 
 	h.logger.Info("Request completed",
 		loggerPkg.StatusCode(response.StatusCode),
@@ -223,26 +237,28 @@ func (h *GatewayHandler) extractQuery(r *http.Request) string {
 	}
 
 	// For POST requests with form data, parse the body
-	if r.Method == "POST" && strings.Contains(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+	if r.Method == http.MethodPost && strings.Contains(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
 		// We need to read the body, but we must restore it for the proxy
 		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
-			h.logger.Error("Failed to read request body for query extraction", 
+			h.logger.Error("Failed to read request body for query extraction",
 				domain.Field{Key: "error", Value: err.Error()})
+
 			return ""
 		}
-		
+
 		// Restore the body for later use
 		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-		
+
 		// Parse form data
 		bodyValues, err := url.ParseQuery(string(bodyBytes))
 		if err != nil {
-			h.logger.Debug("Failed to parse form data", 
+			h.logger.Debug("Failed to parse form data",
 				domain.Field{Key: "error", Value: err.Error()})
+
 			return ""
 		}
-		
+
 		return bodyValues.Get("query")
 	}
 
@@ -296,7 +312,9 @@ func (h *GatewayHandler) writeResponse(w http.ResponseWriter, response *domain.P
 	}
 
 	w.WriteHeader(response.StatusCode)
-	w.Write(response.Body)
+	if _, err := w.Write(response.Body); err != nil {
+		h.logger.With(loggerPkg.Error(err)).Error("Failed to write response body")
+	}
 }
 
 func (h *GatewayHandler) writeError(w http.ResponseWriter, err *domain.AppError) {
@@ -314,14 +332,13 @@ func (h *GatewayHandler) writeError(w http.ResponseWriter, err *domain.AppError)
 	}
 }
 
-func (h *GatewayHandler) recordMetrics(method, path, status string, duration time.Duration, user *domain.User) {
+func (h *GatewayHandler) recordMetrics(ctx context.Context, method, path, status string, duration time.Duration, user *domain.User) {
 	if h.metricsService != nil {
-		ctx := context.Background()
 		h.metricsService.RecordRequest(ctx, method, path, status, duration, user)
 	}
 }
 
 func generateRequestID() string {
 	// Simple request ID generation - in production, use UUID or similar
-	return fmt.Sprintf("%d", time.Now().UnixNano())
+	return strconv.FormatInt(time.Now().UnixNano(), 10)
 }

@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
@@ -47,7 +47,7 @@ func main() {
 	// Load configuration
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -78,7 +78,7 @@ func main() {
 	// Initialize all services using clean architecture
 	metricsService := metrics.NewService(appLogger)
 	authService := auth.NewService(cfg.Auth, cfg.TenantMaps, appLogger, metricsService)
-	tenantService := tenant.NewService(cfg.Upstream, appLogger, metricsService)
+	tenantService := tenant.NewService(&cfg.Upstream, appLogger, metricsService)
 	accessService := access.NewService(appLogger)
 	proxyService := proxy.NewService(cfg.Upstream.URL, cfg.Upstream.Timeout, appLogger, metricsService)
 
@@ -99,13 +99,13 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/health", healthHandler)
 	mux.Handle("/ready", healthHandler) // Same handler for both health and readiness
-	
+
 	// Add metrics endpoint if enabled
 	if cfg.Metrics.Enabled {
 		mux.Handle("/metrics", metricsService.Handler())
 		appLogger.Info("Metrics endpoint enabled", domain.Field{Key: "path", Value: "/metrics"})
 	}
-	
+
 	mux.Handle("/", gatewayHandler) // Catch-all for proxy requests
 
 	// Create HTTP server
@@ -120,7 +120,7 @@ func main() {
 	// Start server in goroutine
 	go func() {
 		appLogger.Info("Server starting", domain.Field{Key: "address", Value: cfg.Server.Address})
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			appLogger.Error("Server failed to start", domain.Field{Key: "error", Value: err.Error()})
 			os.Exit(1)
 		}
@@ -134,7 +134,7 @@ func main() {
 	appLogger.Info("Received shutdown signal", domain.Field{Key: "signal", Value: sig.String()})
 
 	// Graceful shutdown
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), domain.DefaultShutdownTimeout)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {

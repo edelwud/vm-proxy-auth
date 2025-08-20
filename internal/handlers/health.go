@@ -10,7 +10,7 @@ import (
 
 // HealthHandler handles health check endpoints
 type HealthHandler struct {
-	logger domain.Logger
+	logger  domain.Logger
 	version string
 }
 

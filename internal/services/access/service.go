@@ -8,20 +8,20 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
-// Service implements domain.AccessControlService
+// Service implements domain.AccessControlService.
 type Service struct {
 	logger domain.Logger
 }
 
-// NewService creates a new access control service
+// NewService creates a new access control service.
 func NewService(logger domain.Logger) *Service {
 	return &Service{
 		logger: logger,
 	}
 }
 
-// CanAccess checks if a user can access a specific path with given method
-func (s *Service) CanAccess(ctx context.Context, user *domain.User, path string, method string) error {
+// CanAccess checks if a user can access a specific path with given method.
+func (s *Service) CanAccess(ctx context.Context, user *domain.User, path, method string) error {
 	// Check if user is read-only and this is a write operation
 	if user.ReadOnly && isWriteOperation(method, path) {
 		return &domain.AppError{
@@ -44,7 +44,7 @@ func (s *Service) CanAccess(ctx context.Context, user *domain.User, path string,
 	return nil
 }
 
-// isWriteOperation determines if the request is a write operation
+// isWriteOperation determines if the request is a write operation.
 func isWriteOperation(method, path string) bool {
 	// POST, PUT, PATCH, DELETE are write operations
 	writeHTTPMethods := []string{"POST", "PUT", "PATCH", "DELETE"}
@@ -71,7 +71,7 @@ func isWriteOperation(method, path string) bool {
 	return false
 }
 
-// isRestrictedPath checks if a path is restricted
+// isRestrictedPath checks if a path is restricted.
 func isRestrictedPath(path string) bool {
 	restrictedPaths := []string{
 		"/api/v1/admin/",

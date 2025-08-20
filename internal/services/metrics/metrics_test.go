@@ -9,18 +9,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
 // mockLogger implements domain.Logger for testing
 type mockLogger struct{}
 
-func (m *mockLogger) Debug(msg string, fields ...domain.Field) {}
-func (m *mockLogger) Info(msg string, fields ...domain.Field)  {}
-func (m *mockLogger) Warn(msg string, fields ...domain.Field)  {}
-func (m *mockLogger) Error(msg string, fields ...domain.Field) {}
+func (m *mockLogger) Debug(msg string, fields ...domain.Field)  {}
+func (m *mockLogger) Info(msg string, fields ...domain.Field)   {}
+func (m *mockLogger) Warn(msg string, fields ...domain.Field)   {}
+func (m *mockLogger) Error(msg string, fields ...domain.Field)  {}
 func (m *mockLogger) With(fields ...domain.Field) domain.Logger { return m }
 
 // TestableMetricsService wraps the real service for better testing
@@ -32,10 +32,10 @@ type TestableMetricsService struct {
 // NewTestableService creates a metrics service with isolated registry for testing
 func NewTestableService() *TestableMetricsService {
 	logger := &mockLogger{}
-	
+
 	// Create isolated registry for test
 	registry := prometheus.NewRegistry()
-	
+
 	// Create new metric instances for this test
 	testHTTPRequestsTotal := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -150,18 +150,18 @@ func (t *TestableMetricsService) GetMetricValue(metricName string, labels promet
 func (t *TestableMetricsService) GetMetricsOutput() (string, error) {
 	req := httptest.NewRequest("GET", "/metrics", nil)
 	recorder := httptest.NewRecorder()
-	
+
 	t.Handler().ServeHTTP(recorder, req)
-	
+
 	if recorder.Code != http.StatusOK {
 		return "", nil
 	}
-	
+
 	body, err := io.ReadAll(recorder.Body)
 	if err != nil {
 		return "", err
 	}
-	
+
 	return string(body), nil
 }
 
@@ -256,9 +256,9 @@ func TestQueryFilteringMetricsWithTestRegistry(t *testing.T) {
 	ctx := context.Background()
 
 	// Record query filtering with different scenarios
-	service.RecordQueryFilter(ctx, "user1", 2, true, 10*time.Millisecond)   // Filter applied
-	service.RecordQueryFilter(ctx, "user2", 1, false, 5*time.Millisecond)   // No filter needed
-	service.RecordQueryFilter(ctx, "user1", 3, true, 15*time.Millisecond)   // Filter applied
+	service.RecordQueryFilter(ctx, "user1", 2, true, 10*time.Millisecond) // Filter applied
+	service.RecordQueryFilter(ctx, "user2", 1, false, 5*time.Millisecond) // No filter needed
+	service.RecordQueryFilter(ctx, "user1", 3, true, 15*time.Millisecond) // Filter applied
 
 	// Get metrics output
 	output, err := service.GetMetricsOutput()
@@ -289,9 +289,9 @@ func TestTenantAccessMetricsWithTestRegistry(t *testing.T) {
 	ctx := context.Background()
 
 	// Record tenant access checks
-	service.RecordTenantAccess(ctx, "user1", "1000", true)   // Allowed
-	service.RecordTenantAccess(ctx, "user1", "2000", false)  // Denied
-	service.RecordTenantAccess(ctx, "user2", "1000", true)   // Allowed
+	service.RecordTenantAccess(ctx, "user1", "1000", true)  // Allowed
+	service.RecordTenantAccess(ctx, "user1", "2000", false) // Denied
+	service.RecordTenantAccess(ctx, "user2", "1000", true)  // Allowed
 
 	// Get metrics output
 	output, err := service.GetMetricsOutput()
@@ -343,14 +343,14 @@ func TestMetricsEndpointFormat(t *testing.T) {
 	// Verify it's valid Prometheus exposition format
 	lines := strings.Split(output, "\n")
 	hasMetricLine := false
-	
+
 	for _, line := range lines {
 		if strings.HasPrefix(line, "vm_proxy_auth_") && strings.Contains(line, "{") {
 			hasMetricLine = true
 			break
 		}
 	}
-	
+
 	if !hasMetricLine {
 		t.Error("Expected at least one metric line with labels")
 	}
@@ -363,9 +363,9 @@ func TestConcurrentMetricsRecording(t *testing.T) {
 	user := &domain.User{ID: "test-user"}
 
 	// Record metrics concurrently to test thread safety
-	done := make(chan bool, 10)
-	
-	for i := 0; i < 10; i++ {
+	done := make(chan bool, domain.DefaultBenchCount)
+
+	for i := range domain.DefaultBenchCount {
 		go func(id int) {
 			service.RecordRequest(ctx, "GET", "/test", "200", time.Duration(id)*time.Millisecond, user)
 			service.RecordAuthAttempt(ctx, "user", "success")
@@ -374,7 +374,7 @@ func TestConcurrentMetricsRecording(t *testing.T) {
 	}
 
 	// Wait for all goroutines
-	for i := 0; i < 10; i++ {
+	for _ = range domain.DefaultBenchCount {
 		<-done
 	}
 

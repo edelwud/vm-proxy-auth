@@ -10,13 +10,20 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
+const (
+	testUserID     = "test-user"
+	testStatusOK   = "200"
+	testMethodGET  = "GET"
+	testMethodPOST = "POST"
+)
+
 // mockLogger implements domain.Logger for testing
 type mockLogger struct{}
 
-func (m *mockLogger) Debug(msg string, fields ...domain.Field) {}
-func (m *mockLogger) Info(msg string, fields ...domain.Field)  {}
-func (m *mockLogger) Warn(msg string, fields ...domain.Field)  {}
-func (m *mockLogger) Error(msg string, fields ...domain.Field) {}
+func (m *mockLogger) Debug(msg string, fields ...domain.Field)  {}
+func (m *mockLogger) Info(msg string, fields ...domain.Field)   {}
+func (m *mockLogger) Warn(msg string, fields ...domain.Field)   {}
+func (m *mockLogger) Error(msg string, fields ...domain.Field)  {}
 func (m *mockLogger) With(fields ...domain.Field) domain.Logger { return m }
 
 type mockAccessService struct {
@@ -118,7 +125,9 @@ func (t *TestableMetricsCollector) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("# Mock metrics endpoint\n"))
+		if _, err := w.Write([]byte("# Mock metrics endpoint\n")); err != nil {
+			http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		}
 	})
 }
 
@@ -132,10 +141,12 @@ type testableAuthService struct {
 func (m *testableAuthService) Authenticate(ctx context.Context, token string) (*domain.User, error) {
 	if m.err != nil {
 		m.metrics.RecordAuthAttempt(ctx, "unknown", "failed")
+
 		return nil, m.err
 	}
-	
+
 	m.metrics.RecordAuthAttempt(ctx, m.user.ID, "success")
+
 	return m.user, nil
 }
 
@@ -151,15 +162,17 @@ func (m *testableTenantService) FilterQuery(ctx context.Context, user *domain.Us
 	// Simulate metrics recording
 	filterApplied := query != m.filteredQuery
 	m.metrics.RecordQueryFilter(ctx, user.ID, len(user.VMTenants), filterApplied, 10*time.Millisecond)
-	
+
 	if m.err != nil {
 		return "", m.err
 	}
+
 	return m.filteredQuery, nil
 }
 
 func (m *testableTenantService) CanAccessTenant(ctx context.Context, user *domain.User, tenantID string) bool {
 	m.metrics.RecordTenantAccess(ctx, user.ID, tenantID, m.canAccess)
+
 	return m.canAccess
 }
 
@@ -167,6 +180,7 @@ func (m *testableTenantService) DetermineTargetTenant(ctx context.Context, user 
 	if m.err != nil {
 		return "", m.err
 	}
+
 	return m.targetTenant, nil
 }
 
@@ -183,7 +197,7 @@ func (m *testableProxyService) Forward(ctx context.Context, req *domain.ProxyReq
 		for i, tenant := range req.User.VMTenants {
 			tenants[i] = tenant.String()
 		}
-		
+
 		m.metrics.RecordUpstream(
 			ctx,
 			req.OriginalRequest.Method,
@@ -193,36 +207,37 @@ func (m *testableProxyService) Forward(ctx context.Context, req *domain.ProxyReq
 			tenants,
 		)
 	}
-	
+
 	if m.err != nil {
 		return nil, m.err
 	}
+
 	return m.response, nil
 }
 
 func TestGatewayHandler_MetricsCollection_Success(t *testing.T) {
 	metrics := &TestableMetricsCollector{}
-	
+
 	// Setup testable services
 	user := &domain.User{
 		ID:        "test-user",
 		VMTenants: []domain.VMTenant{{AccountID: "1000"}},
 	}
-	
+
 	authService := &testableAuthService{
 		user:    user,
 		metrics: metrics,
 	}
-	
+
 	tenantService := &testableTenantService{
 		filteredQuery: "up{vm_account_id=\"1000\"}",
 		canAccess:     true,
 		targetTenant:  "1000",
 		metrics:       metrics,
 	}
-	
+
 	accessService := &mockAccessService{}
-	
+
 	proxyService := &testableProxyService{
 		response: &domain.ProxyResponse{
 			StatusCode: 200,
@@ -231,7 +246,7 @@ func TestGatewayHandler_MetricsCollection_Success(t *testing.T) {
 		},
 		metrics: metrics,
 	}
-	
+
 	logger := &mockLogger{}
 
 	// Create handler
@@ -262,13 +277,13 @@ func TestGatewayHandler_MetricsCollection_Success(t *testing.T) {
 		t.Error("Expected request metrics to be recorded")
 	} else {
 		call := metrics.RequestCalls[0]
-		if call.Method != "GET" {
-			t.Errorf("Expected method GET, got %s", call.Method)
+		if call.Method != testMethodGET {
+			t.Errorf("Expected method %s, got %s", testMethodGET, call.Method)
 		}
-		if call.Status != "200" {
-			t.Errorf("Expected status 200, got %s", call.Status)
+		if call.Status != testStatusOK {
+			t.Errorf("Expected status %s, got %s", testStatusOK, call.Status)
 		}
-		if call.User == nil || call.User.ID != "test-user" {
+		if call.User == nil || call.User.ID != testUserID {
 			t.Error("Expected user to be recorded in metrics")
 		}
 	}
@@ -278,8 +293,8 @@ func TestGatewayHandler_MetricsCollection_Success(t *testing.T) {
 		t.Error("Expected upstream metrics to be recorded")
 	} else {
 		call := metrics.UpstreamCalls[0]
-		if call.Method != "GET" {
-			t.Errorf("Expected upstream method GET, got %s", call.Method)
+		if call.Method != testMethodGET {
+			t.Errorf("Expected upstream method %s, got %s", testMethodGET, call.Method)
 		}
 		if len(call.Tenants) != 1 {
 			t.Errorf("Expected 1 tenant, got %d", len(call.Tenants))
@@ -291,7 +306,7 @@ func TestGatewayHandler_MetricsCollection_Success(t *testing.T) {
 		t.Error("Expected query filtering metrics to be recorded")
 	} else {
 		call := metrics.QueryFilterCalls[0]
-		if call.UserID != "test-user" {
+		if call.UserID != testUserID {
 			t.Errorf("Expected user test-user, got %s", call.UserID)
 		}
 		if call.TenantCount != 1 {
@@ -307,7 +322,7 @@ func TestGatewayHandler_MetricsCollection_Success(t *testing.T) {
 		if call.Status != "success" {
 			t.Errorf("Expected auth status success, got %s", call.Status)
 		}
-		if call.UserID != "test-user" {
+		if call.UserID != testUserID {
 			t.Errorf("Expected user test-user, got %s", call.UserID)
 		}
 	}
@@ -315,7 +330,7 @@ func TestGatewayHandler_MetricsCollection_Success(t *testing.T) {
 
 func TestGatewayHandler_MetricsCollection_AuthFailure(t *testing.T) {
 	metrics := &TestableMetricsCollector{}
-	
+
 	authService := &testableAuthService{
 		err: &domain.AppError{
 			Code:       "invalid_token",
@@ -323,7 +338,7 @@ func TestGatewayHandler_MetricsCollection_AuthFailure(t *testing.T) {
 		},
 		metrics: metrics,
 	}
-	
+
 	tenantService := &testableTenantService{metrics: metrics}
 	accessService := &mockAccessService{}
 	proxyService := &testableProxyService{metrics: metrics}
@@ -383,24 +398,24 @@ func TestGatewayHandler_MetricsCollection_AuthFailure(t *testing.T) {
 
 func TestGatewayHandler_MetricsCollection_TenantAccess(t *testing.T) {
 	metrics := &TestableMetricsCollector{}
-	
+
 	user := &domain.User{
 		ID:        "test-user",
 		VMTenants: []domain.VMTenant{{AccountID: "1000"}},
 	}
-	
+
 	authService := &testableAuthService{
 		user:    user,
 		metrics: metrics,
 	}
-	
+
 	tenantService := &testableTenantService{
 		filteredQuery: "up{vm_account_id=\"1000\"}",
 		canAccess:     true,
 		targetTenant:  "1000",
 		metrics:       metrics,
 	}
-	
+
 	accessService := &mockAccessService{}
 	proxyService := &testableProxyService{
 		response: &domain.ProxyResponse{
@@ -409,7 +424,7 @@ func TestGatewayHandler_MetricsCollection_TenantAccess(t *testing.T) {
 		},
 		metrics: metrics,
 	}
-	
+
 	logger := &mockLogger{}
 
 	// Create handler
@@ -442,7 +457,7 @@ func TestGatewayHandler_MetricsCollection_TenantAccess(t *testing.T) {
 		t.Skip("Tenant access check not triggered for this request type - this is expected behavior")
 	} else {
 		call := metrics.TenantAccessCalls[0]
-		if call.UserID != "test-user" {
+		if call.UserID != testUserID {
 			t.Errorf("Expected user test-user, got %s", call.UserID)
 		}
 		if !call.Allowed {
@@ -453,26 +468,26 @@ func TestGatewayHandler_MetricsCollection_TenantAccess(t *testing.T) {
 
 func TestGatewayHandler_MetricsCollection_UpstreamError(t *testing.T) {
 	metrics := &TestableMetricsCollector{}
-	
+
 	user := &domain.User{
 		ID:        "test-user",
 		VMTenants: []domain.VMTenant{{AccountID: "1000"}},
 	}
-	
+
 	authService := &testableAuthService{
 		user:    user,
 		metrics: metrics,
 	}
-	
+
 	tenantService := &testableTenantService{
 		filteredQuery: "up{vm_account_id=\"1000\"}",
 		canAccess:     true,
 		targetTenant:  "1000",
 		metrics:       metrics,
 	}
-	
+
 	accessService := &mockAccessService{}
-	
+
 	// Simulate upstream error
 	proxyService := &testableProxyService{
 		response: &domain.ProxyResponse{
@@ -481,7 +496,7 @@ func TestGatewayHandler_MetricsCollection_UpstreamError(t *testing.T) {
 		},
 		metrics: metrics,
 	}
-	
+
 	logger := &mockLogger{}
 
 	// Create handler

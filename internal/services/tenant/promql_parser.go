@@ -1,35 +1,40 @@
 package tenant
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql/parser"
+
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
-// PromQLTenantInjector provides production-ready PromQL parsing and tenant injection
+// Remove local error as we'll use domain error
+
+// PromQLTenantInjector provides production-ready PromQL parsing and tenant injection.
 type PromQLTenantInjector struct {
 	logger domain.Logger
 }
 
-// NewPromQLTenantInjector creates a new production ready PromQL tenant injector
+// NewPromQLTenantInjector creates a new production ready PromQL tenant injector.
 func NewPromQLTenantInjector(logger domain.Logger) *PromQLTenantInjector {
 	return &PromQLTenantInjector{
 		logger: logger,
 	}
 }
 
-// InjectTenantLabels parses PromQL using Prometheus parser and injects tenant labels
-func (p *PromQLTenantInjector) InjectTenantLabels(query string, vmTenants []domain.VMTenant, cfg config.UpstreamConfig) (string, error) {
+// InjectTenantLabels parses PromQL using Prometheus parser and injects tenant labels.
+func (p *PromQLTenantInjector) InjectTenantLabels(query string, vmTenants []domain.VMTenant, cfg *config.UpstreamConfig) (string, error) {
 	p.logger.Debug("Starting production PromQL tenant injection",
 		domain.Field{Key: "original_query", Value: query},
 		domain.Field{Key: "vm_tenants", Value: fmt.Sprintf("%v", vmTenants)})
 
 	if len(vmTenants) == 0 {
 		p.logger.Warn("No VM tenants provided for query filtering")
-		return query, fmt.Errorf("no VM tenants available for filtering")
+
+		return query, errors.New("no VM tenants available for filtering")
 	}
 
 	// Parse the query using Prometheus parser
@@ -38,6 +43,7 @@ func (p *PromQLTenantInjector) InjectTenantLabels(query string, vmTenants []doma
 		p.logger.Error("Failed to parse PromQL query",
 			domain.Field{Key: "query", Value: query},
 			domain.Field{Key: "error", Value: err.Error()})
+
 		return "", fmt.Errorf("failed to parse PromQL query: %w", err)
 	}
 
@@ -47,12 +53,13 @@ func (p *PromQLTenantInjector) InjectTenantLabels(query string, vmTenants []doma
 		if vs, ok := node.(*parser.VectorSelector); ok {
 			p.injectTenantLabelsToVectorSelector(vs, vmTenants, cfg)
 		}
+
 		return nil
 	})
 
 	// Convert back to string
 	result := expr.String()
-	
+
 	p.logger.Debug("Production PromQL injection completed",
 		domain.Field{Key: "original_query", Value: query},
 		domain.Field{Key: "filtered_query", Value: result},
@@ -62,8 +69,12 @@ func (p *PromQLTenantInjector) InjectTenantLabels(query string, vmTenants []doma
 	return result, nil
 }
 
-// injectTenantLabelsToVectorSelector injects tenant labels into a vector selector
-func (p *PromQLTenantInjector) injectTenantLabelsToVectorSelector(vs *parser.VectorSelector, vmTenants []domain.VMTenant, cfg config.UpstreamConfig) {
+// injectTenantLabelsToVectorSelector injects tenant labels into a vector selector.
+func (p *PromQLTenantInjector) injectTenantLabelsToVectorSelector(
+	vs *parser.VectorSelector,
+	vmTenants []domain.VMTenant,
+	cfg *config.UpstreamConfig,
+) {
 	// Check if tenant labels already exist
 	tenantLabelName := cfg.TenantLabel
 	if tenantLabelName == "" {
@@ -76,19 +87,14 @@ func (p *PromQLTenantInjector) injectTenantLabelsToVectorSelector(vs *parser.Vec
 	}
 
 	// Check if we already have tenant filtering
-	hasTenantFilter := false
 	for _, matcher := range vs.LabelMatchers {
 		if matcher.Name == tenantLabelName {
-			hasTenantFilter = true
 			p.logger.Debug("Tenant label already exists, skipping",
 				domain.Field{Key: "metric", Value: vs.Name},
 				domain.Field{Key: "existing_label", Value: tenantLabelName})
+
 			return
 		}
-	}
-
-	if hasTenantFilter {
-		return
 	}
 
 	// Add tenant filtering based on number of VM tenants
@@ -102,8 +108,13 @@ func (p *PromQLTenantInjector) injectTenantLabelsToVectorSelector(vs *parser.Vec
 	}
 }
 
-// addSingleTenantFilter adds a single tenant filter to vector selector
-func (p *PromQLTenantInjector) addSingleTenantFilter(vs *parser.VectorSelector, tenant domain.VMTenant, tenantLabel, projectLabel string, useProjectID bool) {
+// addSingleTenantFilter adds a single tenant filter to vector selector.
+func (p *PromQLTenantInjector) addSingleTenantFilter(
+	vs *parser.VectorSelector,
+	tenant domain.VMTenant,
+	tenantLabel, projectLabel string,
+	useProjectID bool,
+) {
 	// Add account ID filter
 	accountMatcher := &labels.Matcher{
 		Type:  labels.MatchEqual,
@@ -128,15 +139,20 @@ func (p *PromQLTenantInjector) addSingleTenantFilter(vs *parser.VectorSelector, 
 		domain.Field{Key: "project_id", Value: tenant.ProjectID})
 }
 
-// addMultipleTenantFilter adds multiple tenant filter using regex
-func (p *PromQLTenantInjector) addMultipleTenantFilter(vs *parser.VectorSelector, vmTenants []domain.VMTenant, tenantLabel, projectLabel string, useProjectID bool) {
+// addMultipleTenantFilter adds multiple tenant filter using regex.
+func (p *PromQLTenantInjector) addMultipleTenantFilter(
+	vs *parser.VectorSelector,
+	vmTenants []domain.VMTenant,
+	tenantLabel, projectLabel string,
+	useProjectID bool,
+) {
 	// For now, use first tenant (simple approach)
 	// TODO: In future, implement proper OR logic for multiple tenants
 	if len(vmTenants) > 0 {
 		p.logger.Debug("Multiple tenants found, using first tenant for now",
 			domain.Field{Key: "tenant_count", Value: len(vmTenants)},
 			domain.Field{Key: "selected_tenant", Value: vmTenants[0].String()})
-		
+
 		p.addSingleTenantFilter(vs, vmTenants[0], tenantLabel, projectLabel, useProjectID)
 	}
 }

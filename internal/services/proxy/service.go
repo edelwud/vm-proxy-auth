@@ -11,7 +11,7 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
-// Service implements domain.ProxyService
+// Service implements domain.ProxyService.
 type Service struct {
 	upstreamURL string
 	client      *http.Client
@@ -19,7 +19,7 @@ type Service struct {
 	metrics     domain.MetricsService
 }
 
-// NewService creates a new proxy service
+// NewService creates a new proxy service.
 func NewService(upstreamURL string, timeout time.Duration, logger domain.Logger, metrics domain.MetricsService) *Service {
 	return &Service{
 		upstreamURL: upstreamURL,
@@ -31,53 +31,13 @@ func NewService(upstreamURL string, timeout time.Duration, logger domain.Logger,
 	}
 }
 
-// Forward forwards a request to the upstream server
+// Forward forwards a request to the upstream server.
 func (s *Service) Forward(ctx context.Context, req *domain.ProxyRequest) (*domain.ProxyResponse, error) {
 	startTime := time.Now()
-	// Prepare query parameters and body for filtering
-	queryParams := req.OriginalRequest.URL.Query()
-	var body io.Reader
-	
-	// Apply filtered query if present
-	if req.FilteredQuery != "" {
-		s.logger.Debug("Applying filtered query",
-			domain.Field{Key: "original_query", Value: queryParams.Get("query")},
-			domain.Field{Key: "filtered_query", Value: req.FilteredQuery},
-			domain.Field{Key: "user_id", Value: req.User.ID})
-		
-		// Replace query parameter with filtered version
-		queryParams.Set("query", req.FilteredQuery)
-	}
-	
-	// Handle request body (for POST requests with form data)
-	if req.OriginalRequest.Body != nil {
-		bodyBytes, err := io.ReadAll(req.OriginalRequest.Body)
-		if err != nil {
-			return nil, &domain.AppError{
-				Code:       "request_read_error",
-				Message:    "Failed to read request body",
-				HTTPStatus: http.StatusInternalServerError,
-			}
-		}
-		
-		bodyStr := string(bodyBytes)
-		
-		// If we have a filtered query and this is a POST with form data, update the body
-		if req.FilteredQuery != "" && req.OriginalRequest.Header.Get("Content-Type") == "application/x-www-form-urlencoded" {
-			// Parse form data from body
-			bodyValues, parseErr := url.ParseQuery(bodyStr)
-			if parseErr == nil && bodyValues.Get("query") != "" {
-				s.logger.Debug("Replacing query in POST body",
-					domain.Field{Key: "original_body_query", Value: bodyValues.Get("query")},
-					domain.Field{Key: "filtered_query", Value: req.FilteredQuery})
-				
-				// Replace the query in form data
-				bodyValues.Set("query", req.FilteredQuery)
-				bodyStr = bodyValues.Encode()
-			}
-		}
-		
-		body = strings.NewReader(bodyStr)
+
+	queryParams, body, err := s.prepareRequest(req)
+	if err != nil {
+		return nil, err
 	}
 
 	// Build target URL with potentially modified query parameters
@@ -106,7 +66,7 @@ func (s *Service) Forward(ctx context.Context, req *domain.ProxyRequest) (*domai
 			httpReq.Header.Add(key, value)
 		}
 	}
-	
+
 	// Add tenant headers for write operations
 	if req.TargetTenant != "" {
 		httpReq.Header.Set("X-Prometheus-Tenant", req.TargetTenant)
@@ -149,7 +109,7 @@ func (s *Service) Forward(ctx context.Context, req *domain.ProxyRequest) (*domai
 	for i, tenant := range req.User.VMTenants {
 		tenants[i] = tenant.String()
 	}
-	
+
 	s.metrics.RecordUpstream(
 		ctx,
 		req.OriginalRequest.Method,
@@ -180,9 +140,9 @@ func (s *Service) buildTargetURL(path string, query url.Values) (string, error) 
 	if !strings.HasSuffix(targetURL.Path, "/") && !strings.HasPrefix(path, "/") {
 		targetURL.Path = targetURL.Path + "/" + path
 	} else if strings.HasSuffix(targetURL.Path, "/") && strings.HasPrefix(path, "/") {
-		targetURL.Path = targetURL.Path + path[1:]
+		targetURL.Path += path[1:]
 	} else {
-		targetURL.Path = targetURL.Path + path
+		targetURL.Path += path
 	}
 
 	// Properly handle query parameters
@@ -198,4 +158,71 @@ func (s *Service) buildTargetURL(path string, query url.Values) (string, error) 
 	)
 
 	return targetURL.String(), nil
+}
+
+// prepareRequest handles query parameter and body preparation for the request.
+func (s *Service) prepareRequest(req *domain.ProxyRequest) (url.Values, io.Reader, error) {
+	queryParams := req.OriginalRequest.URL.Query()
+	var body io.Reader
+
+	// Apply filtered query if present
+	if req.FilteredQuery != "" {
+		s.logger.Debug("Applying filtered query",
+			domain.Field{Key: "original_query", Value: queryParams.Get("query")},
+			domain.Field{Key: "filtered_query", Value: req.FilteredQuery},
+			domain.Field{Key: "user_id", Value: req.User.ID})
+
+		// Replace query parameter with filtered version
+		queryParams.Set("query", req.FilteredQuery)
+	}
+
+	// Handle request body
+	if req.OriginalRequest.Body != nil {
+		var err error
+		body, err = s.handleRequestBody(req)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return queryParams, body, nil
+}
+
+// handleRequestBody processes the request body and applies query filtering if needed.
+func (s *Service) handleRequestBody(req *domain.ProxyRequest) (io.Reader, error) {
+	bodyBytes, err := io.ReadAll(req.OriginalRequest.Body)
+	if err != nil {
+		return nil, &domain.AppError{
+			Code:       "request_read_error",
+			Message:    "Failed to read request body",
+			HTTPStatus: http.StatusInternalServerError,
+		}
+	}
+
+	bodyStr := string(bodyBytes)
+
+	// If we have a filtered query and this is a POST with form data, update the body
+	if req.FilteredQuery != "" &&
+		req.OriginalRequest.Header.Get("Content-Type") == "application/x-www-form-urlencoded" {
+		bodyStr = s.updateFormDataQuery(bodyStr, req.FilteredQuery)
+	}
+
+	return strings.NewReader(bodyStr), nil
+}
+
+// updateFormDataQuery updates the query parameter in form data.
+func (s *Service) updateFormDataQuery(bodyStr, filteredQuery string) string {
+	bodyValues, parseErr := url.ParseQuery(bodyStr)
+	if parseErr == nil && bodyValues.Get("query") != "" {
+		s.logger.Debug("Replacing query in POST body",
+			domain.Field{Key: "original_body_query", Value: bodyValues.Get("query")},
+			domain.Field{Key: "filtered_query", Value: filteredQuery})
+
+		// Replace the query in form data
+		bodyValues.Set("query", filteredQuery)
+
+		return bodyValues.Encode()
+	}
+
+	return bodyStr
 }
