@@ -193,6 +193,11 @@ GET /health   # Health check
 GET /ready    # Readiness check
 ```
 
+### Metrics Endpoint
+```bash
+GET /metrics  # Prometheus metrics (if enabled)
+```
+
 ### Prometheus API Proxy
 All Prometheus API endpoints are proxied with tenant filtering:
 
@@ -238,6 +243,48 @@ The gateway provides comprehensive structured logging:
 - **INFO**: Request/response and tenant filtering results
 - **WARN**: Authentication failures and misconfigurations  
 - **ERROR**: System errors and parsing failures
+
+### Prometheus Metrics
+
+VM Proxy Auth exposes comprehensive Prometheus metrics when enabled:
+
+```yaml
+metrics:
+  enabled: true
+```
+
+#### Available Metrics
+
+**HTTP Request Metrics:**
+- `vm_proxy_auth_http_requests_total` - Total HTTP requests by method, path, status, user
+- `vm_proxy_auth_http_request_duration_seconds` - HTTP request duration histogram
+
+**Upstream (VictoriaMetrics) Metrics:**
+- `vm_proxy_auth_upstream_requests_total` - Total upstream requests by method, path, status, tenant count
+- `vm_proxy_auth_upstream_request_duration_seconds` - Upstream request duration histogram
+
+**Authentication Metrics:**
+- `vm_proxy_auth_auth_attempts_total` - Authentication attempts by status and user
+- `vm_proxy_auth_query_filtering_total` - Query filtering operations by user, tenant count, filter applied
+- `vm_proxy_auth_query_filtering_duration_seconds` - Query filtering duration histogram
+
+**Tenant Access Metrics:**
+- `vm_proxy_auth_tenant_access_total` - Tenant access checks by user, tenant, allowed status
+
+**Example Metrics Query:**
+```promql
+# Request rate by status code
+rate(vm_proxy_auth_http_requests_total[5m])
+
+# Authentication failure rate
+rate(vm_proxy_auth_auth_attempts_total{status="failed"}[5m])
+
+# Query filtering performance
+histogram_quantile(0.95, rate(vm_proxy_auth_query_filtering_duration_seconds_bucket[5m]))
+
+# Top users by request volume
+topk(10, sum by (user_id) (rate(vm_proxy_auth_http_requests_total[5m])))
+```
 
 ## Development
 

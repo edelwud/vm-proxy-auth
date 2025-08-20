@@ -18,6 +18,7 @@ type Service struct {
 	tenantMaps   []config.TenantMapping
 	verifier     *JWTVerifier
 	logger       domain.Logger
+	metrics      domain.MetricsService
 	userCache    sync.Map
 	cacheTTL     time.Duration
 }
@@ -28,7 +29,7 @@ type cachedUser struct {
 }
 
 // NewService creates a new auth service
-func NewService(cfg config.AuthConfig, tenantMaps []config.TenantMapping, logger domain.Logger) domain.AuthService {
+func NewService(cfg config.AuthConfig, tenantMaps []config.TenantMapping, logger domain.Logger, metrics domain.MetricsService) domain.AuthService {
 	// Initialize JWT verifier based on configuration
 	var verifier *JWTVerifier
 	
@@ -48,6 +49,7 @@ func NewService(cfg config.AuthConfig, tenantMaps []config.TenantMapping, logger
 		tenantMaps: tenantMaps,
 		verifier:   verifier,
 		logger:     logger,
+		metrics:    metrics,
 		cacheTTL:   cfg.CacheTTL,
 	}
 }
@@ -80,6 +82,9 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*domain.User,
 	// Verify token
 	claims, err := s.verifier.VerifyToken(token)
 	if err != nil {
+		// Record failed authentication attempt
+		s.metrics.RecordAuthAttempt(ctx, "unknown", "failed")
+		
 		s.logger.Warn("Token verification failed", domain.Field{Key: "error", Value: err.Error()})
 		return nil, &domain.AppError{
 			Code:       "invalid_token",
@@ -109,6 +114,9 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*domain.User,
 		user:      user,
 		expiresAt: time.Now().Add(s.cacheTTL),
 	})
+
+	// Record successful authentication attempt
+	s.metrics.RecordAuthAttempt(ctx, user.ID, "success")
 
 	s.logger.Info("User authenticated successfully",
 		domain.Field{Key: "user_id", Value: user.ID},

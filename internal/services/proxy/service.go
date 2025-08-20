@@ -16,21 +16,24 @@ type Service struct {
 	upstreamURL string
 	client      *http.Client
 	logger      domain.Logger
+	metrics     domain.MetricsService
 }
 
 // NewService creates a new proxy service
-func NewService(upstreamURL string, timeout time.Duration, logger domain.Logger) *Service {
+func NewService(upstreamURL string, timeout time.Duration, logger domain.Logger, metrics domain.MetricsService) *Service {
 	return &Service{
 		upstreamURL: upstreamURL,
 		client: &http.Client{
 			Timeout: timeout,
 		},
-		logger: logger,
+		logger:  logger,
+		metrics: metrics,
 	}
 }
 
 // Forward forwards a request to the upstream server
 func (s *Service) Forward(ctx context.Context, req *domain.ProxyRequest) (*domain.ProxyResponse, error) {
+	startTime := time.Now()
 	// Prepare query parameters and body for filtering
 	queryParams := req.OriginalRequest.URL.Query()
 	var body io.Reader
@@ -139,6 +142,30 @@ func (s *Service) Forward(ctx context.Context, req *domain.ProxyRequest) (*domai
 		Headers:    resp.Header.Clone(),
 		Body:       responseBody,
 	}
+
+	// Record upstream metrics
+	duration := time.Since(startTime)
+	tenants := make([]string, len(req.User.VMTenants))
+	for i, tenant := range req.User.VMTenants {
+		tenants[i] = tenant.String()
+	}
+	
+	s.metrics.RecordUpstream(
+		ctx,
+		req.OriginalRequest.Method,
+		req.OriginalRequest.URL.Path,
+		http.StatusText(resp.StatusCode),
+		duration,
+		tenants,
+	)
+
+	s.logger.Debug("Upstream request completed",
+		domain.Field{Key: "method", Value: req.OriginalRequest.Method},
+		domain.Field{Key: "path", Value: req.OriginalRequest.URL.Path},
+		domain.Field{Key: "status_code", Value: resp.StatusCode},
+		domain.Field{Key: "duration_ms", Value: duration.Milliseconds()},
+		domain.Field{Key: "user_id", Value: req.User.ID},
+	)
 
 	return proxyResponse, nil
 }

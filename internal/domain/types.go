@@ -93,7 +93,10 @@ type AccessControlService interface {
 type MetricsService interface {
 	RecordRequest(ctx context.Context, method, path, status string, duration time.Duration, user *User)
 	RecordUpstream(ctx context.Context, method, path, status string, duration time.Duration, tenants []string)
-	RecordQueryFilter(ctx context.Context, userID string, tenants string)
+	RecordQueryFilter(ctx context.Context, userID string, tenantCount int, filterApplied bool, duration time.Duration)
+	RecordAuthAttempt(ctx context.Context, userID, status string)
+	RecordTenantAccess(ctx context.Context, userID, tenantID string, allowed bool)
+	Handler() http.Handler
 }
 
 

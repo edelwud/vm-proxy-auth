@@ -76,11 +76,11 @@ func main() {
 	)
 
 	// Initialize all services using clean architecture
-	authService := auth.NewService(cfg.Auth, cfg.TenantMaps, appLogger)
-	tenantService := tenant.NewService(cfg.Upstream, appLogger)
-	accessService := access.NewService(appLogger)
-	proxyService := proxy.NewService(cfg.Upstream.URL, cfg.Upstream.Timeout, appLogger)
 	metricsService := metrics.NewService(appLogger)
+	authService := auth.NewService(cfg.Auth, cfg.TenantMaps, appLogger, metricsService)
+	tenantService := tenant.NewService(cfg.Upstream, appLogger, metricsService)
+	accessService := access.NewService(appLogger)
+	proxyService := proxy.NewService(cfg.Upstream.URL, cfg.Upstream.Timeout, appLogger, metricsService)
 
 	// Initialize main gateway handler
 	gatewayHandler := handlers.NewGatewayHandler(
@@ -99,9 +99,13 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/health", healthHandler)
 	mux.Handle("/ready", healthHandler) // Same handler for both health and readiness
+	
+	// Add metrics endpoint if enabled
 	if cfg.Metrics.Enabled {
-		appLogger.Info("Metrics endpoint not yet implemented in clean architecture")
+		mux.Handle("/metrics", metricsService.Handler())
+		appLogger.Info("Metrics endpoint enabled", domain.Field{Key: "path", Value: "/metrics"})
 	}
+	
 	mux.Handle("/", gatewayHandler) // Catch-all for proxy requests
 
 	// Create HTTP server

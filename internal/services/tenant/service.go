@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/finlego/vm-proxy-auth/internal/config"
 	"github.com/finlego/vm-proxy-auth/internal/domain"
@@ -14,19 +15,23 @@ type Service struct {
 	config         config.UpstreamConfig
 	logger         domain.Logger
 	promqlInjector *PromQLTenantInjector
+	metrics        domain.MetricsService
 }
 
 // NewService creates a new tenant service
-func NewService(cfg config.UpstreamConfig, logger domain.Logger) domain.TenantService {
+func NewService(cfg config.UpstreamConfig, logger domain.Logger, metrics domain.MetricsService) domain.TenantService {
 	return &Service{
 		config:         cfg,
 		logger:         logger,
 		promqlInjector: NewPromQLTenantInjector(logger),
+		metrics:        metrics,
 	}
 }
 
 // FilterQuery adds tenant filtering to PromQL query for VictoriaMetrics using production-ready Prometheus parser
 func (s *Service) FilterQuery(ctx context.Context, user *domain.User, query string) (string, error) {
+	startTime := time.Now()
+	
 	// Only support VM tenants
 	if len(user.VMTenants) == 0 {
 		return "", &domain.AppError{
@@ -46,7 +51,12 @@ func (s *Service) FilterQuery(ctx context.Context, user *domain.User, query stri
 
 	// Use production ready PromQL parser for VM tenants
 	filteredQuery, err := s.promqlInjector.InjectTenantLabels(query, user.VMTenants, s.config)
+	duration := time.Since(startTime)
+	
 	if err != nil {
+		// Record failed query filtering
+		s.metrics.RecordQueryFilter(ctx, user.ID, len(user.VMTenants), false, duration)
+		
 		s.logger.Error("PromQL parsing failed",
 			domain.Field{Key: "error", Value: err.Error()},
 			domain.Field{Key: "original_query", Value: query})
@@ -57,12 +67,18 @@ func (s *Service) FilterQuery(ctx context.Context, user *domain.User, query stri
 		}
 	}
 
+	filterApplied := query != filteredQuery
+	
+	// Record successful query filtering metrics
+	s.metrics.RecordQueryFilter(ctx, user.ID, len(user.VMTenants), filterApplied, duration)
+
 	s.logger.Info("TENANT FILTER RESULT",
 		domain.Field{Key: "user_id", Value: user.ID},
 		domain.Field{Key: "original_query", Value: query},
 		domain.Field{Key: "filtered_query", Value: filteredQuery},
-		domain.Field{Key: "filter_applied", Value: query != filteredQuery},
+		domain.Field{Key: "filter_applied", Value: filterApplied},
 		domain.Field{Key: "used_production_parser", Value: true},
+		domain.Field{Key: "duration_ms", Value: duration.Milliseconds()},
 	)
 
 	return filteredQuery, nil
@@ -73,9 +89,14 @@ func (s *Service) CanAccessTenant(ctx context.Context, user *domain.User, tenant
 	// Only check VM tenants
 	for _, vmTenant := range user.VMTenants {
 		if vmTenant.AccountID == tenantID || vmTenant.String() == tenantID {
+			// Record successful tenant access
+			s.metrics.RecordTenantAccess(ctx, user.ID, tenantID, true)
 			return true
 		}
 	}
+	
+	// Record denied tenant access
+	s.metrics.RecordTenantAccess(ctx, user.ID, tenantID, false)
 	return false
 }
 
