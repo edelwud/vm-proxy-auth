@@ -6,13 +6,15 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
 var (
-	// HTTP request metrics
+	// HTTP request metrics.
 	httpRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "vm_proxy_auth_http_requests_total",
@@ -30,7 +32,7 @@ var (
 		[]string{"method", "path", "status_code"},
 	)
 
-	// Upstream (VictoriaMetrics) request metrics
+	// Upstream (VictoriaMetrics) request metrics.
 	upstreamRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "vm_proxy_auth_upstream_requests_total",
@@ -48,7 +50,7 @@ var (
 		[]string{"method", "path", "status_code"},
 	)
 
-	// Authentication metrics
+	// Authentication metrics.
 	authAttemptsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "vm_proxy_auth_auth_attempts_total",
@@ -57,7 +59,7 @@ var (
 		[]string{"status", "user_id"},
 	)
 
-	// Query filtering metrics
+	// Query filtering metrics.
 	queryFilteringTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "vm_proxy_auth_query_filtering_total",
@@ -75,7 +77,7 @@ var (
 		[]string{"user_id"},
 	)
 
-	// Tenant access metrics
+	// Tenant access metrics.
 	tenantAccessTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "vm_proxy_auth_tenant_access_total",
@@ -85,13 +87,13 @@ var (
 	)
 )
 
-// Service implements domain.MetricsService
+// Service implements domain.MetricsService.
 type Service struct {
 	logger   domain.Logger
 	registry *prometheus.Registry
 }
 
-// NewService creates a new metrics service
+// NewService creates a new metrics service.
 func NewService(logger domain.Logger) *Service {
 	registry := prometheus.NewRegistry()
 
@@ -107,9 +109,9 @@ func NewService(logger domain.Logger) *Service {
 		tenantAccessTotal,
 	)
 
-	// Also register Go runtime metrics
-	registry.MustRegister(prometheus.NewGoCollector())
-	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	// Also register Go runtime metrics.
+	registry.MustRegister(collectors.NewGoCollector())
+	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
 	return &Service{
 		logger:   logger,
@@ -117,14 +119,14 @@ func NewService(logger domain.Logger) *Service {
 	}
 }
 
-// Handler returns HTTP handler for metrics endpoint
+// Handler returns HTTP handler for metrics endpoint.
 func (s *Service) Handler() http.Handler {
 	return promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{
 		EnableOpenMetrics: true,
 	})
 }
 
-// RecordRequest records metrics for incoming requests
+// RecordRequest records metrics for incoming requests.
 func (s *Service) RecordRequest(ctx context.Context, method, path, status string, duration time.Duration, user *domain.User) {
 	statusCode := status
 	userID := "anonymous"
@@ -132,7 +134,7 @@ func (s *Service) RecordRequest(ctx context.Context, method, path, status string
 		userID = user.ID
 	}
 
-	// Record HTTP request metrics
+	// Record HTTP request metrics.
 	httpRequestsTotal.WithLabelValues(method, path, statusCode, userID).Inc()
 	httpRequestDuration.WithLabelValues(method, path, statusCode).Observe(duration.Seconds())
 
@@ -145,12 +147,12 @@ func (s *Service) RecordRequest(ctx context.Context, method, path, status string
 	)
 }
 
-// RecordUpstream records metrics for upstream requests
+// RecordUpstream records metrics for upstream requests.
 func (s *Service) RecordUpstream(ctx context.Context, method, path, status string, duration time.Duration, tenants []string) {
 	statusCode := status
 	tenantCount := strconv.Itoa(len(tenants))
 
-	// Record upstream request metrics
+	// Record upstream request metrics.
 	upstreamRequestsTotal.WithLabelValues(method, path, statusCode, tenantCount).Inc()
 	upstreamRequestDuration.WithLabelValues(method, path, statusCode).Observe(duration.Seconds())
 
@@ -163,12 +165,12 @@ func (s *Service) RecordUpstream(ctx context.Context, method, path, status strin
 	)
 }
 
-// RecordQueryFilter records metrics for query filtering operations
+// RecordQueryFilter records metrics for query filtering operations.
 func (s *Service) RecordQueryFilter(ctx context.Context, userID string, tenantCount int, filterApplied bool, duration time.Duration) {
 	tenantCountStr := strconv.Itoa(tenantCount)
 	filterAppliedStr := strconv.FormatBool(filterApplied)
 
-	// Record query filtering metrics
+	// Record query filtering metrics.
 	queryFilteringTotal.WithLabelValues(userID, tenantCountStr, filterAppliedStr).Inc()
 	queryFilteringDuration.WithLabelValues(userID).Observe(duration.Seconds())
 
@@ -180,7 +182,7 @@ func (s *Service) RecordQueryFilter(ctx context.Context, userID string, tenantCo
 	)
 }
 
-// RecordAuthAttempt records authentication attempt metrics
+// RecordAuthAttempt records authentication attempt metrics.
 func (s *Service) RecordAuthAttempt(ctx context.Context, userID, status string) {
 	authAttemptsTotal.WithLabelValues(status, userID).Inc()
 
@@ -190,7 +192,7 @@ func (s *Service) RecordAuthAttempt(ctx context.Context, userID, status string) 
 	)
 }
 
-// RecordTenantAccess records tenant access check metrics
+// RecordTenantAccess records tenant access check metrics.
 func (s *Service) RecordTenantAccess(ctx context.Context, userID, tenantID string, allowed bool) {
 	allowedStr := strconv.FormatBool(allowed)
 	tenantAccessTotal.WithLabelValues(userID, tenantID, allowedStr).Inc()

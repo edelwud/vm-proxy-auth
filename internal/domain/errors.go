@@ -96,7 +96,7 @@ var (
 		HTTPStatus: http.StatusBadGateway,
 	}
 
-	// Tenant errors
+	// Tenant errors.
 	ErrNoVMTenants = &AppError{
 		Code:       ErrCodeTenantError,
 		Message:    "User has no VM tenants configured",
@@ -109,14 +109,14 @@ var (
 		HTTPStatus: http.StatusForbidden,
 	}
 
-	// PromQL errors
+	// PromQL errors.
 	ErrPromQLParsing = &AppError{
 		Code:       ErrCodePromQLError,
 		Message:    "Failed to parse PromQL query for VM tenant filtering",
 		HTTPStatus: http.StatusBadRequest,
 	}
 
-	// Validation errors
+	// Validation errors.
 	ErrInvalidTokenClaims = &AppError{
 		Code:       ErrCodeUnauthorized,
 		Message:    "Invalid token claims",
@@ -135,7 +135,7 @@ var (
 		HTTPStatus: http.StatusUnauthorized,
 	}
 
-	// JWT/JWKS errors
+	// JWT/JWKS errors.
 	ErrJWKSKeyNotFound = &AppError{
 		Code:       ErrCodeUnauthorized,
 		Message:    "Key not found in JWKS",

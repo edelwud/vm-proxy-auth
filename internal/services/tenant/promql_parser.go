@@ -1,7 +1,6 @@
 package tenant
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/prometheus/prometheus/model/labels"
@@ -34,7 +33,7 @@ func (p *PromQLTenantInjector) InjectTenantLabels(query string, vmTenants []doma
 	if len(vmTenants) == 0 {
 		p.logger.Warn("No VM tenants provided for query filtering")
 
-		return query, errors.New("no VM tenants available for filtering")
+		return query, domain.ErrNoVMTenantsForFiltering
 	}
 
 	// Parse the query using Prometheus parser
@@ -147,7 +146,7 @@ func (p *PromQLTenantInjector) addMultipleTenantFilter(
 	useProjectID bool,
 ) {
 	// For now, use first tenant (simple approach)
-	// TODO: In future, implement proper OR logic for multiple tenants
+	// In future, implement proper OR logic for multiple tenants
 	if len(vmTenants) > 0 {
 		p.logger.Debug("Multiple tenants found, using first tenant for now",
 			domain.Field{Key: "tenant_count", Value: len(vmTenants)},

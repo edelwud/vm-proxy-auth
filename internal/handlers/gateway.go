@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -78,7 +79,8 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	user, err := h.authService.Authenticate(ctx, token)
 	if err != nil {
 		reqLogger.Warn("Authentication failed", loggerPkg.Error(err))
-		if appErr, ok := err.(*domain.AppError); ok {
+		var appErr *domain.AppError
+		if errors.As(err, &appErr) {
 			h.writeError(w, appErr)
 			h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), nil)
 		} else {
@@ -94,7 +96,8 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check access permissions
 	if err := h.accessService.CanAccess(ctx, user, r.URL.Path, r.Method); err != nil {
 		userLogger.Warn("Access denied", loggerPkg.Error(err))
-		if appErr, ok := err.(*domain.AppError); ok {
+		var appErr *domain.AppError
+		if errors.As(err, &appErr) {
 			h.writeError(w, appErr)
 			h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), user)
 		} else {
@@ -144,7 +147,8 @@ func (h *GatewayHandler) processRequest(w http.ResponseWriter, r *http.Request, 
 			filteredQuery, err = h.tenantService.FilterQuery(ctx, user, originalQuery)
 			if err != nil {
 				userLogger.Error("Query filtering failed", loggerPkg.Error(err))
-				if appErr, ok := err.(*domain.AppError); ok {
+				var appErr *domain.AppError
+				if errors.As(err, &appErr) {
 					h.writeError(w, appErr)
 					h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), user)
 				} else {
@@ -171,7 +175,8 @@ func (h *GatewayHandler) processRequest(w http.ResponseWriter, r *http.Request, 
 		targetTenant, err = h.tenantService.DetermineTargetTenant(ctx, user, r)
 		if err != nil {
 			h.logger.Error("Failed to determine target tenant", loggerPkg.Error(err))
-			if appErr, ok := err.(*domain.AppError); ok {
+			var appErr *domain.AppError
+			if errors.As(err, &appErr) {
 				h.writeError(w, appErr)
 				h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), user)
 			} else {
@@ -195,7 +200,8 @@ func (h *GatewayHandler) processRequest(w http.ResponseWriter, r *http.Request, 
 	response, err := h.proxyService.Forward(ctx, proxyReq)
 	if err != nil {
 		h.logger.Error("Upstream request failed", loggerPkg.Error(err))
-		if appErr, ok := err.(*domain.AppError); ok {
+		var appErr *domain.AppError
+		if errors.As(err, &appErr) {
 			h.writeError(w, appErr)
 			h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), user)
 		} else {

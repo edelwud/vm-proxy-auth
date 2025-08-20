@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
-// mockLogger implements domain.Logger for testing
+// mockLogger implements domain.Logger for testing.
 type mockLogger struct{}
 
 func (m *mockLogger) Debug(msg string, fields ...domain.Field)  {}
@@ -23,13 +24,13 @@ func (m *mockLogger) Warn(msg string, fields ...domain.Field)   {}
 func (m *mockLogger) Error(msg string, fields ...domain.Field)  {}
 func (m *mockLogger) With(fields ...domain.Field) domain.Logger { return m }
 
-// TestableMetricsService wraps the real service for better testing
+// TestableMetricsService wraps the real service for better testing.
 type TestableMetricsService struct {
 	*Service
 	registry *prometheus.Registry
 }
 
-// NewTestableService creates a metrics service with isolated registry for testing
+// NewTestableService creates a metrics service with isolated registry for testing.
 func NewTestableService() *TestableMetricsService {
 	logger := &mockLogger{}
 
@@ -104,7 +105,7 @@ func NewTestableService() *TestableMetricsService {
 		[]string{"user_id", "tenant_id", "allowed"},
 	)
 
-	// Register test metrics
+	// Register test metrics.
 	registry.MustRegister(
 		testHTTPRequestsTotal,
 		testHTTPRequestDuration,
@@ -116,7 +117,7 @@ func NewTestableService() *TestableMetricsService {
 		testTenantAccessTotal,
 	)
 
-	// Override global metrics with test metrics
+	// Override global metrics with test metrics.
 	httpRequestsTotal = testHTTPRequestsTotal
 	httpRequestDuration = testHTTPRequestDuration
 	upstreamRequestsTotal = testUpstreamRequestsTotal
@@ -137,16 +138,17 @@ func NewTestableService() *TestableMetricsService {
 	}
 }
 
-// GetMetricValue gets the value of a counter metric for testing
+// GetMetricValue gets the value of a counter metric for testing.
 func (t *TestableMetricsService) GetMetricValue(metricName string, labels prometheus.Labels) (float64, error) {
 	gauge := prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: metricName}, func() float64 {
 		// This is a simplified approach - in reality you'd query the actual collector
 		return 0
 	})
+
 	return testutil.ToFloat64(gauge), nil
 }
 
-// GetMetricsOutput returns the metrics in Prometheus text format
+// GetMetricsOutput returns the metrics in Prometheus text format.
 func (t *TestableMetricsService) GetMetricsOutput() (string, error) {
 	req := httptest.NewRequest("GET", "/metrics", nil)
 	recorder := httptest.NewRecorder()
@@ -174,16 +176,16 @@ func TestMetricsWithTestRegistry(t *testing.T) {
 		Email: "test@example.com",
 	}
 
-	// Record a request
+	// Record a request.
 	service.RecordRequest(ctx, "GET", "/api/v1/query", "200", 100*time.Millisecond, user)
 
-	// Get metrics output
+	// Get metrics output.
 	output, err := service.GetMetricsOutput()
 	if err != nil {
 		t.Fatalf("Failed to get metrics output: %v", err)
 	}
 
-	// Verify metrics are present
+	// Verify metrics are present.
 	if !strings.Contains(output, "vm_proxy_auth_http_requests_total") {
 		t.Error("Expected HTTP request counter metric")
 	}
@@ -203,16 +205,16 @@ func TestUpstreamMetricsWithTestRegistry(t *testing.T) {
 
 	tenants := []string{"1000", "1001"}
 
-	// Record upstream request
+	// Record upstream request.
 	service.RecordUpstream(ctx, "GET", "/api/v1/query", "200", 200*time.Millisecond, tenants)
 
-	// Get metrics output
+	// Get metrics output.
 	output, err := service.GetMetricsOutput()
 	if err != nil {
 		t.Fatalf("Failed to get metrics output: %v", err)
 	}
 
-	// Verify upstream metrics
+	// Verify upstream metrics.
 	if !strings.Contains(output, "vm_proxy_auth_upstream_requests_total") {
 		t.Error("Expected upstream request counter metric")
 	}
@@ -226,18 +228,18 @@ func TestAuthAttemptsWithTestRegistry(t *testing.T) {
 	service := NewTestableService()
 	ctx := context.Background()
 
-	// Record successful and failed auth attempts
+	// Record successful and failed auth attempts.
 	service.RecordAuthAttempt(ctx, "user1", "success")
 	service.RecordAuthAttempt(ctx, "user2", "failed")
 	service.RecordAuthAttempt(ctx, "user1", "success") // Another success
 
-	// Get metrics output
+	// Get metrics output.
 	output, err := service.GetMetricsOutput()
 	if err != nil {
 		t.Fatalf("Failed to get metrics output: %v", err)
 	}
 
-	// Verify auth metrics
+	// Verify auth metrics.
 	if !strings.Contains(output, "vm_proxy_auth_auth_attempts_total") {
 		t.Error("Expected auth attempts counter metric")
 	}
@@ -255,18 +257,18 @@ func TestQueryFilteringMetricsWithTestRegistry(t *testing.T) {
 	service := NewTestableService()
 	ctx := context.Background()
 
-	// Record query filtering with different scenarios
+	// Record query filtering with different scenarios.
 	service.RecordQueryFilter(ctx, "user1", 2, true, 10*time.Millisecond) // Filter applied
 	service.RecordQueryFilter(ctx, "user2", 1, false, 5*time.Millisecond) // No filter needed
 	service.RecordQueryFilter(ctx, "user1", 3, true, 15*time.Millisecond) // Filter applied
 
-	// Get metrics output
+	// Get metrics output.
 	output, err := service.GetMetricsOutput()
 	if err != nil {
 		t.Fatalf("Failed to get metrics output: %v", err)
 	}
 
-	// Verify query filtering metrics
+	// Verify query filtering metrics.
 	if !strings.Contains(output, "vm_proxy_auth_query_filtering_total") {
 		t.Error("Expected query filtering counter metric")
 	}
@@ -288,18 +290,18 @@ func TestTenantAccessMetricsWithTestRegistry(t *testing.T) {
 	service := NewTestableService()
 	ctx := context.Background()
 
-	// Record tenant access checks
+	// Record tenant access checks.
 	service.RecordTenantAccess(ctx, "user1", "1000", true)  // Allowed
 	service.RecordTenantAccess(ctx, "user1", "2000", false) // Denied
 	service.RecordTenantAccess(ctx, "user2", "1000", true)  // Allowed
 
-	// Get metrics output
+	// Get metrics output.
 	output, err := service.GetMetricsOutput()
 	if err != nil {
 		t.Fatalf("Failed to get metrics output: %v", err)
 	}
 
-	// Verify tenant access metrics
+	// Verify tenant access metrics.
 	if !strings.Contains(output, "vm_proxy_auth_tenant_access_total") {
 		t.Error("Expected tenant access counter metric")
 	}
@@ -321,17 +323,17 @@ func TestMetricsEndpointFormat(t *testing.T) {
 	service := NewTestableService()
 	ctx := context.Background()
 
-	// Record some sample data
+	// Record some sample data.
 	user := &domain.User{ID: "test-user"}
 	service.RecordRequest(ctx, "GET", "/api/v1/query", "200", 100*time.Millisecond, user)
 
-	// Get metrics output
+	// Get metrics output.
 	output, err := service.GetMetricsOutput()
 	if err != nil {
 		t.Fatalf("Failed to get metrics output: %v", err)
 	}
 
-	// Check basic Prometheus format
+	// Check basic Prometheus format.
 	if !strings.Contains(output, "# HELP") {
 		t.Error("Expected Prometheus HELP comments")
 	}
@@ -340,13 +342,14 @@ func TestMetricsEndpointFormat(t *testing.T) {
 		t.Error("Expected Prometheus TYPE comments")
 	}
 
-	// Verify it's valid Prometheus exposition format
+	// Verify it's valid Prometheus exposition format.
 	lines := strings.Split(output, "\n")
 	hasMetricLine := false
 
 	for _, line := range lines {
 		if strings.HasPrefix(line, "vm_proxy_auth_") && strings.Contains(line, "{") {
 			hasMetricLine = true
+
 			break
 		}
 	}
@@ -362,7 +365,7 @@ func TestConcurrentMetricsRecording(t *testing.T) {
 
 	user := &domain.User{ID: "test-user"}
 
-	// Record metrics concurrently to test thread safety
+	// Record metrics concurrently to test thread safety.
 	done := make(chan bool, domain.DefaultBenchCount)
 
 	for i := range domain.DefaultBenchCount {
@@ -374,17 +377,17 @@ func TestConcurrentMetricsRecording(t *testing.T) {
 	}
 
 	// Wait for all goroutines
-	for _ = range domain.DefaultBenchCount {
+	for range domain.DefaultBenchCount {
 		<-done
 	}
 
-	// Get metrics output
+	// Get metrics output.
 	output, err := service.GetMetricsOutput()
 	if err != nil {
 		t.Fatalf("Failed to get metrics output: %v", err)
 	}
 
-	// Should have recorded all metrics without race conditions
+	// Should have recorded all metrics without race conditions.
 	if !strings.Contains(output, "vm_proxy_auth_http_requests_total") {
 		t.Error("Expected HTTP request metrics after concurrent recording")
 	}

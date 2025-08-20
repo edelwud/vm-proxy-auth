@@ -56,7 +56,7 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 	)
 
 	// Create request without authorization
-	req := httptest.NewRequest("GET", "/api/v1/query?query=up", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/query?query=up", http.NoBody)
 	recorder := httptest.NewRecorder()
 
 	// Execute request
@@ -68,7 +68,7 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 	}
 
 	// Get metrics
-	metricsReq := httptest.NewRequest("GET", "/metrics", nil)
+	metricsReq := httptest.NewRequest(http.MethodGet, "/metrics", http.NoBody)
 	metricsRecorder := httptest.NewRecorder()
 	metricsService.Handler().ServeHTTP(metricsRecorder, metricsReq)
 
@@ -97,7 +97,7 @@ func TestMetricsIntegration_HealthCheck(t *testing.T) {
 	healthHandler := NewHealthHandler(logger, "test")
 
 	// Create request
-	req := httptest.NewRequest("GET", "/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/health", http.NoBody)
 	recorder := httptest.NewRecorder()
 
 	// Execute request
@@ -109,7 +109,7 @@ func TestMetricsIntegration_HealthCheck(t *testing.T) {
 	}
 
 	// Get metrics endpoint - should have default Prometheus metrics
-	metricsReq := httptest.NewRequest("GET", "/metrics", nil)
+	metricsReq := httptest.NewRequest(http.MethodGet, "/metrics", http.NoBody)
 	metricsRecorder := httptest.NewRecorder()
 	metricsService.Handler().ServeHTTP(metricsRecorder, metricsReq)
 
@@ -142,14 +142,14 @@ func TestMetricsIntegration_CustomMetrics(t *testing.T) {
 	}
 
 	// Record different types of metrics
-	metricsService.RecordRequest(ctx, "GET", "/api/v1/query", "200", 100*time.Millisecond, user)
-	metricsService.RecordUpstream(ctx, "GET", "/api/v1/query", "200", 50*time.Millisecond, []string{"1000"})
+	metricsService.RecordRequest(ctx, http.MethodGet, "/api/v1/query", "200", 100*time.Millisecond, user)
+	metricsService.RecordUpstream(ctx, http.MethodGet, "/api/v1/query", "200", 50*time.Millisecond, []string{"1000"})
 	metricsService.RecordQueryFilter(ctx, "test-user", 1, true, 10*time.Millisecond)
 	metricsService.RecordAuthAttempt(ctx, "test-user", "success")
 	metricsService.RecordTenantAccess(ctx, "test-user", "1000", true)
 
 	// Get metrics
-	metricsReq := httptest.NewRequest("GET", "/metrics", nil)
+	metricsReq := httptest.NewRequest(http.MethodGet, "/metrics", http.NoBody)
 	metricsRecorder := httptest.NewRecorder()
 	metricsService.Handler().ServeHTTP(metricsRecorder, metricsReq)
 
@@ -175,7 +175,7 @@ func TestMetricsIntegration_CustomMetrics(t *testing.T) {
 
 	// Verify specific labels exist
 	expectedLabels := []string{
-		`method="GET"`,
+		`method=http.MethodGet`,
 		`status_code="200"`,
 		`user_id="test-user"`,
 		`tenant_count="1"`,
@@ -203,17 +203,17 @@ func TestMetricsIntegration_MetricValues(t *testing.T) {
 	}
 
 	// Record multiple requests to test counter increments
-	for _ = range domain.DefaultTestRetries {
-		metricsService.RecordRequest(ctx, "GET", "/api/v1/query", "200", 100*time.Millisecond, user)
+	for range domain.DefaultTestRetries {
+		metricsService.RecordRequest(ctx, http.MethodGet, "/api/v1/query", "200", 100*time.Millisecond, user)
 	}
 
 	// Record failed requests
-	for _ = range domain.DefaultTestCount {
-		metricsService.RecordRequest(ctx, "GET", "/api/v1/query", "500", 100*time.Millisecond, user)
+	for range domain.DefaultTestCount {
+		metricsService.RecordRequest(ctx, http.MethodGet, "/api/v1/query", "500", 100*time.Millisecond, user)
 	}
 
 	// Get metrics
-	metricsReq := httptest.NewRequest("GET", "/metrics", nil)
+	metricsReq := httptest.NewRequest(http.MethodGet, "/metrics", http.NoBody)
 	metricsRecorder := httptest.NewRecorder()
 	metricsService.Handler().ServeHTTP(metricsRecorder, metricsReq)
 
@@ -236,17 +236,17 @@ func TestMetricsIntegration_MetricValues(t *testing.T) {
 
 // containsMetric checks if metrics output contains a specific metric name or label.
 func containsMetric(metricsOutput, searchString string) bool {
-	return len(metricsOutput) > 0 &&
-		len(searchString) > 0 &&
+	return metricsOutput != "" &&
+		searchString != "" &&
 		findInString(metricsOutput, searchString)
 }
 
 // Simple string search helper.
 func findInString(haystack, needle string) bool {
-	if len(needle) == 0 {
+	if needle == "" {
 		return true
 	}
-	if len(haystack) == 0 {
+	if haystack == "" {
 		return false
 	}
 

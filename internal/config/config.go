@@ -59,9 +59,9 @@ type AuthConfig struct {
 }
 
 type TenantMapping struct {
-	Groups   []string          `yaml:"groups"`
-	Tenants  []string          `yaml:"tenants"`
-	ReadOnly bool              `yaml:"read_only"   default:"false"`
+	Groups   []string `yaml:"groups"`
+	Tenants  []string `yaml:"tenants"`
+	ReadOnly bool     `yaml:"read_only"   default:"false"`
 	// VictoriaMetrics specific
 	VMTenants []VMTenantMapping `yaml:"vm_tenants,omitempty"`
 }
@@ -95,9 +95,7 @@ func Load(path string) (*Config, error) {
 		}
 	}
 
-	if err := loadFromEnv(config); err != nil {
-		return nil, fmt.Errorf("failed to load environment variables: %w", err)
-	}
+	loadFromEnv(config)
 
 	if err := validate(config); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
@@ -108,7 +106,7 @@ func Load(path string) (*Config, error) {
 	return config, nil
 }
 
-func loadFromEnv(config *Config) error {
+func loadFromEnv(config *Config) {
 	if addr := os.Getenv("SERVER_ADDRESS"); addr != "" {
 		config.Server.Address = addr
 	}
@@ -136,8 +134,6 @@ func loadFromEnv(config *Config) error {
 	if level := os.Getenv("LOG_LEVEL"); level != "" {
 		config.Logging.Level = level
 	}
-
-	return nil
 }
 
 func validate(config *Config) error {

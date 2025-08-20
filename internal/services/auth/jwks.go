@@ -13,12 +13,12 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
-// JWKS represents the JSON Web Key Set structure
+// JWKS represents the JSON Web Key Set structure.
 type JWKS struct {
 	Keys []JWK `json:"keys"`
 }
 
-// JWK represents a JSON Web Key
+// JWK represents a JSON Web Key.
 type JWK struct {
 	Kty string `json:"kty"`
 	Use string `json:"use"`
@@ -28,7 +28,7 @@ type JWK struct {
 	Alg string `json:"alg"`
 }
 
-// JWKSFetcher handles fetching and caching JWKS
+// JWKSFetcher handles fetching and caching JWKS.
 type JWKSFetcher struct {
 	client    *http.Client
 	jwksURL   string
@@ -37,7 +37,7 @@ type JWKSFetcher struct {
 	cacheTTL  time.Duration
 }
 
-// NewJWKSFetcher creates a new JWKS fetcher
+// NewJWKSFetcher creates a new JWKS fetcher.
 func NewJWKSFetcher(jwksURL string, cacheTTL time.Duration) *JWKSFetcher {
 	return &JWKSFetcher{
 		client: &http.Client{
@@ -49,7 +49,7 @@ func NewJWKSFetcher(jwksURL string, cacheTTL time.Duration) *JWKSFetcher {
 	}
 }
 
-// GetPublicKey fetches and returns the public key for the given kid
+// GetPublicKey fetches and returns the public key for the given kid.
 func (f *JWKSFetcher) GetPublicKey(kid string) (*rsa.PublicKey, error) {
 	// Check cache first
 	if key, exists := f.cache[kid]; exists && time.Since(f.cacheTime) < f.cacheTTL {
@@ -66,10 +66,10 @@ func (f *JWKSFetcher) GetPublicKey(kid string) (*rsa.PublicKey, error) {
 		return key, nil
 	}
 
-	return nil, fmt.Errorf("key with kid '%s' not found in JWKS", kid)
+	return nil, fmt.Errorf("%w: kid '%s'", domain.ErrJWKSKeyNotFound, kid)
 }
 
-// fetchJWKS fetches the JWKS and updates the cache
+// fetchJWKS fetches the JWKS and updates the cache.
 func (f *JWKSFetcher) fetchJWKS() error {
 	resp, err := f.client.Get(f.jwksURL)
 	if err != nil {
@@ -78,7 +78,7 @@ func (f *JWKSFetcher) fetchJWKS() error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("JWKS endpoint returned status %d", resp.StatusCode)
+		return fmt.Errorf("%w: status %d", domain.ErrJWKSEndpointError, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -108,7 +108,7 @@ func (f *JWKSFetcher) fetchJWKS() error {
 	return nil
 }
 
-// jwkToRSAPublicKey converts a JWK to an RSA public key
+// jwkToRSAPublicKey converts a JWK to an RSA public key.
 func (f *JWKSFetcher) jwkToRSAPublicKey(jwk JWK) (*rsa.PublicKey, error) {
 	// Decode base64url encoded n and e
 	nBytes, err := base64.RawURLEncoding.DecodeString(jwk.N)

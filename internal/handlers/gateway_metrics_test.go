@@ -13,7 +13,7 @@ import (
 const (
 	testUserID     = "test-user"
 	testStatusOK   = "200"
-	testMethodGET  = "GET"
+	testMethodGET  = http.MethodGet
 	testMethodPOST = "POST"
 )
 
@@ -30,7 +30,7 @@ type mockAccessService struct {
 	err error
 }
 
-func (m *mockAccessService) CanAccess(ctx context.Context, user *domain.User, path string, method string) error {
+func (m *mockAccessService) CanAccess(ctx context.Context, user *domain.User, path, method string) error {
 	return m.err
 }
 
@@ -77,7 +77,9 @@ type TenantAccessCall struct {
 	Allowed  bool
 }
 
-func (t *TestableMetricsCollector) RecordRequest(ctx context.Context, method, path, status string, duration time.Duration, user *domain.User) {
+func (t *TestableMetricsCollector) RecordRequest(
+	ctx context.Context, method, path, status string, duration time.Duration, user *domain.User,
+) {
 	t.RequestCalls = append(t.RequestCalls, RequestCall{
 		Method:   method,
 		Path:     path,
@@ -87,7 +89,9 @@ func (t *TestableMetricsCollector) RecordRequest(ctx context.Context, method, pa
 	})
 }
 
-func (t *TestableMetricsCollector) RecordUpstream(ctx context.Context, method, path, status string, duration time.Duration, tenants []string) {
+func (t *TestableMetricsCollector) RecordUpstream(
+	ctx context.Context, method, path, status string, duration time.Duration, tenants []string,
+) {
 	t.UpstreamCalls = append(t.UpstreamCalls, UpstreamCall{
 		Method:   method,
 		Path:     path,
@@ -97,7 +101,9 @@ func (t *TestableMetricsCollector) RecordUpstream(ctx context.Context, method, p
 	})
 }
 
-func (t *TestableMetricsCollector) RecordQueryFilter(ctx context.Context, userID string, tenantCount int, filterApplied bool, duration time.Duration) {
+func (t *TestableMetricsCollector) RecordQueryFilter(
+	ctx context.Context, userID string, tenantCount int, filterApplied bool, duration time.Duration,
+) {
 	t.QueryFilterCalls = append(t.QueryFilterCalls, QueryFilterCall{
 		UserID:        userID,
 		TenantCount:   tenantCount,
@@ -260,7 +266,7 @@ func TestGatewayHandler_MetricsCollection_Success(t *testing.T) {
 	)
 
 	// Create request
-	req := httptest.NewRequest("GET", "/api/v1/query?query=up", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/query?query=up", http.NoBody)
 	req.Header.Set("Authorization", "Bearer valid-token")
 	recorder := httptest.NewRecorder()
 
@@ -355,7 +361,7 @@ func TestGatewayHandler_MetricsCollection_AuthFailure(t *testing.T) {
 	)
 
 	// Create request
-	req := httptest.NewRequest("GET", "/api/v1/query?query=up", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/query?query=up", http.NoBody)
 	req.Header.Set("Authorization", "Bearer invalid-token")
 	recorder := httptest.NewRecorder()
 
@@ -438,7 +444,7 @@ func TestGatewayHandler_MetricsCollection_TenantAccess(t *testing.T) {
 	)
 
 	// Create regular GET request - this should trigger CanAccessTenant through DetermineTargetTenant
-	req := httptest.NewRequest("GET", "/api/v1/query?query=up", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/query?query=up", http.NoBody)
 	req.Header.Set("Authorization", "Bearer valid-token")
 	recorder := httptest.NewRecorder()
 
@@ -510,7 +516,7 @@ func TestGatewayHandler_MetricsCollection_UpstreamError(t *testing.T) {
 	)
 
 	// Create request
-	req := httptest.NewRequest("GET", "/api/v1/query?query=up", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/query?query=up", http.NoBody)
 	req.Header.Set("Authorization", "Bearer valid-token")
 	recorder := httptest.NewRecorder()
 

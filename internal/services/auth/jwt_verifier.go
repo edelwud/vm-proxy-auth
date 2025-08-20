@@ -28,7 +28,7 @@ func NewJWTVerifier(publicKey *rsa.PublicKey, secret []byte, algorithm string) *
 }
 
 // NewJWKSVerifier creates a new JWT verifier using JWKS.
-func NewJWKSVerifier(jwksURL string, algorithm string, cacheTTL time.Duration) *JWTVerifier {
+func NewJWKSVerifier(jwksURL, algorithm string, cacheTTL time.Duration) *JWTVerifier {
 	return &JWTVerifier{
 		algorithm:   algorithm,
 		jwksFetcher: NewJWKSFetcher(jwksURL, cacheTTL),
@@ -55,7 +55,7 @@ func (v *JWTVerifier) VerifyToken(tokenString string) (*Claims, error) {
 		switch v.algorithm {
 		case "RS256":
 			if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+				return nil, fmt.Errorf("%w: %v", domain.ErrUnexpectedSigningMethod, token.Header["alg"])
 			}
 
 			// If we have a static public key, use it
@@ -65,13 +65,13 @@ func (v *JWTVerifier) VerifyToken(tokenString string) (*Claims, error) {
 
 			// Otherwise, use JWKS to get the key
 			if v.jwksFetcher == nil {
-				return nil, fmt.Errorf("no public key or JWKS URL configured for RS256")
+				return nil, domain.ErrNoPublicKeyConfigured
 			}
 
 			// Get kid from token header
 			kid, ok := token.Header["kid"].(string)
 			if !ok {
-				return nil, fmt.Errorf("token header missing kid claim")
+				return nil, domain.ErrTokenMissingKid
 			}
 
 			// Fetch public key from JWKS
@@ -84,16 +84,15 @@ func (v *JWTVerifier) VerifyToken(tokenString string) (*Claims, error) {
 
 		case "HS256":
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+				return nil, fmt.Errorf("%w: %v", domain.ErrUnexpectedSigningMethod, token.Header["alg"])
 			}
 
 			return v.secret, nil
 
 		default:
-			return nil, fmt.Errorf("unsupported signing method: %s", v.algorithm)
+			return nil, fmt.Errorf("%w: %s", domain.ErrUnsupportedSigningMethod, v.algorithm)
 		}
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse token: %w", err)
 	}
