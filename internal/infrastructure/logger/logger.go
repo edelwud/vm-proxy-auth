@@ -97,7 +97,7 @@ func (l *StructuredLogger) logWithFields(level logrus.Level, msg string, fields 
 	entry.Log(level, msg)
 }
 
-// Field helpers for common patterns.
+// String field helpers for common patterns.
 func String(key, value string) domain.Field {
 	return domain.Field{Key: key, Value: value}
 }

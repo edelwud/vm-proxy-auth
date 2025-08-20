@@ -8,13 +8,13 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
-// HealthHandler handles health check endpoints
+// HealthHandler handles health check endpoints.
 type HealthHandler struct {
 	logger  domain.Logger
 	version string
 }
 
-// NewHealthHandler creates a new health handler
+// NewHealthHandler creates a new health handler.
 func NewHealthHandler(logger domain.Logger, version string) *HealthHandler {
 	return &HealthHandler{
 		logger:  logger,
@@ -22,13 +22,13 @@ func NewHealthHandler(logger domain.Logger, version string) *HealthHandler {
 	}
 }
 
-// ServeHTTP implements http.Handler interface
+// ServeHTTP implements http.Handler interface.
 func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Health(w, r)
 }
 
-// Health responds to health check requests
-func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
+// Health responds to health check requests.
+func (h *HealthHandler) Health(w http.ResponseWriter, _ *http.Request) {
 	response := map[string]interface{}{
 		"status":    "healthy",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
@@ -38,8 +38,8 @@ func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, response)
 }
 
-// Readiness responds to readiness check requests
-func (h *HealthHandler) Readiness(w http.ResponseWriter, r *http.Request) {
+// Readiness responds to readiness check requests.
+func (h *HealthHandler) Readiness(w http.ResponseWriter, _ *http.Request) {
 	response := map[string]interface{}{
 		"status": "ready",
 		"checks": map[string]string{

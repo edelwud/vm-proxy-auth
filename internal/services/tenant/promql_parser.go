@@ -25,7 +25,11 @@ func NewPromQLTenantInjector(logger domain.Logger) *PromQLTenantInjector {
 }
 
 // InjectTenantLabels parses PromQL using Prometheus parser and injects tenant labels.
-func (p *PromQLTenantInjector) InjectTenantLabels(query string, vmTenants []domain.VMTenant, cfg *config.UpstreamConfig) (string, error) {
+func (p *PromQLTenantInjector) InjectTenantLabels(
+	query string,
+	vmTenants []domain.VMTenant,
+	cfg *config.UpstreamConfig,
+) (string, error) {
 	p.logger.Debug("Starting production PromQL tenant injection",
 		domain.Field{Key: "original_query", Value: query},
 		domain.Field{Key: "vm_tenants", Value: fmt.Sprintf("%v", vmTenants)})
@@ -47,7 +51,7 @@ func (p *PromQLTenantInjector) InjectTenantLabels(query string, vmTenants []doma
 	}
 
 	// Walk the AST and inject tenant labels
-	parser.Inspect(expr, func(node parser.Node, path []parser.Node) error {
+	parser.Inspect(expr, func(node parser.Node, _ []parser.Node) error {
 		// Find Vector Selectors (metric names with optional labels)
 		if vs, ok := node.(*parser.VectorSelector); ok {
 			p.injectTenantLabelsToVectorSelector(vs, vmTenants, cfg)

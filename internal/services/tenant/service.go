@@ -19,7 +19,11 @@ type Service struct {
 }
 
 // NewService creates a new tenant service.
-func NewService(cfg *config.UpstreamConfig, logger domain.Logger, metrics domain.MetricsService) domain.TenantService {
+func NewService(
+	cfg *config.UpstreamConfig,
+	logger domain.Logger,
+	metrics domain.MetricsService,
+) domain.TenantService {
 	return &Service{
 		config:         *cfg,
 		logger:         logger,
@@ -29,7 +33,11 @@ func NewService(cfg *config.UpstreamConfig, logger domain.Logger, metrics domain
 }
 
 // FilterQuery adds tenant filtering to PromQL query for VictoriaMetrics using production-ready Prometheus parser.
-func (s *Service) FilterQuery(ctx context.Context, user *domain.User, query string) (string, error) {
+func (s *Service) FilterQuery(
+	ctx context.Context,
+	user *domain.User,
+	query string,
+) (string, error) {
 	startTime := time.Now()
 
 	// Only support VM tenants
@@ -96,7 +104,11 @@ func (s *Service) CanAccessTenant(ctx context.Context, user *domain.User, tenant
 }
 
 // DetermineTargetTenant determines which tenant to use for write operations.
-func (s *Service) DetermineTargetTenant(ctx context.Context, user *domain.User, r *http.Request) (string, error) {
+func (s *Service) DetermineTargetTenant(
+	ctx context.Context,
+	user *domain.User,
+	r *http.Request,
+) (string, error) {
 	// Only support VM tenants
 	if len(user.VMTenants) == 0 {
 		return "", domain.ErrNoVMTenants

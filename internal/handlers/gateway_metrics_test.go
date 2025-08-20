@@ -17,7 +17,7 @@ const (
 	testMethodPOST = "POST"
 )
 
-// mockLogger implements domain.Logger for testing
+// mockLogger implements domain.Logger for testing.
 type mockLogger struct{}
 
 func (m *mockLogger) Debug(msg string, fields ...domain.Field)  {}
@@ -30,11 +30,11 @@ type mockAccessService struct {
 	err error
 }
 
-func (m *mockAccessService) CanAccess(ctx context.Context, user *domain.User, path, method string) error {
+func (m *mockAccessService) CanAccess(_ context.Context, _ *domain.User, _, _ string) error {
 	return m.err
 }
 
-// TestableMetricsCollector collects metrics calls for verification
+// TestableMetricsCollector collects metrics calls for verification.
 type TestableMetricsCollector struct {
 	RequestCalls      []RequestCall
 	UpstreamCalls     []UpstreamCall
@@ -78,7 +78,7 @@ type TenantAccessCall struct {
 }
 
 func (t *TestableMetricsCollector) RecordRequest(
-	ctx context.Context, method, path, status string, duration time.Duration, user *domain.User,
+	_ context.Context, method, path, status string, duration time.Duration, user *domain.User,
 ) {
 	t.RequestCalls = append(t.RequestCalls, RequestCall{
 		Method:   method,
@@ -90,7 +90,7 @@ func (t *TestableMetricsCollector) RecordRequest(
 }
 
 func (t *TestableMetricsCollector) RecordUpstream(
-	ctx context.Context, method, path, status string, duration time.Duration, tenants []string,
+	_ context.Context, method, path, status string, duration time.Duration, tenants []string,
 ) {
 	t.UpstreamCalls = append(t.UpstreamCalls, UpstreamCall{
 		Method:   method,
@@ -102,7 +102,7 @@ func (t *TestableMetricsCollector) RecordUpstream(
 }
 
 func (t *TestableMetricsCollector) RecordQueryFilter(
-	ctx context.Context, userID string, tenantCount int, filterApplied bool, duration time.Duration,
+	_ context.Context, userID string, tenantCount int, filterApplied bool, duration time.Duration,
 ) {
 	t.QueryFilterCalls = append(t.QueryFilterCalls, QueryFilterCall{
 		UserID:        userID,
@@ -112,14 +112,14 @@ func (t *TestableMetricsCollector) RecordQueryFilter(
 	})
 }
 
-func (t *TestableMetricsCollector) RecordAuthAttempt(ctx context.Context, userID, status string) {
+func (t *TestableMetricsCollector) RecordAuthAttempt(_ context.Context, userID, status string) {
 	t.AuthAttemptCalls = append(t.AuthAttemptCalls, AuthAttemptCall{
 		UserID: userID,
 		Status: status,
 	})
 }
 
-func (t *TestableMetricsCollector) RecordTenantAccess(ctx context.Context, userID, tenantID string, allowed bool) {
+func (t *TestableMetricsCollector) RecordTenantAccess(_ context.Context, userID, tenantID string, allowed bool) {
 	t.TenantAccessCalls = append(t.TenantAccessCalls, TenantAccessCall{
 		UserID:   userID,
 		TenantID: tenantID,
@@ -128,7 +128,7 @@ func (t *TestableMetricsCollector) RecordTenantAccess(ctx context.Context, userI
 }
 
 func (t *TestableMetricsCollector) Handler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write([]byte("# Mock metrics endpoint\n")); err != nil {
@@ -137,14 +137,14 @@ func (t *TestableMetricsCollector) Handler() http.Handler {
 	})
 }
 
-// Mock services that use the testable metrics collector
+// Mock services that use the testable metrics collector.
 type testableAuthService struct {
 	user    *domain.User
 	err     error
 	metrics *TestableMetricsCollector
 }
 
-func (m *testableAuthService) Authenticate(ctx context.Context, token string) (*domain.User, error) {
+func (m *testableAuthService) Authenticate(ctx context.Context, _ string) (*domain.User, error) {
 	if m.err != nil {
 		m.metrics.RecordAuthAttempt(ctx, "unknown", "failed")
 
@@ -182,7 +182,7 @@ func (m *testableTenantService) CanAccessTenant(ctx context.Context, user *domai
 	return m.canAccess
 }
 
-func (m *testableTenantService) DetermineTargetTenant(ctx context.Context, user *domain.User, r *http.Request) (string, error) {
+func (m *testableTenantService) DetermineTargetTenant(_ context.Context, _ *domain.User, r *http.Request) (string, error) {
 	if m.err != nil {
 		return "", m.err
 	}

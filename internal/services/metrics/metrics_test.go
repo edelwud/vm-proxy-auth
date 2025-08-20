@@ -27,6 +27,7 @@ func (m *mockLogger) With(fields ...domain.Field) domain.Logger { return m }
 // TestableMetricsService wraps the real service for better testing.
 type TestableMetricsService struct {
 	*Service
+
 	registry *prometheus.Registry
 }
 
@@ -139,7 +140,7 @@ func NewTestableService() *TestableMetricsService {
 }
 
 // GetMetricValue gets the value of a counter metric for testing.
-func (t *TestableMetricsService) GetMetricValue(metricName string, labels prometheus.Labels) (float64, error) {
+func (t *TestableMetricsService) GetMetricValue(metricName string, _ prometheus.Labels) (float64, error) {
 	gauge := prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: metricName}, func() float64 {
 		// This is a simplified approach - in reality you'd query the actual collector
 		return 0
@@ -150,7 +151,7 @@ func (t *TestableMetricsService) GetMetricValue(metricName string, labels promet
 
 // GetMetricsOutput returns the metrics in Prometheus text format.
 func (t *TestableMetricsService) GetMetricsOutput() (string, error) {
-	req := httptest.NewRequest("GET", "/metrics", nil)
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	recorder := httptest.NewRecorder()
 
 	t.Handler().ServeHTTP(recorder, req)

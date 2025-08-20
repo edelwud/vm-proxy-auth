@@ -16,12 +16,12 @@ import (
 	loggerPkg "github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
 )
 
-// Define custom type for context keys to avoid collisions
+// Define custom type for context keys to avoid collisions.
 type contextKey string
 
 const requestIDKey contextKey = "request_id"
 
-// GatewayHandler handles all proxy requests using clean architecture
+// GatewayHandler handles all proxy requests using clean architecture.
 type GatewayHandler struct {
 	authService    domain.AuthService
 	tenantService  domain.TenantService
@@ -31,7 +31,7 @@ type GatewayHandler struct {
 	logger         domain.Logger
 }
 
-// NewGatewayHandler creates a new gateway handler
+// NewGatewayHandler creates a new gateway handler.
 func NewGatewayHandler(
 	authService domain.AuthService,
 	tenantService domain.TenantService,
@@ -50,7 +50,7 @@ func NewGatewayHandler(
 	}
 }
 
-// ServeHTTP implements http.Handler interface
+// ServeHTTP implements http.Handler interface.
 func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	requestID := generateRequestID()

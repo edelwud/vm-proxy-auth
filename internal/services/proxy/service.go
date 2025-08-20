@@ -20,7 +20,12 @@ type Service struct {
 }
 
 // NewService creates a new proxy service.
-func NewService(upstreamURL string, timeout time.Duration, logger domain.Logger, metrics domain.MetricsService) *Service {
+func NewService(
+	upstreamURL string,
+	timeout time.Duration,
+	logger domain.Logger,
+	metrics domain.MetricsService,
+) *Service {
 	return &Service{
 		upstreamURL: upstreamURL,
 		client: &http.Client{
@@ -32,7 +37,10 @@ func NewService(upstreamURL string, timeout time.Duration, logger domain.Logger,
 }
 
 // Forward forwards a request to the upstream server.
-func (s *Service) Forward(ctx context.Context, req *domain.ProxyRequest) (*domain.ProxyResponse, error) {
+func (s *Service) Forward(
+	ctx context.Context,
+	req *domain.ProxyRequest,
+) (*domain.ProxyResponse, error) {
 	startTime := time.Now()
 
 	queryParams, body, err := s.prepareRequest(req)

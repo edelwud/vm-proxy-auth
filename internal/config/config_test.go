@@ -112,14 +112,14 @@ auth:
 		t.Run(tt.name, func(t *testing.T) {
 			// Set environment variables
 			for key, value := range tt.env {
-				os.Setenv(key, value)
+				t.Setenv(key, value)
 				defer os.Unsetenv(key)
 			}
 
 			var configPath string
 			if tt.config != "" {
 				// Create temporary config file
-				tmpFile, err := os.CreateTemp("", "config-*.yaml")
+				tmpFile, err := os.CreateTemp(t.TempDir(), "config-*.yaml")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -149,10 +149,18 @@ auth:
 					t.Errorf("Auth.JWKSURL = %v, want %v", got.Auth.JWKSURL, tt.want.Auth.JWKSURL)
 				}
 				if got.Auth.RequiredIssuer != tt.want.Auth.RequiredIssuer {
-					t.Errorf("Auth.RequiredIssuer = %v, want %v", got.Auth.RequiredIssuer, tt.want.Auth.RequiredIssuer)
+					t.Errorf(
+						"Auth.RequiredIssuer = %v, want %v",
+						got.Auth.RequiredIssuer,
+						tt.want.Auth.RequiredIssuer,
+					)
 				}
 				if got.Auth.UserGroupsClaim != tt.want.Auth.UserGroupsClaim {
-					t.Errorf("Auth.UserGroupsClaim = %v, want %v", got.Auth.UserGroupsClaim, tt.want.Auth.UserGroupsClaim)
+					t.Errorf(
+						"Auth.UserGroupsClaim = %v, want %v",
+						got.Auth.UserGroupsClaim,
+						tt.want.Auth.UserGroupsClaim,
+					)
 				}
 				if got.Logging.Level != tt.want.Logging.Level {
 					t.Errorf("Logging.Level = %v, want %v", got.Logging.Level, tt.want.Logging.Level)

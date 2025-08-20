@@ -37,6 +37,8 @@ func NewJWKSVerifier(jwksURL, algorithm string, cacheTTL time.Duration) *JWTVeri
 
 // Claims represents JWT claims structure.
 type Claims struct {
+	jwt.RegisteredClaims
+
 	Email     string   `json:"email"`
 	Groups    []string `json:"groups"`
 	UserID    string   `json:"sub"`
@@ -45,7 +47,6 @@ type Claims struct {
 	NotBefore int64    `json:"nbf"`
 	Issuer    string   `json:"iss"`
 	Audience  string   `json:"aud"`
-	jwt.RegisteredClaims
 }
 
 // VerifyToken verifies a JWT token and returns the claims.

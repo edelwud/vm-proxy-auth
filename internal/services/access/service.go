@@ -21,7 +21,7 @@ func NewService(logger domain.Logger) *Service {
 }
 
 // CanAccess checks if a user can access a specific path with given method.
-func (s *Service) CanAccess(ctx context.Context, user *domain.User, path, method string) error {
+func (s *Service) CanAccess(_ context.Context, user *domain.User, path, method string) error {
 	// Check if user is read-only and this is a write operation
 	if user.ReadOnly && isWriteOperation(method, path) {
 		return &domain.AppError{

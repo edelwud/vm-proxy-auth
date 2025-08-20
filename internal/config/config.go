@@ -61,7 +61,7 @@ type AuthConfig struct {
 type TenantMapping struct {
 	Groups   []string `yaml:"groups"`
 	Tenants  []string `yaml:"tenants"`
-	ReadOnly bool     `yaml:"read_only"   default:"false"`
+	ReadOnly bool     `yaml:"read_only" default:"false"`
 	// VictoriaMetrics specific
 	VMTenants []VMTenantMapping `yaml:"vm_tenants,omitempty"`
 }

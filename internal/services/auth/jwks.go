@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
@@ -71,7 +72,11 @@ func (f *JWKSFetcher) GetPublicKey(kid string) (*rsa.PublicKey, error) {
 
 // fetchJWKS fetches the JWKS and updates the cache.
 func (f *JWKSFetcher) fetchJWKS() error {
-	resp, err := f.client.Get(f.jwksURL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, f.jwksURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	resp, err := f.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to fetch JWKS from %s: %w", f.jwksURL, err)
 	}

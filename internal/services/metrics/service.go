@@ -127,7 +127,14 @@ func (s *Service) Handler() http.Handler {
 }
 
 // RecordRequest records metrics for incoming requests.
-func (s *Service) RecordRequest(ctx context.Context, method, path, status string, duration time.Duration, user *domain.User) {
+func (s *Service) RecordRequest(
+	_ context.Context,
+	method,
+	path,
+	status string,
+	duration time.Duration,
+	user *domain.User,
+) {
 	statusCode := status
 	userID := "anonymous"
 	if user != nil {
@@ -148,7 +155,7 @@ func (s *Service) RecordRequest(ctx context.Context, method, path, status string
 }
 
 // RecordUpstream records metrics for upstream requests.
-func (s *Service) RecordUpstream(ctx context.Context, method, path, status string, duration time.Duration, tenants []string) {
+func (s *Service) RecordUpstream(_ context.Context, method, path, status string, duration time.Duration, tenants []string) {
 	statusCode := status
 	tenantCount := strconv.Itoa(len(tenants))
 
@@ -166,7 +173,7 @@ func (s *Service) RecordUpstream(ctx context.Context, method, path, status strin
 }
 
 // RecordQueryFilter records metrics for query filtering operations.
-func (s *Service) RecordQueryFilter(ctx context.Context, userID string, tenantCount int, filterApplied bool, duration time.Duration) {
+func (s *Service) RecordQueryFilter(_ context.Context, userID string, tenantCount int, filterApplied bool, duration time.Duration) {
 	tenantCountStr := strconv.Itoa(tenantCount)
 	filterAppliedStr := strconv.FormatBool(filterApplied)
 
@@ -183,7 +190,7 @@ func (s *Service) RecordQueryFilter(ctx context.Context, userID string, tenantCo
 }
 
 // RecordAuthAttempt records authentication attempt metrics.
-func (s *Service) RecordAuthAttempt(ctx context.Context, userID, status string) {
+func (s *Service) RecordAuthAttempt(_ context.Context, userID, status string) {
 	authAttemptsTotal.WithLabelValues(status, userID).Inc()
 
 	s.logger.Debug("Auth attempt metrics recorded",
@@ -193,7 +200,7 @@ func (s *Service) RecordAuthAttempt(ctx context.Context, userID, status string) 
 }
 
 // RecordTenantAccess records tenant access check metrics.
-func (s *Service) RecordTenantAccess(ctx context.Context, userID, tenantID string, allowed bool) {
+func (s *Service) RecordTenantAccess(_ context.Context, userID, tenantID string, allowed bool) {
 	allowedStr := strconv.FormatBool(allowed)
 	tenantAccessTotal.WithLabelValues(userID, tenantID, allowedStr).Inc()
 

@@ -82,7 +82,12 @@ type ProxyService interface {
 
 // WriteService handles write operations with tenant injection.
 type WriteService interface {
-	ProcessWrite(ctx context.Context, data []byte, tenantID string, contentType string) ([]byte, error)
+	ProcessWrite(
+		ctx context.Context,
+		data []byte,
+		tenantID string,
+		contentType string,
+	) ([]byte, error)
 }
 
 // AccessControlService handles authorization.
@@ -92,9 +97,25 @@ type AccessControlService interface {
 
 // MetricsService handles metrics collection.
 type MetricsService interface {
-	RecordRequest(ctx context.Context, method, path, status string, duration time.Duration, user *User)
-	RecordUpstream(ctx context.Context, method, path, status string, duration time.Duration, tenants []string)
-	RecordQueryFilter(ctx context.Context, userID string, tenantCount int, filterApplied bool, duration time.Duration)
+	RecordRequest(
+		ctx context.Context,
+		method, path, status string,
+		duration time.Duration,
+		user *User,
+	)
+	RecordUpstream(
+		ctx context.Context,
+		method, path, status string,
+		duration time.Duration,
+		tenants []string,
+	)
+	RecordQueryFilter(
+		ctx context.Context,
+		userID string,
+		tenantCount int,
+		filterApplied bool,
+		duration time.Duration,
+	)
 	RecordAuthAttempt(ctx context.Context, userID, status string)
 	RecordTenantAccess(ctx context.Context, userID, tenantID string, allowed bool)
 	Handler() http.Handler

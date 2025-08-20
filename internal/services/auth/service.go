@@ -145,7 +145,9 @@ func (s *Service) extractGroups(claims *Claims) []string {
 }
 
 // determineUserPermissions maps user groups to tenant permissions.
-func (s *Service) determineUserPermissions(userGroups []string) ([]string, []domain.VMTenant, bool) {
+func (s *Service) determineUserPermissions(
+	userGroups []string,
+) ([]string, []domain.VMTenant, bool) {
 	var allowedTenants []string
 	var vmTenants []domain.VMTenant
 	readOnly := true // Default to read-only
