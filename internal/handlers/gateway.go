@@ -115,77 +115,18 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *GatewayHandler) processRequest(w http.ResponseWriter, r *http.Request, user *domain.User, startTime time.Time) {
 	ctx := r.Context()
 
-	// Determine if this is a query endpoint that needs filtering
-	var filteredQuery string
-	requestID, ok := ctx.Value(requestIDKey).(string)
-	if !ok {
-		requestID = "unknown"
-	}
-	userLogger := h.logger.With(
-		loggerPkg.RequestID(requestID),
-		loggerPkg.UserID(user.ID),
-		loggerPkg.Path(r.URL.Path),
-		loggerPkg.Method(r.Method),
-	)
-
-	userLogger.Info("Processing request",
-		domain.Field{Key: "path", Value: r.URL.Path},
-		domain.Field{Key: "method", Value: r.Method},
-		domain.Field{Key: "is_query_endpoint", Value: h.isQueryEndpoint(r.URL.Path)})
-
-	if h.isQueryEndpoint(r.URL.Path) {
-		originalQuery := h.extractQuery(r)
-		userLogger.Info("Extracted query from request",
-			domain.Field{Key: "original_query", Value: originalQuery},
-			domain.Field{Key: "query_empty", Value: originalQuery == ""})
-
-		if originalQuery != "" {
-			userLogger.Info("Calling FilterQuery function",
-				domain.Field{Key: "original_query", Value: originalQuery})
-
-			var err error
-			filteredQuery, err = h.tenantService.FilterQuery(ctx, user, originalQuery)
-			if err != nil {
-				userLogger.Error("Query filtering failed", loggerPkg.Error(err))
-				var appErr *domain.AppError
-				if errors.As(err, &appErr) {
-					h.writeError(w, appErr)
-					h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), user)
-				} else {
-					h.writeError(w, domain.ErrForbidden)
-					h.recordMetrics(ctx, r.Method, r.URL.Path, "403", time.Since(startTime), user)
-				}
-
-				return
-			}
-
-			userLogger.Info("Query filtering completed",
-				domain.Field{Key: "original_query", Value: originalQuery},
-				domain.Field{Key: "filtered_query", Value: filteredQuery},
-				domain.Field{Key: "filter_applied", Value: originalQuery != filteredQuery})
-		} else {
-			userLogger.Warn("No query found in request - cannot apply tenant filtering")
-		}
+	// Process query filtering if needed
+	filteredQuery, err := h.processQueryFiltering(ctx, r, user)
+	if err != nil {
+		h.handleProcessingError(w, r, err, startTime, user)
+		return
 	}
 
 	// Determine target tenant for write operations
-	var targetTenant string
-	if h.isWriteEndpoint(r.URL.Path, r.Method) {
-		var err error
-		targetTenant, err = h.tenantService.DetermineTargetTenant(ctx, user, r)
-		if err != nil {
-			h.logger.Error("Failed to determine target tenant", loggerPkg.Error(err))
-			var appErr *domain.AppError
-			if errors.As(err, &appErr) {
-				h.writeError(w, appErr)
-				h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), user)
-			} else {
-				h.writeError(w, domain.ErrTenantRequired)
-				h.recordMetrics(ctx, r.Method, r.URL.Path, "400", time.Since(startTime), user)
-			}
-
-			return
-		}
+	targetTenant, err := h.processTargetTenant(ctx, r, user)
+	if err != nil {
+		h.handleProcessingError(w, r, err, startTime, user)
+		return
 	}
 
 	// Create proxy request
@@ -347,4 +288,78 @@ func (h *GatewayHandler) recordMetrics(ctx context.Context, method, path, status
 func generateRequestID() string {
 	// Simple request ID generation - in production, use UUID or similar
 	return strconv.FormatInt(time.Now().UnixNano(), 10)
+}
+
+// processQueryFiltering handles query filtering for query endpoints.
+func (h *GatewayHandler) processQueryFiltering(ctx context.Context, r *http.Request, user *domain.User) (string, error) {
+	if !h.isQueryEndpoint(r.URL.Path) {
+		return "", nil
+	}
+
+	originalQuery := h.extractQuery(r)
+	if originalQuery == "" {
+		h.logger.Warn("No query found in request - cannot apply tenant filtering")
+		return "", nil
+	}
+
+	userLogger := h.getUserLogger(ctx, user, r)
+	userLogger.Info("Calling FilterQuery function", domain.Field{Key: "original_query", Value: originalQuery})
+
+	filteredQuery, err := h.tenantService.FilterQuery(ctx, user, originalQuery)
+	if err != nil {
+		userLogger.Error("Query filtering failed", loggerPkg.Error(err))
+		return "", err
+	}
+
+	userLogger.Info("Query filtering completed",
+		domain.Field{Key: "original_query", Value: originalQuery},
+		domain.Field{Key: "filtered_query", Value: filteredQuery},
+		domain.Field{Key: "filter_applied", Value: originalQuery != filteredQuery})
+
+	return filteredQuery, nil
+}
+
+// processTargetTenant determines the target tenant for write operations.
+func (h *GatewayHandler) processTargetTenant(ctx context.Context, r *http.Request, user *domain.User) (string, error) {
+	if !h.isWriteEndpoint(r.URL.Path, r.Method) {
+		return "", nil
+	}
+
+	targetTenant, err := h.tenantService.DetermineTargetTenant(ctx, user, r)
+	if err != nil {
+		h.logger.Error("Failed to determine target tenant", loggerPkg.Error(err))
+		return "", err
+	}
+
+	return targetTenant, nil
+}
+
+// handleProcessingError handles errors during request processing.
+func (h *GatewayHandler) handleProcessingError(w http.ResponseWriter, r *http.Request, err error, startTime time.Time, user *domain.User) {
+	ctx := r.Context()
+	var appErr *domain.AppError
+	
+	if errors.As(err, &appErr) {
+		h.writeError(w, appErr)
+		h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), user)
+	} else {
+		// Default to forbidden for unknown errors
+		h.writeError(w, domain.ErrForbidden)
+		h.recordMetrics(ctx, r.Method, r.URL.Path, "403", time.Since(startTime), user)
+	}
+}
+
+// getUserLogger creates a logger with user context.
+func (h *GatewayHandler) getUserLogger(ctx context.Context, user *domain.User, r *http.Request) domain.Logger {
+	requestID, ok := ctx.Value(requestIDKey).(string)
+	if !ok {
+		requestID = "unknown"
+	}
+	
+	return h.logger.With(
+		loggerPkg.RequestID(requestID),
+		loggerPkg.UserID(user.ID),
+		loggerPkg.Path(r.URL.Path),
+		loggerPkg.Method(r.Method),
+	)
 }

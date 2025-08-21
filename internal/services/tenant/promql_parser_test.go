@@ -1,4 +1,4 @@
-package tenant
+package tenant_test
 
 import (
 	"errors"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
+	"github.com/edelwud/vm-proxy-auth/internal/services/tenant"
 )
 
 // mockLogger implements domain.Logger for testing.
@@ -21,7 +22,7 @@ func (m *mockLogger) With(fields ...domain.Field) domain.Logger { return m }
 
 func TestPromQLTenantInjector_SingleTenant(t *testing.T) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -47,7 +48,7 @@ func TestPromQLTenantInjector_SingleTenant(t *testing.T) {
 
 func TestPromQLTenantInjector_SingleTenantWithProject(t *testing.T) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -73,7 +74,7 @@ func TestPromQLTenantInjector_SingleTenantWithProject(t *testing.T) {
 
 func TestPromQLTenantInjector_MultipleTenants(t *testing.T) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -108,7 +109,7 @@ func TestPromQLTenantInjector_MultipleTenants(t *testing.T) {
 
 func TestPromQLTenantInjector_MultipleTenantsWithProjects(t *testing.T) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -161,7 +162,7 @@ func TestPromQLTenantInjector_MultipleTenantsWithProjects(t *testing.T) {
 
 func TestPromQLTenantInjector_ComplexQuery(t *testing.T) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -199,7 +200,7 @@ func TestPromQLTenantInjector_ComplexQuery(t *testing.T) {
 
 func TestPromQLTenantInjector_ExistingLabels(t *testing.T) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -231,7 +232,7 @@ func TestPromQLTenantInjector_ExistingLabels(t *testing.T) {
 
 func TestPromQLTenantInjector_MixedExistingLabels(t *testing.T) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -278,7 +279,7 @@ func TestPromQLTenantInjector_MixedExistingLabels(t *testing.T) {
 
 func TestPromQLTenantInjector_NoTenants(t *testing.T) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -301,7 +302,7 @@ func TestPromQLTenantInjector_NoTenants(t *testing.T) {
 
 func TestPromQLTenantInjector_InvalidQuery(t *testing.T) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -327,7 +328,7 @@ func TestPromQLTenantInjector_InvalidQuery(t *testing.T) {
 
 func TestPromQLTenantInjector_SingleTenantRegexEscape(t *testing.T) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -355,7 +356,7 @@ func TestPromQLTenantInjector_SingleTenantRegexEscape(t *testing.T) {
 
 func TestPromQLTenantInjector_ProjectIDOnlyMode(t *testing.T) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -406,7 +407,7 @@ func TestPromQLTenantInjector_ProjectIDOnlyMode(t *testing.T) {
 // Benchmark tests
 func BenchmarkPromQLTenantInjector_SingleTenant(b *testing.B) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -431,7 +432,7 @@ func BenchmarkPromQLTenantInjector_SingleTenant(b *testing.B) {
 
 func TestPromQLTenantInjector_DuplicateDeduplication(t *testing.T) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -476,7 +477,7 @@ func TestPromQLTenantInjector_DuplicateDeduplication(t *testing.T) {
 
 func TestPromQLTenantInjector_DuplicateDeduplicationWithProjects(t *testing.T) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -535,7 +536,7 @@ func TestPromQLTenantInjector_DuplicateDeduplicationWithProjects(t *testing.T) {
 
 func TestPromQLTenantInjector_EmptyAndDuplicateHandling(t *testing.T) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -583,7 +584,7 @@ func TestPromQLTenantInjector_EmptyAndDuplicateHandling(t *testing.T) {
 
 func BenchmarkPromQLTenantInjector_MultipleTenants(b *testing.B) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",
@@ -613,7 +614,7 @@ func BenchmarkPromQLTenantInjector_MultipleTenants(b *testing.B) {
 
 func BenchmarkPromQLTenantInjector_ManyDuplicateTenants(b *testing.B) {
 	logger := &mockLogger{}
-	injector := NewPromQLTenantInjector(logger)
+	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
 		TenantLabel:  "vm_account_id",

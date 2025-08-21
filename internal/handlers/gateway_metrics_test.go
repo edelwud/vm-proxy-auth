@@ -1,4 +1,4 @@
-package handlers
+package handlers_test
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
+	"github.com/edelwud/vm-proxy-auth/internal/handlers"
 )
 
 const (
@@ -256,7 +257,7 @@ func TestGatewayHandler_MetricsCollection_Success(t *testing.T) {
 	logger := &mockLogger{}
 
 	// Create handler
-	handler := NewGatewayHandler(
+	handler := handlers.NewGatewayHandler(
 		authService,
 		tenantService,
 		accessService,
@@ -351,7 +352,7 @@ func TestGatewayHandler_MetricsCollection_AuthFailure(t *testing.T) {
 	logger := &mockLogger{}
 
 	// Create handler
-	handler := NewGatewayHandler(
+	handler := handlers.NewGatewayHandler(
 		authService,
 		tenantService,
 		accessService,
@@ -434,7 +435,7 @@ func TestGatewayHandler_MetricsCollection_TenantAccess(t *testing.T) {
 	logger := &mockLogger{}
 
 	// Create handler
-	handler := NewGatewayHandler(
+	handler := handlers.NewGatewayHandler(
 		authService,
 		tenantService,
 		accessService,
@@ -506,7 +507,7 @@ func TestGatewayHandler_MetricsCollection_UpstreamError(t *testing.T) {
 	logger := &mockLogger{}
 
 	// Create handler
-	handler := NewGatewayHandler(
+	handler := handlers.NewGatewayHandler(
 		authService,
 		tenantService,
 		accessService,

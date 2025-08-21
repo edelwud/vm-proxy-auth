@@ -1,4 +1,4 @@
-package handlers
+package handlers_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
+	"github.com/edelwud/vm-proxy-auth/internal/handlers"
 	"github.com/edelwud/vm-proxy-auth/internal/services/access"
 	"github.com/edelwud/vm-proxy-auth/internal/services/auth"
 	"github.com/edelwud/vm-proxy-auth/internal/services/metrics"
@@ -46,7 +47,7 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 	proxyService := proxy.NewService("http://localhost:8428", 30*time.Second, logger, metricsService)
 
 	// Create gateway handler
-	handler := NewGatewayHandler(
+	handler := handlers.NewGatewayHandler(
 		authService,
 		tenantService,
 		accessService,
@@ -94,7 +95,7 @@ func TestMetricsIntegration_HealthCheck(t *testing.T) {
 	metricsService := metrics.NewService(logger)
 
 	// Create health handler
-	healthHandler := NewHealthHandler(logger, "test")
+	healthHandler := handlers.NewHealthHandler(logger, "test")
 
 	// Create request
 	req := httptest.NewRequest(http.MethodGet, "/health", http.NoBody)
@@ -175,7 +176,7 @@ func TestMetricsIntegration_CustomMetrics(t *testing.T) {
 
 	// Verify specific labels exist
 	expectedLabels := []string{
-		`method=http.MethodGet`,
+		`method="GET"`,
 		`status_code="200"`,
 		`user_id="test-user"`,
 		`tenant_count="1"`,
