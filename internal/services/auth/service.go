@@ -38,13 +38,14 @@ func NewService(
 	// Initialize JWT verifier based on configuration
 	var verifier *JWTVerifier
 
-	if cfg.JWTSecret != "" {
+	switch {
+	case cfg.JWTSecret != "":
 		// Use secret-based verification (typically HS256)
 		verifier = NewJWTVerifier(nil, []byte(cfg.JWTSecret), cfg.JWTAlgorithm)
-	} else if cfg.JWKSURL != "" {
+	case cfg.JWKSURL != "":
 		// Use JWKS-based verification (typically RS256)
 		verifier = NewJWKSVerifier(cfg.JWKSURL, cfg.JWTAlgorithm, cfg.CacheTTL)
-	} else {
+	default:
 		// Error: must have either secret or JWKS URL
 		panic("JWT authentication requires either jwt_secret or jwks_url to be configured")
 	}
@@ -75,11 +76,12 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*domain.User,
 	// Check cache first
 	if cached, ok := s.userCache.Load(token); ok {
 		cachedUser, ok := cached.(cachedUser)
-		if !ok {
+		switch {
+		case !ok:
 			s.userCache.Delete(token) // Remove invalid cache entry
-		} else if time.Now().Before(cachedUser.expiresAt) {
+		case time.Now().Before(cachedUser.expiresAt):
 			return cachedUser.user, nil
-		} else {
+		default:
 			// Remove expired entry
 			s.userCache.Delete(token)
 		}

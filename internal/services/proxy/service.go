@@ -145,11 +145,12 @@ func (s *Service) buildTargetURL(path string, query url.Values) (string, error) 
 	}
 
 	// Properly concatenate paths
-	if !strings.HasSuffix(targetURL.Path, "/") && !strings.HasPrefix(path, "/") {
+	switch {
+	case !strings.HasSuffix(targetURL.Path, "/") && !strings.HasPrefix(path, "/"):
 		targetURL.Path = targetURL.Path + "/" + path
-	} else if strings.HasSuffix(targetURL.Path, "/") && strings.HasPrefix(path, "/") {
+	case strings.HasSuffix(targetURL.Path, "/") && strings.HasPrefix(path, "/"):
 		targetURL.Path += path[1:]
-	} else {
+	default:
 		targetURL.Path += path
 	}
 

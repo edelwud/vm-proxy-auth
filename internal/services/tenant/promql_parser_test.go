@@ -9,19 +9,11 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/services/tenant"
+	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
-// mockLogger implements domain.Logger for testing.
-type mockLogger struct{}
-
-func (m *mockLogger) Debug(msg string, fields ...domain.Field)  {}
-func (m *mockLogger) Info(msg string, fields ...domain.Field)   {}
-func (m *mockLogger) Warn(msg string, fields ...domain.Field)   {}
-func (m *mockLogger) Error(msg string, fields ...domain.Field)  {}
-func (m *mockLogger) With(fields ...domain.Field) domain.Logger { return m }
-
 func TestPromQLTenantInjector_SingleTenant(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -47,7 +39,7 @@ func TestPromQLTenantInjector_SingleTenant(t *testing.T) {
 }
 
 func TestPromQLTenantInjector_SingleTenantWithProject(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -73,7 +65,7 @@ func TestPromQLTenantInjector_SingleTenantWithProject(t *testing.T) {
 }
 
 func TestPromQLTenantInjector_MultipleTenants(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -98,7 +90,7 @@ func TestPromQLTenantInjector_MultipleTenants(t *testing.T) {
 	if !strings.Contains(result, "vm_account_id=~") {
 		t.Errorf("Expected result to contain regex pattern, got %q", result)
 	}
-	
+
 	expectedIDs := []string{"1000", "2000", "3000"}
 	for _, id := range expectedIDs {
 		if !strings.Contains(result, id) {
@@ -108,7 +100,7 @@ func TestPromQLTenantInjector_MultipleTenants(t *testing.T) {
 }
 
 func TestPromQLTenantInjector_MultipleTenantsWithProjects(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -132,12 +124,12 @@ func TestPromQLTenantInjector_MultipleTenantsWithProjects(t *testing.T) {
 	// Should create regex patterns for both account and project IDs
 	// Account IDs: all three accounts (order may vary)
 	// Project IDs: only proj1 and proj2 (3000 has no project)
-	
+
 	// Check that result contains account filter pattern
 	if !strings.Contains(result, "vm_account_id=~") {
 		t.Errorf("Expected result to contain account ID filter, got %q", result)
 	}
-	
+
 	// Check all account IDs are present
 	expectedAccountIDs := []string{"1000", "2000", "3000"}
 	for _, id := range expectedAccountIDs {
@@ -150,7 +142,7 @@ func TestPromQLTenantInjector_MultipleTenantsWithProjects(t *testing.T) {
 	if !strings.Contains(result, "vm_project_id=~") {
 		t.Errorf("Expected result to contain project ID filter, got %q", result)
 	}
-	
+
 	// Check expected project IDs are present (only proj1 and proj2)
 	expectedProjectIDs := []string{"proj1", "proj2"}
 	for _, id := range expectedProjectIDs {
@@ -161,7 +153,7 @@ func TestPromQLTenantInjector_MultipleTenantsWithProjects(t *testing.T) {
 }
 
 func TestPromQLTenantInjector_ComplexQuery(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -199,7 +191,7 @@ func TestPromQLTenantInjector_ComplexQuery(t *testing.T) {
 }
 
 func TestPromQLTenantInjector_ExistingLabels(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -231,7 +223,7 @@ func TestPromQLTenantInjector_ExistingLabels(t *testing.T) {
 }
 
 func TestPromQLTenantInjector_MixedExistingLabels(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -261,7 +253,7 @@ func TestPromQLTenantInjector_MixedExistingLabels(t *testing.T) {
 	if !strings.Contains(result, "down{vm_account_id=~") {
 		t.Errorf("Expected second metric to get tenant filter, got: %q", result)
 	}
-	
+
 	// Check that both expected IDs are in the result
 	expectedIDs := []string{"1000", "2000"}
 	downPartStart := strings.Index(result, "down{")
@@ -278,7 +270,7 @@ func TestPromQLTenantInjector_MixedExistingLabels(t *testing.T) {
 }
 
 func TestPromQLTenantInjector_NoTenants(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -301,7 +293,7 @@ func TestPromQLTenantInjector_NoTenants(t *testing.T) {
 }
 
 func TestPromQLTenantInjector_InvalidQuery(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -327,7 +319,7 @@ func TestPromQLTenantInjector_InvalidQuery(t *testing.T) {
 }
 
 func TestPromQLTenantInjector_SingleTenantRegexEscape(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -355,7 +347,7 @@ func TestPromQLTenantInjector_SingleTenantRegexEscape(t *testing.T) {
 }
 
 func TestPromQLTenantInjector_ProjectIDOnlyMode(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -404,9 +396,9 @@ func TestPromQLTenantInjector_ProjectIDOnlyMode(t *testing.T) {
 	}
 }
 
-// Benchmark tests
+// Benchmark tests.
 func BenchmarkPromQLTenantInjector_SingleTenant(b *testing.B) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -431,7 +423,7 @@ func BenchmarkPromQLTenantInjector_SingleTenant(b *testing.B) {
 }
 
 func TestPromQLTenantInjector_DuplicateDeduplication(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -459,7 +451,7 @@ func TestPromQLTenantInjector_DuplicateDeduplication(t *testing.T) {
 	// Should only contain unique account IDs
 	// The exact order might vary due to map iteration, so we check for presence
 	uniqueIDs := []string{"1000", "2000", "3000"}
-	
+
 	for _, id := range uniqueIDs {
 		if !strings.Contains(result, id) {
 			t.Errorf("Expected result to contain account ID %s, got %q", id, result)
@@ -476,7 +468,7 @@ func TestPromQLTenantInjector_DuplicateDeduplication(t *testing.T) {
 }
 
 func TestPromQLTenantInjector_DuplicateDeduplicationWithProjects(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -509,7 +501,7 @@ func TestPromQLTenantInjector_DuplicateDeduplicationWithProjects(t *testing.T) {
 		}
 	}
 
-	// Check unique project IDs  
+	// Check unique project IDs
 	uniqueProjectIDs := []string{"proj1", "proj2", "proj3"}
 	for _, id := range uniqueProjectIDs {
 		if !strings.Contains(result, id) {
@@ -535,7 +527,7 @@ func TestPromQLTenantInjector_DuplicateDeduplicationWithProjects(t *testing.T) {
 }
 
 func TestPromQLTenantInjector_EmptyAndDuplicateHandling(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -583,7 +575,7 @@ func TestPromQLTenantInjector_EmptyAndDuplicateHandling(t *testing.T) {
 }
 
 func BenchmarkPromQLTenantInjector_MultipleTenants(b *testing.B) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -613,7 +605,7 @@ func BenchmarkPromQLTenantInjector_MultipleTenants(b *testing.B) {
 }
 
 func BenchmarkPromQLTenantInjector_ManyDuplicateTenants(b *testing.B) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	injector := tenant.NewPromQLTenantInjector(logger)
 
 	cfg := &config.UpstreamConfig{
@@ -644,3 +636,4 @@ func BenchmarkPromQLTenantInjector_ManyDuplicateTenants(b *testing.B) {
 		}
 	}
 }
+

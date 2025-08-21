@@ -77,17 +77,10 @@ func TestLoad_ValidConfigWithEnvironmentOverrides(t *testing.T) {
 		"LOG_LEVEL":              "debug",
 	}
 
-	// Set environment variables
+	// Set environment variables using t.Setenv for automatic cleanup
 	for key, value := range envVars {
-		os.Setenv(key, value)
+		t.Setenv(key, value)
 	}
-
-	// Clean up environment variables after test
-	defer func() {
-		for key := range envVars {
-			os.Unsetenv(key)
-		}
-	}()
 
 	configContent := `
 server:
@@ -99,12 +92,12 @@ auth:
   jwks_url: "https://auth.example.com/.well-known/jwks.json"
 `
 
-	// Create temporary config file
-	tmpfile, err := os.CreateTemp("", "config*.yaml")
+	// Create temporary config file in test directory
+	tmpfile, err := os.CreateTemp(t.TempDir(), "config*.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name())
+	// No need for manual cleanup when using t.TempDir()
 
 	if _, err := tmpfile.WriteString(configContent); err != nil {
 		t.Fatal(err)
@@ -170,3 +163,4 @@ auth:
 		t.Errorf("Logging.Level = %v, want %v", got.Logging.Level, want.Logging.Level)
 	}
 }
+

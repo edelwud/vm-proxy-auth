@@ -9,6 +9,7 @@ import (
 
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/handlers"
+	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
 const (
@@ -17,15 +18,6 @@ const (
 	testMethodGET  = http.MethodGet
 	testMethodPOST = "POST"
 )
-
-// mockLogger implements domain.Logger for testing.
-type mockLogger struct{}
-
-func (m *mockLogger) Debug(msg string, fields ...domain.Field)  {}
-func (m *mockLogger) Info(msg string, fields ...domain.Field)   {}
-func (m *mockLogger) Warn(msg string, fields ...domain.Field)   {}
-func (m *mockLogger) Error(msg string, fields ...domain.Field)  {}
-func (m *mockLogger) With(fields ...domain.Field) domain.Logger { return m }
 
 type mockAccessService struct {
 	err error
@@ -183,7 +175,7 @@ func (m *testableTenantService) CanAccessTenant(ctx context.Context, user *domai
 	return m.canAccess
 }
 
-func (m *testableTenantService) DetermineTargetTenant(_ context.Context, _ *domain.User, r *http.Request) (string, error) {
+func (m *testableTenantService) DetermineTargetTenant(_ context.Context, _ *domain.User, _ *http.Request) (string, error) {
 	if m.err != nil {
 		return "", m.err
 	}
@@ -254,7 +246,7 @@ func TestGatewayHandler_MetricsCollection_Success(t *testing.T) {
 		metrics: metrics,
 	}
 
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 
 	// Create handler
 	handler := handlers.NewGatewayHandler(
@@ -349,7 +341,7 @@ func TestGatewayHandler_MetricsCollection_AuthFailure(t *testing.T) {
 	tenantService := &testableTenantService{metrics: metrics}
 	accessService := &mockAccessService{}
 	proxyService := &testableProxyService{metrics: metrics}
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 
 	// Create handler
 	handler := handlers.NewGatewayHandler(
@@ -432,7 +424,7 @@ func TestGatewayHandler_MetricsCollection_TenantAccess(t *testing.T) {
 		metrics: metrics,
 	}
 
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 
 	// Create handler
 	handler := handlers.NewGatewayHandler(
@@ -504,7 +496,7 @@ func TestGatewayHandler_MetricsCollection_UpstreamError(t *testing.T) {
 		metrics: metrics,
 	}
 
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 
 	// Create handler
 	handler := handlers.NewGatewayHandler(

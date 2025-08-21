@@ -15,19 +15,11 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/services/metrics"
 	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/services/tenant"
+	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
-// mockLogger implements domain.Logger for testing.
-type testLogger struct{}
-
-func (m *testLogger) Debug(msg string, fields ...domain.Field)  {}
-func (m *testLogger) Info(msg string, fields ...domain.Field)   {}
-func (m *testLogger) Warn(msg string, fields ...domain.Field)   {}
-func (m *testLogger) Error(msg string, fields ...domain.Field)  {}
-func (m *testLogger) With(fields ...domain.Field) domain.Logger { return m }
-
 func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
-	logger := &testLogger{}
+	logger := &testutils.MockLogger{}
 	metricsService := metrics.NewService(logger)
 
 	// Create auth service with invalid config to force authentication failure
@@ -91,7 +83,7 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 }
 
 func TestMetricsIntegration_HealthCheck(t *testing.T) {
-	logger := &testLogger{}
+	logger := &testutils.MockLogger{}
 	metricsService := metrics.NewService(logger)
 
 	// Create health handler
@@ -132,7 +124,7 @@ func TestMetricsIntegration_HealthCheck(t *testing.T) {
 }
 
 func TestMetricsIntegration_CustomMetrics(t *testing.T) {
-	logger := &testLogger{}
+	logger := &testutils.MockLogger{}
 	metricsService := metrics.NewService(logger)
 	ctx := context.Background()
 
@@ -194,7 +186,7 @@ func TestMetricsIntegration_CustomMetrics(t *testing.T) {
 }
 
 func TestMetricsIntegration_MetricValues(t *testing.T) {
-	logger := &testLogger{}
+	logger := &testutils.MockLogger{}
 	metricsService := metrics.NewService(logger)
 	ctx := context.Background()
 

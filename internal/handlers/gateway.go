@@ -338,7 +338,7 @@ func (h *GatewayHandler) processTargetTenant(ctx context.Context, r *http.Reques
 func (h *GatewayHandler) handleProcessingError(w http.ResponseWriter, r *http.Request, err error, startTime time.Time, user *domain.User) {
 	ctx := r.Context()
 	var appErr *domain.AppError
-	
+
 	if errors.As(err, &appErr) {
 		h.writeError(w, appErr)
 		h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), user)
@@ -355,7 +355,7 @@ func (h *GatewayHandler) getUserLogger(ctx context.Context, user *domain.User, r
 	if !ok {
 		requestID = "unknown"
 	}
-	
+
 	return h.logger.With(
 		loggerPkg.RequestID(requestID),
 		loggerPkg.UserID(user.ID),

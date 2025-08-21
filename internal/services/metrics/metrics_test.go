@@ -9,19 +9,11 @@ import (
 
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/services/metrics"
+	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
-// mockLogger implements domain.Logger for testing.
-type mockLogger struct{}
-
-func (m *mockLogger) Debug(msg string, fields ...domain.Field)  {}
-func (m *mockLogger) Info(msg string, fields ...domain.Field)   {}
-func (m *mockLogger) Warn(msg string, fields ...domain.Field)   {}
-func (m *mockLogger) Error(msg string, fields ...domain.Field)  {}
-func (m *mockLogger) With(fields ...domain.Field) domain.Logger { return m }
-
 func TestMetricsService_Creation(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	service := metrics.NewService(logger)
 
 	if service == nil {
@@ -30,7 +22,7 @@ func TestMetricsService_Creation(t *testing.T) {
 }
 
 func TestMetricsService_Handler(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	service := metrics.NewService(logger)
 
 	handler := service.Handler()
@@ -54,8 +46,8 @@ func TestMetricsService_Handler(t *testing.T) {
 	}
 }
 
-func TestMetricsService_RecordRequest(t *testing.T) {
-	logger := &mockLogger{}
+func TestMetricsService_RecordRequest(_ *testing.T) {
+	logger := &testutils.MockLogger{}
 	service := metrics.NewService(logger)
 
 	ctx := context.Background()
@@ -71,7 +63,7 @@ func TestMetricsService_RecordRequest(t *testing.T) {
 }
 
 func TestMetricsService_MultipleCalls(t *testing.T) {
-	logger := &mockLogger{}
+	logger := &testutils.MockLogger{}
 	service := metrics.NewService(logger)
 
 	ctx := context.Background()
@@ -96,3 +88,4 @@ func TestMetricsService_MultipleCalls(t *testing.T) {
 		t.Errorf("Expected status 200, got %d", recorder.Code)
 	}
 }
+
