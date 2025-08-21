@@ -37,6 +37,8 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
+		// For version output, we need to output to stdout before logger initialization
+		// This is acceptable as it's a utility function that exits immediately
 		fmt.Printf("vm-proxy-auth (VictoriaMetrics Proxy with Authentication)\n")
 		fmt.Printf("Version: %s\n", version)
 		fmt.Printf("Build time: %s\n", buildTime)
@@ -47,6 +49,8 @@ func main() {
 	// Load configuration
 	cfg, err := config.Load(*configPath)
 	if err != nil {
+		// For configuration load errors, we output to stderr before logger initialization
+		// This is necessary as we can't initialize logger without configuration
 		_, _ = fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
 		os.Exit(1)
 	}
@@ -58,6 +62,8 @@ func main() {
 
 	// Validate configuration
 	if *validateConfig {
+		// For config validation, we output to stdout before logger initialization
+		// This is a utility function that exits immediately
 		fmt.Println("Configuration is valid")
 		os.Exit(0)
 	}

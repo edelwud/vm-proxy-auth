@@ -2,6 +2,7 @@ package tenant
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
@@ -142,20 +143,87 @@ func (p *PromQLTenantInjector) addSingleTenantFilter(
 		domain.Field{Key: "project_id", Value: tenant.ProjectID})
 }
 
-// addMultipleTenantFilter adds multiple tenant filter using regex.
+// addMultipleTenantFilter adds multiple tenant filter using regex OR logic.
 func (p *PromQLTenantInjector) addMultipleTenantFilter(
 	vs *parser.VectorSelector,
 	vmTenants []domain.VMTenant,
 	tenantLabel, projectLabel string,
 	useProjectID bool,
 ) {
-	// For now, use first tenant (simple approach)
-	// In future, implement proper OR logic for multiple tenants
-	if len(vmTenants) > 0 {
-		p.logger.Debug("Multiple tenants found, using first tenant for now",
-			domain.Field{Key: "tenant_count", Value: len(vmTenants)},
-			domain.Field{Key: "selected_tenant", Value: vmTenants[0].String()})
+	if len(vmTenants) == 0 {
+		return
+	}
 
-		p.addSingleTenantFilter(vs, vmTenants[0], tenantLabel, projectLabel, useProjectID)
+	p.logger.Debug("Creating multiple tenant filter",
+		domain.Field{Key: "tenant_count", Value: len(vmTenants)},
+		domain.Field{Key: "use_project_id", Value: useProjectID})
+
+	// Build regex patterns for account IDs and project IDs
+	// Use maps to automatically deduplicate
+	accountIDMap := make(map[string]bool)
+	projectIDMap := make(map[string]bool)
+
+	for _, tenant := range vmTenants {
+		if tenant.AccountID != "" {
+			accountIDMap[tenant.AccountID] = true
+		}
+		if useProjectID && tenant.ProjectID != "" {
+			projectIDMap[tenant.ProjectID] = true
+		}
+	}
+
+	// Convert maps to slices
+	var accountIDs []string
+	for id := range accountIDMap {
+		accountIDs = append(accountIDs, id)
+	}
+
+	var projectIDs []string
+	for id := range projectIDMap {
+		projectIDs = append(projectIDs, id)
+	}
+
+	// Add account ID filter using regex
+	if len(accountIDs) > 0 {
+		var accountPattern string
+		if len(accountIDs) == 1 {
+			accountPattern = accountIDs[0]
+		} else {
+			accountPattern = "(" + strings.Join(accountIDs, "|") + ")"
+		}
+
+		accountMatcher := &labels.Matcher{
+			Type:  labels.MatchRegexp,
+			Name:  tenantLabel,
+			Value: accountPattern,
+		}
+		vs.LabelMatchers = append(vs.LabelMatchers, accountMatcher)
+
+		p.logger.Debug("Added account ID filter",
+			domain.Field{Key: "metric", Value: vs.Name},
+			domain.Field{Key: "account_pattern", Value: accountPattern},
+			domain.Field{Key: "account_count", Value: len(accountIDs)})
+	}
+
+	// Add project ID filter if needed
+	if useProjectID && len(projectIDs) > 0 {
+		var projectPattern string
+		if len(projectIDs) == 1 {
+			projectPattern = projectIDs[0]
+		} else {
+			projectPattern = "(" + strings.Join(projectIDs, "|") + ")"
+		}
+
+		projectMatcher := &labels.Matcher{
+			Type:  labels.MatchRegexp,
+			Name:  projectLabel,
+			Value: projectPattern,
+		}
+		vs.LabelMatchers = append(vs.LabelMatchers, projectMatcher)
+
+		p.logger.Debug("Added project ID filter",
+			domain.Field{Key: "metric", Value: vs.Name},
+			domain.Field{Key: "project_pattern", Value: projectPattern},
+			domain.Field{Key: "project_count", Value: len(projectIDs)})
 	}
 }

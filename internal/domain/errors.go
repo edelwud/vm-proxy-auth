@@ -28,6 +28,41 @@ type AppError struct {
 	Cause      error  `json:"-"`
 }
 
+// NewAppError creates a new application error.
+func NewAppError(code, message string, httpStatus int, cause error) *AppError {
+	return &AppError{
+		Code:       code,
+		Message:    message,
+		HTTPStatus: httpStatus,
+		Cause:      cause,
+	}
+}
+
+// NewUnauthorizedError creates an unauthorized error.
+func NewUnauthorizedError(message string, cause error) *AppError {
+	return NewAppError(ErrCodeUnauthorized, message, http.StatusUnauthorized, cause)
+}
+
+// NewForbiddenError creates a forbidden error.
+func NewForbiddenError(message string, cause error) *AppError {
+	return NewAppError(ErrCodeForbidden, message, http.StatusForbidden, cause)
+}
+
+// NewBadRequestError creates a bad request error.
+func NewBadRequestError(message string, cause error) *AppError {
+	return NewAppError(ErrCodeBadRequest, message, http.StatusBadRequest, cause)
+}
+
+// NewUpstreamError creates an upstream error.
+func NewUpstreamError(message string, cause error) *AppError {
+	return NewAppError(ErrCodeUpstreamError, message, http.StatusBadGateway, cause)
+}
+
+// NewInternalError creates an internal error.
+func NewInternalError(message string, cause error) *AppError {
+	return NewAppError(ErrCodeInternalError, message, http.StatusInternalServerError, cause)
+}
+
 func (e *AppError) Error() string {
 	if e.Cause != nil {
 		return fmt.Sprintf("%s: %s (caused by: %v)", e.Code, e.Message, e.Cause)
@@ -178,38 +213,3 @@ var (
 		HTTPStatus: http.StatusBadRequest,
 	}
 )
-
-// NewAppError creates a new application error.
-func NewAppError(code, message string, httpStatus int, cause error) *AppError {
-	return &AppError{
-		Code:       code,
-		Message:    message,
-		HTTPStatus: httpStatus,
-		Cause:      cause,
-	}
-}
-
-// NewUnauthorizedError creates an unauthorized error.
-func NewUnauthorizedError(message string, cause error) *AppError {
-	return NewAppError(ErrCodeUnauthorized, message, http.StatusUnauthorized, cause)
-}
-
-// NewForbiddenError creates a forbidden error.
-func NewForbiddenError(message string, cause error) *AppError {
-	return NewAppError(ErrCodeForbidden, message, http.StatusForbidden, cause)
-}
-
-// NewBadRequestError creates a bad request error.
-func NewBadRequestError(message string, cause error) *AppError {
-	return NewAppError(ErrCodeBadRequest, message, http.StatusBadRequest, cause)
-}
-
-// NewUpstreamError creates an upstream error.
-func NewUpstreamError(message string, cause error) *AppError {
-	return NewAppError(ErrCodeUpstreamError, message, http.StatusBadGateway, cause)
-}
-
-// NewInternalError creates an internal error.
-func NewInternalError(message string, cause error) *AppError {
-	return NewAppError(ErrCodeInternalError, message, http.StatusInternalServerError, cause)
-}
