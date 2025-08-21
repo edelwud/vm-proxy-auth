@@ -21,12 +21,14 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/services/tenant"
 )
 
+//nolint:gochecknoglobals // We are using global variables for version information.
 var (
 	version   = "dev"
 	buildTime = "unknown"
 	gitCommit = "unknown"
 )
 
+//nolint:funlen
 func main() {
 	var (
 		configPath     = flag.String("config", "", "Path to configuration file")
@@ -146,6 +148,7 @@ func main() {
 
 	if shutdownErr := server.Shutdown(shutdownCtx); shutdownErr != nil {
 		appLogger.Error("Error during server shutdown", domain.Field{Key: "error", Value: shutdownErr.Error()})
+		//nolint:gocritic // Ignore this error as it is expected during shutdown
 		os.Exit(1)
 	}
 
@@ -154,6 +157,8 @@ func main() {
 
 // showVersionInfo displays version information to stdout.
 // This function is allowed to use fmt.Printf for CLI utility purposes.
+//
+//nolint:forbidigo // We are using fmt.Printf for CLI utility purposes.
 func showVersionInfo() {
 	fmt.Printf("vm-proxy-auth (VictoriaMetrics Proxy with Authentication)\n")
 	fmt.Printf("Version: %s\n", version)
@@ -163,6 +168,8 @@ func showVersionInfo() {
 
 // showValidationSuccess displays configuration validation success message.
 // This function is allowed to use fmt.Println for CLI utility purposes.
+//
+//nolint:forbidigo // We are using fmt.Println for CLI utility purposes.
 func showValidationSuccess() {
 	fmt.Println("Configuration is valid")
 }

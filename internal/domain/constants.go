@@ -26,9 +26,3 @@ const (
 	DefaultTestCount   = 3
 	DefaultBenchCount  = 10
 )
-
-// Configuration validation errors.
-var (
-	ErrUpstreamURLRequired = "upstream.url is required"
-	ErrAuthConfigRequired  = "either auth.jwks_url or auth.jwt_secret must be provided for JWT authentication"
-)

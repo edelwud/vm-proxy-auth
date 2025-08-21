@@ -131,6 +131,18 @@ var (
 		HTTPStatus: http.StatusBadGateway,
 	}
 
+	// Config errors.
+	ErrUpstreamURLRequired = &AppError{
+		Code:       ErrCodeUpstreamError,
+		Message:    "upstream.url is required",
+		HTTPStatus: http.StatusBadGateway,
+	}
+	ErrAuthConfigRequired = &AppError{
+		Code:       ErrCodeUpstreamError,
+		Message:    "either auth.jwks_url or auth.jwt_secret must be provided for JWT authentication",
+		HTTPStatus: http.StatusBadGateway,
+	}
+
 	// Tenant errors.
 	ErrNoVMTenants = &AppError{
 		Code:       ErrCodeTenantError,

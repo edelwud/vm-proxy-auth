@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -11,10 +10,7 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
-var (
-	ErrUpstreamURLRequired = errors.New(domain.ErrUpstreamURLRequired)
-	ErrAuthConfigRequired  = errors.New(domain.ErrAuthConfigRequired)
-)
+var ()
 
 type Config struct {
 	Server     ServerConfig    `yaml:"server"`
@@ -138,11 +134,11 @@ func loadFromEnv(config *Config) {
 
 func validate(config *Config) error {
 	if config.Upstream.URL == "" {
-		return ErrUpstreamURLRequired
+		return domain.ErrUpstreamURLRequired
 	}
 
 	if config.Auth.Type == "jwt" && config.Auth.JWKSURL == "" && config.Auth.JWTSecret == "" {
-		return ErrAuthConfigRequired
+		return domain.ErrAuthConfigRequired
 	}
 
 	return nil
