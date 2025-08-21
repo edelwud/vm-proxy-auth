@@ -94,10 +94,10 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	userLogger := reqLogger.With(loggerPkg.UserID(user.ID))
 
 	// Check access permissions
-	if err := h.accessService.CanAccess(ctx, user, r.URL.Path, r.Method); err != nil {
-		userLogger.Warn("Access denied", loggerPkg.Error(err))
+	if accessErr := h.accessService.CanAccess(ctx, user, r.URL.Path, r.Method); accessErr != nil {
+		userLogger.Warn("Access denied", loggerPkg.Error(accessErr))
 		var appErr *domain.AppError
-		if errors.As(err, &appErr) {
+		if errors.As(accessErr, &appErr) {
 			h.writeError(w, appErr)
 			h.recordMetrics(ctx, r.Method, r.URL.Path, strconv.Itoa(appErr.HTTPStatus), time.Since(startTime), user)
 		} else {
@@ -112,7 +112,12 @@ func (h *GatewayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.processRequest(w, r, user, startTime)
 }
 
-func (h *GatewayHandler) processRequest(w http.ResponseWriter, r *http.Request, user *domain.User, startTime time.Time) {
+func (h *GatewayHandler) processRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	user *domain.User,
+	startTime time.Time,
+) {
 	ctx := r.Context()
 
 	// Process query filtering if needed
@@ -184,7 +189,8 @@ func (h *GatewayHandler) extractQuery(r *http.Request) string {
 	}
 
 	// For POST requests with form data, parse the body
-	if r.Method == http.MethodPost && strings.Contains(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+	if r.Method == http.MethodPost &&
+		strings.Contains(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
 		// We need to read the body, but we must restore it for the proxy
 		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -279,7 +285,12 @@ func (h *GatewayHandler) writeError(w http.ResponseWriter, err *domain.AppError)
 	}
 }
 
-func (h *GatewayHandler) recordMetrics(ctx context.Context, method, path, status string, duration time.Duration, user *domain.User) {
+func (h *GatewayHandler) recordMetrics(
+	ctx context.Context,
+	method, path, status string,
+	duration time.Duration,
+	user *domain.User,
+) {
 	if h.metricsService != nil {
 		h.metricsService.RecordRequest(ctx, method, path, status, duration, user)
 	}
@@ -291,7 +302,11 @@ func generateRequestID() string {
 }
 
 // processQueryFiltering handles query filtering for query endpoints.
-func (h *GatewayHandler) processQueryFiltering(ctx context.Context, r *http.Request, user *domain.User) (string, error) {
+func (h *GatewayHandler) processQueryFiltering(
+	ctx context.Context,
+	r *http.Request,
+	user *domain.User,
+) (string, error) {
 	if !h.isQueryEndpoint(r.URL.Path) {
 		return "", nil
 	}
@@ -335,7 +350,13 @@ func (h *GatewayHandler) processTargetTenant(ctx context.Context, r *http.Reques
 }
 
 // handleProcessingError handles errors during request processing.
-func (h *GatewayHandler) handleProcessingError(w http.ResponseWriter, r *http.Request, err error, startTime time.Time, user *domain.User) {
+func (h *GatewayHandler) handleProcessingError(
+	w http.ResponseWriter,
+	r *http.Request,
+	err error,
+	startTime time.Time,
+	user *domain.User,
+) {
 	ctx := r.Context()
 	var appErr *domain.AppError
 

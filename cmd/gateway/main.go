@@ -37,12 +37,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		// For version output, we need to output to stdout before logger initialization
-		// This is acceptable as it's a utility function that exits immediately
-		fmt.Printf("vm-proxy-auth (VictoriaMetrics Proxy with Authentication)\n")
-		fmt.Printf("Version: %s\n", version)
-		fmt.Printf("Build time: %s\n", buildTime)
-		fmt.Printf("Git commit: %s\n", gitCommit)
+		showVersionInfo()
 		os.Exit(0)
 	}
 
@@ -62,9 +57,7 @@ func main() {
 
 	// Validate configuration
 	if *validateConfig {
-		// For config validation, we output to stdout before logger initialization
-		// This is a utility function that exits immediately
-		fmt.Println("Configuration is valid")
+		showValidationSuccess()
 		os.Exit(0)
 	}
 
@@ -123,30 +116,53 @@ func main() {
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
+	// Channel to signal server startup errors
+	startupErr := make(chan error, 1)
+
 	// Start server in goroutine
 	go func() {
 		appLogger.Info("Server starting", domain.Field{Key: "address", Value: cfg.Server.Address})
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			appLogger.Error("Server failed to start", domain.Field{Key: "error", Value: err.Error()})
-			os.Exit(1)
+		if serverErr := server.ListenAndServe(); serverErr != nil && !errors.Is(serverErr, http.ErrServerClosed) {
+			appLogger.Error("Server failed to start", domain.Field{Key: "error", Value: serverErr.Error()})
+			startupErr <- serverErr
 		}
 	}()
 
-	// Wait for shutdown signal
+	// Wait for shutdown signal or startup error
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	sig := <-sigChan
-	appLogger.Info("Received shutdown signal", domain.Field{Key: "signal", Value: sig.String()})
+	select {
+	case startupErr := <-startupErr:
+		appLogger.Error("Server startup failed", domain.Field{Key: "error", Value: startupErr.Error()})
+		os.Exit(1)
+	case sig := <-sigChan:
+		appLogger.Info("Received shutdown signal", domain.Field{Key: "signal", Value: sig.String()})
+	}
 
 	// Graceful shutdown
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), domain.DefaultShutdownTimeout)
 	defer cancel()
 
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		appLogger.Error("Error during server shutdown", domain.Field{Key: "error", Value: err.Error()})
+	if shutdownErr := server.Shutdown(shutdownCtx); shutdownErr != nil {
+		appLogger.Error("Error during server shutdown", domain.Field{Key: "error", Value: shutdownErr.Error()})
 		os.Exit(1)
 	}
 
 	appLogger.Info("Server stopped gracefully")
+}
+
+// showVersionInfo displays version information to stdout.
+// This function is allowed to use fmt.Printf for CLI utility purposes.
+func showVersionInfo() {
+	fmt.Printf("vm-proxy-auth (VictoriaMetrics Proxy with Authentication)\n")
+	fmt.Printf("Version: %s\n", version)
+	fmt.Printf("Build time: %s\n", buildTime)
+	fmt.Printf("Git commit: %s\n", gitCommit)
+}
+
+// showValidationSuccess displays configuration validation success message.
+// This function is allowed to use fmt.Println for CLI utility purposes.
+func showValidationSuccess() {
+	fmt.Println("Configuration is valid")
 }

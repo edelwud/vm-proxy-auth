@@ -178,7 +178,11 @@ func TestPromQLTenantInjector_ComplexQuery(t *testing.T) {
 	accountFilterCount := strings.Count(result, "vm_account_id=~")
 
 	if accountFilterCount != 2 {
-		t.Errorf("Expected account filter to appear 2 times in complex query, got %d times. Result: %q", accountFilterCount, result)
+		t.Errorf(
+			"Expected account filter to appear 2 times in complex query, got %d times. Result: %q",
+			accountFilterCount,
+			result,
+		)
 	}
 
 	// Verify both account IDs are present in the result
@@ -414,7 +418,7 @@ func BenchmarkPromQLTenantInjector_SingleTenant(b *testing.B) {
 	query := "up"
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := injector.InjectTenantLabels(query, vmTenants, cfg)
 		if err != nil {
 			b.Fatal(err)
@@ -586,7 +590,7 @@ func BenchmarkPromQLTenantInjector_MultipleTenants(b *testing.B) {
 
 	// Create many tenants to test performance
 	vmTenants := make([]domain.VMTenant, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		vmTenants[i] = domain.VMTenant{
 			AccountID: fmt.Sprintf("acc%d", i+1000),
 			ProjectID: fmt.Sprintf("proj%d", i),
@@ -596,7 +600,7 @@ func BenchmarkPromQLTenantInjector_MultipleTenants(b *testing.B) {
 	query := `rate(http_requests_total{status="200"}[5m])`
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := injector.InjectTenantLabels(query, vmTenants, cfg)
 		if err != nil {
 			b.Fatal(err)
@@ -616,7 +620,7 @@ func BenchmarkPromQLTenantInjector_ManyDuplicateTenants(b *testing.B) {
 
 	// Create many tenants with lots of duplicates (simulate multiple tenant mappings)
 	vmTenants := make([]domain.VMTenant, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		// Only 5 unique account IDs, but 100 tenant entries
 		accountID := fmt.Sprintf("acc%d", i%5+1000)
 		projectID := fmt.Sprintf("proj%d", i%3) // Only 3 unique project IDs
@@ -629,11 +633,10 @@ func BenchmarkPromQLTenantInjector_ManyDuplicateTenants(b *testing.B) {
 	query := `rate(http_requests_total{status="200"}[5m])`
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := injector.InjectTenantLabels(query, vmTenants, cfg)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
-

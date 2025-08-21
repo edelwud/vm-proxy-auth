@@ -20,4 +20,3 @@ func (m *MockLogger) Error(_ string, _ ...domain.Field) {}
 
 // With implements domain.Logger interface.
 func (m *MockLogger) With(_ ...domain.Field) domain.Logger { return m }
-

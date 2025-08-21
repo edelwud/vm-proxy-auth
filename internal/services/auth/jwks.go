@@ -92,8 +92,8 @@ func (f *JWKSFetcher) fetchJWKS() error {
 	}
 
 	var jwks JWKS
-	if err := json.Unmarshal(body, &jwks); err != nil {
-		return fmt.Errorf("failed to parse JWKS: %w", err)
+	if unmarshalErr := json.Unmarshal(body, &jwks); unmarshalErr != nil {
+		return fmt.Errorf("failed to parse JWKS: %w", unmarshalErr)
 	}
 
 	// Clear cache and update with new keys
@@ -102,8 +102,8 @@ func (f *JWKSFetcher) fetchJWKS() error {
 
 	for _, jwk := range jwks.Keys {
 		if jwk.Kty == "RSA" && (jwk.Use == "sig" || jwk.Use == "") {
-			key, err := f.jwkToRSAPublicKey(jwk)
-			if err != nil {
+			key, keyErr := f.jwkToRSAPublicKey(jwk)
+			if keyErr != nil {
 				continue // Skip invalid keys
 			}
 			f.cache[jwk.Kid] = key

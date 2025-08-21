@@ -61,7 +61,7 @@ type AuthConfig struct {
 type TenantMapping struct {
 	Groups   []string `yaml:"groups"`
 	Tenants  []string `yaml:"tenants"`
-	ReadOnly bool     `yaml:"read_only" default:"false"`
+	ReadOnly bool     `yaml:"read_only"            default:"false"`
 	// VictoriaMetrics specific
 	VMTenants []VMTenantMapping `yaml:"vm_tenants,omitempty"`
 }
@@ -90,8 +90,8 @@ func Load(path string) (*Config, error) {
 			return nil, fmt.Errorf("failed to read config file: %w", err)
 		}
 
-		if err := yaml.Unmarshal(data, config); err != nil {
-			return nil, fmt.Errorf("failed to parse config file: %w", err)
+		if yamlErr := yaml.Unmarshal(data, config); yamlErr != nil {
+			return nil, fmt.Errorf("failed to parse config file: %w", yamlErr)
 		}
 	}
 

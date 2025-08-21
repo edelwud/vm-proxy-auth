@@ -99,8 +99,8 @@ auth:
 	}
 	// No need for manual cleanup when using t.TempDir()
 
-	if _, err := tmpfile.WriteString(configContent); err != nil {
-		t.Fatal(err)
+	if _, writeErr := tmpfile.WriteString(configContent); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 	tmpfile.Close()
 
@@ -163,4 +163,3 @@ auth:
 		t.Errorf("Logging.Level = %v, want %v", got.Logging.Level, want.Logging.Level)
 	}
 }
-

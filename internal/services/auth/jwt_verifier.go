@@ -51,49 +51,7 @@ type Claims struct {
 
 // VerifyToken verifies a JWT token and returns the claims.
 func (v *JWTVerifier) VerifyToken(tokenString string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		// Verify signing method
-		switch v.algorithm {
-		case "RS256":
-			if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-				return nil, fmt.Errorf("%w: %v", domain.ErrUnexpectedSigningMethod, token.Header["alg"])
-			}
-
-			// If we have a static public key, use it
-			if v.publicKey != nil {
-				return v.publicKey, nil
-			}
-
-			// Otherwise, use JWKS to get the key
-			if v.jwksFetcher == nil {
-				return nil, domain.ErrNoPublicKeyConfigured
-			}
-
-			// Get kid from token header
-			kid, ok := token.Header["kid"].(string)
-			if !ok {
-				return nil, domain.ErrTokenMissingKid
-			}
-
-			// Fetch public key from JWKS
-			publicKey, err := v.jwksFetcher.GetPublicKey(kid)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get public key from JWKS: %w", err)
-			}
-
-			return publicKey, nil
-
-		case "HS256":
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("%w: %v", domain.ErrUnexpectedSigningMethod, token.Header["alg"])
-			}
-
-			return v.secret, nil
-
-		default:
-			return nil, fmt.Errorf("%w: %s", domain.ErrUnsupportedSigningMethod, v.algorithm)
-		}
-	})
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, v.keyFunc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse token: %w", err)
 	}
@@ -103,16 +61,82 @@ func (v *JWTVerifier) VerifyToken(tokenString string) (*Claims, error) {
 		return nil, domain.ErrInvalidToken
 	}
 
-	// Check expiration
+	if validateErr := v.validateClaims(claims); validateErr != nil {
+		return nil, validateErr
+	}
+
+	return claims, nil
+}
+
+// keyFunc returns the key for verifying the JWT token signature.
+func (v *JWTVerifier) keyFunc(token *jwt.Token) (interface{}, error) {
+	switch v.algorithm {
+	case "RS256":
+		return v.handleRSAKey(token)
+	case "HS256":
+		return v.handleHMACKey(token)
+	default:
+		return nil, fmt.Errorf("%w: %s", domain.ErrUnsupportedSigningMethod, v.algorithm)
+	}
+}
+
+// handleRSAKey handles RSA key verification for RS256 algorithm.
+func (v *JWTVerifier) handleRSAKey(token *jwt.Token) (interface{}, error) {
+	if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+		return nil, fmt.Errorf("%w: %v", domain.ErrUnexpectedSigningMethod, token.Header["alg"])
+	}
+
+	// If we have a static public key, use it
+	if v.publicKey != nil {
+		return v.publicKey, nil
+	}
+
+	// Otherwise, use JWKS to get the key
+	return v.getKeyFromJWKS(token)
+}
+
+// handleHMACKey handles HMAC key verification for HS256 algorithm.
+func (v *JWTVerifier) handleHMACKey(token *jwt.Token) (interface{}, error) {
+	if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+		return nil, fmt.Errorf("%w: %v", domain.ErrUnexpectedSigningMethod, token.Header["alg"])
+	}
+	return v.secret, nil
+}
+
+// getKeyFromJWKS fetches the public key from JWKS endpoint.
+func (v *JWTVerifier) getKeyFromJWKS(token *jwt.Token) (interface{}, error) {
+	if v.jwksFetcher == nil {
+		return nil, domain.ErrNoPublicKeyConfigured
+	}
+
+	// Get kid from token header
+	kid, ok := token.Header["kid"].(string)
+	if !ok {
+		return nil, domain.ErrTokenMissingKid
+	}
+
+	// Fetch public key from JWKS
+	publicKey, err := v.jwksFetcher.GetPublicKey(kid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get public key from JWKS: %w", err)
+	}
+
+	return publicKey, nil
+}
+
+// validateClaims validates the time-based claims in the JWT token.
+func (v *JWTVerifier) validateClaims(claims *Claims) error {
 	now := time.Now().Unix()
+
+	// Check expiration
 	if claims.ExpiresAt < now {
-		return nil, domain.ErrTokenExpiredClaims
+		return domain.ErrTokenExpiredClaims
 	}
 
 	// Check not before
 	if claims.NotBefore > now {
-		return nil, domain.ErrTokenNotValid
+		return domain.ErrTokenNotValid
 	}
 
-	return claims, nil
+	return nil
 }

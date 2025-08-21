@@ -175,7 +175,11 @@ func (m *testableTenantService) CanAccessTenant(ctx context.Context, user *domai
 	return m.canAccess
 }
 
-func (m *testableTenantService) DetermineTargetTenant(_ context.Context, _ *domain.User, _ *http.Request) (string, error) {
+func (m *testableTenantService) DetermineTargetTenant(
+	_ context.Context,
+	_ *domain.User,
+	_ *http.Request,
+) (string, error) {
 	if m.err != nil {
 		return "", m.err
 	}

@@ -75,12 +75,12 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*domain.User,
 
 	// Check cache first
 	if cached, ok := s.userCache.Load(token); ok {
-		cachedUser, ok := cached.(cachedUser)
+		cachedUserData, valid := cached.(cachedUser)
 		switch {
-		case !ok:
+		case !valid:
 			s.userCache.Delete(token) // Remove invalid cache entry
-		case time.Now().Before(cachedUser.expiresAt):
-			return cachedUser.user, nil
+		case time.Now().Before(cachedUserData.expiresAt):
+			return cachedUserData.user, nil
 		default:
 			// Remove expired entry
 			s.userCache.Delete(token)

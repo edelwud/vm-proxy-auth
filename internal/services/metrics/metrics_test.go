@@ -71,7 +71,7 @@ func TestMetricsService_MultipleCalls(t *testing.T) {
 	duration := 50 * time.Millisecond
 
 	// Record multiple metrics calls
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		service.RecordRequest(ctx, "POST", "/api/v1/query", "200", duration, user)
 		service.RecordUpstream(ctx, "POST", "/api/v1/query", "200", duration, []string{"tenant1"})
 		service.RecordAuthAttempt(ctx, user.ID, "success")
@@ -88,4 +88,3 @@ func TestMetricsService_MultipleCalls(t *testing.T) {
 		t.Errorf("Expected status 200, got %d", recorder.Code)
 	}
 }
-
