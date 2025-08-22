@@ -20,12 +20,12 @@ func TestNewService(t *testing.T) {
 
 func TestService_CanAccess_ReadOperations(t *testing.T) {
 	tests := []struct {
-		name           string
-		user           *domain.User
-		path           string
-		method         string
-		expectAllowed  bool
-		expectError    bool
+		name          string
+		user          *domain.User
+		path          string
+		method        string
+		expectAllowed bool
+		expectError   bool
 	}{
 		{
 			name: "admin user - query endpoint",
@@ -113,15 +113,16 @@ func TestService_CanAccess_ReadOperations(t *testing.T) {
 
 			err := service.CanAccess(context.Background(), tt.user, tt.path, tt.method)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else if tt.expectAllowed {
-				assert.NoError(t, err)
-			} else {
-				assert.Error(t, err)
+			switch {
+			case tt.expectError:
+				require.Error(t, err)
+			case tt.expectAllowed:
+				require.NoError(t, err)
+			default:
+				require.Error(t, err)
 				// Should be a forbidden error
 				var appErr *domain.AppError
-				assert.ErrorAs(t, err, &appErr)
+				require.ErrorAs(t, err, &appErr)
 				assert.Equal(t, domain.ErrCodeForbidden, appErr.Code)
 			}
 		})
@@ -130,12 +131,12 @@ func TestService_CanAccess_ReadOperations(t *testing.T) {
 
 func TestService_CanAccess_WriteOperations(t *testing.T) {
 	tests := []struct {
-		name           string
-		user           *domain.User
-		path           string
-		method         string
-		expectAllowed  bool
-		expectError    bool
+		name          string
+		user          *domain.User
+		path          string
+		method        string
+		expectAllowed bool
+		expectError   bool
 	}{
 		{
 			name: "admin user - write endpoint",
@@ -201,14 +202,15 @@ func TestService_CanAccess_WriteOperations(t *testing.T) {
 
 			err := service.CanAccess(context.Background(), tt.user, tt.path, tt.method)
 
-			if tt.expectError {
-				assert.Error(t, err)
-			} else if tt.expectAllowed {
-				assert.NoError(t, err)
-			} else {
-				assert.Error(t, err)
+			switch {
+			case tt.expectError:
+				require.Error(t, err)
+			case tt.expectAllowed:
+				require.NoError(t, err)
+			default:
+				require.Error(t, err)
 				// Should be a read-only error
-				assert.ErrorIs(t, err, domain.ErrReadOnlyAccess)
+				require.ErrorIs(t, err, domain.ErrReadOnlyAccess)
 			}
 		})
 	}
@@ -216,11 +218,11 @@ func TestService_CanAccess_WriteOperations(t *testing.T) {
 
 func TestService_CanAccess_RestrictedPaths(t *testing.T) {
 	tests := []struct {
-		name           string
-		user           *domain.User
-		path           string
-		method         string
-		expectAllowed  bool
+		name          string
+		user          *domain.User
+		path          string
+		method        string
+		expectAllowed bool
 	}{
 		{
 			name: "admin user - admin endpoint",
@@ -273,7 +275,7 @@ func TestService_CanAccess_RestrictedPaths(t *testing.T) {
 			expectAllowed: true,
 		},
 		{
-			name: "regular user - metrics endpoint", 
+			name: "regular user - metrics endpoint",
 			user: &domain.User{
 				ID:     "user@example.com",
 				Groups: []string{"users"},
@@ -292,11 +294,11 @@ func TestService_CanAccess_RestrictedPaths(t *testing.T) {
 			err := service.CanAccess(context.Background(), tt.user, tt.path, tt.method)
 
 			if tt.expectAllowed {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			} else {
-				assert.Error(t, err)
+				require.Error(t, err)
 				// Should be an admin required error for restricted paths
-				assert.ErrorIs(t, err, domain.ErrAdminRequired)
+				require.ErrorIs(t, err, domain.ErrAdminRequired)
 			}
 		})
 	}
@@ -340,10 +342,10 @@ func TestService_CanAccess_HealthEndpoints(t *testing.T) {
 
 func TestService_CanAccess_HTTPMethods(t *testing.T) {
 	tests := []struct {
-		name          string
-		path          string
-		method        string
-		expectWrite   bool
+		name        string
+		path        string
+		method      string
+		expectWrite bool
 	}{
 		{
 			name:        "GET is read operation",
@@ -352,7 +354,7 @@ func TestService_CanAccess_HTTPMethods(t *testing.T) {
 			expectWrite: false,
 		},
 		{
-			name:        "HEAD is read operation", 
+			name:        "HEAD is read operation",
 			path:        "/api/v1/query",
 			method:      "HEAD",
 			expectWrite: false,
@@ -405,11 +407,11 @@ func TestService_CanAccess_HTTPMethods(t *testing.T) {
 
 			if tt.expectWrite {
 				// Write operations should be denied for read-only users
-				assert.Error(t, err)
-				assert.ErrorIs(t, err, domain.ErrReadOnlyAccess)
+				require.Error(t, err)
+				require.ErrorIs(t, err, domain.ErrReadOnlyAccess)
 			} else {
 				// Read operations should be allowed for read-only users
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -420,10 +422,10 @@ func TestService_CanAccess_NilUser(t *testing.T) {
 	service := access.NewService(logger)
 
 	err := service.CanAccess(context.Background(), nil, "/api/v1/query", "GET")
-	assert.Error(t, err)
-	
+	require.Error(t, err)
+
 	var appErr *domain.AppError
-	assert.ErrorAs(t, err, &appErr)
+	require.ErrorAs(t, err, &appErr)
 	assert.Equal(t, domain.ErrCodeUnauthorized, appErr.Code)
 }
 
@@ -443,7 +445,7 @@ func TestService_CanAccess_EdgeCases(t *testing.T) {
 		{
 			name:         "root path",
 			path:         "/",
-			method:       "GET", 
+			method:       "GET",
 			expectResult: true, // Health check path
 		},
 		{
@@ -472,16 +474,16 @@ func TestService_CanAccess_EdgeCases(t *testing.T) {
 			service := access.NewService(logger)
 
 			user := &domain.User{
-				ID:     "user@example.com", 
+				ID:     "user@example.com",
 				Groups: []string{"users"},
 			}
 
 			err := service.CanAccess(context.Background(), user, tt.path, tt.method)
 
 			if tt.expectResult {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			} else {
-				assert.Error(t, err)
+				require.Error(t, err)
 			}
 		})
 	}

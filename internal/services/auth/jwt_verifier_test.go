@@ -51,8 +51,8 @@ func TestJWTVerifier_HS256_ExpiredToken(t *testing.T) {
 
 	// Verify token - should fail
 	_, err = verifier.VerifyToken(tokenString)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "token is expired")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "token is expired")
 }
 
 func TestJWTVerifier_HS256_InvalidSignature(t *testing.T) {
@@ -73,7 +73,7 @@ func TestJWTVerifier_HS256_InvalidSignature(t *testing.T) {
 
 	// Verify token - should fail
 	_, err = verifier.VerifyToken(tokenString)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "signature is invalid")
 }
 
@@ -128,30 +128,30 @@ func TestJWTVerifier_RS256_InvalidPublicKey(t *testing.T) {
 
 	// Verify with second key - should fail
 	_, err = verifier.VerifyToken(tokenString)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestJWTVerifier_UnsupportedAlgorithm(t *testing.T) {
 	secret := []byte("test-secret-key")
-	
+
 	// Create verifier with unsupported algorithm - should still create but fail on verification
 	verifier := auth.NewJWTVerifier(nil, secret, "UNSUPPORTED")
-	
+
 	// Create token
 	claims := jwt.MapClaims{
 		"sub": "user@example.com",
 		"exp": time.Now().Add(time.Hour).Unix(),
 		"iat": time.Now().Unix(),
 	}
-	
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(secret)
 	require.NoError(t, err)
-	
+
 	// Verify token should fail with unsupported algorithm
 	_, err = verifier.VerifyToken(tokenString)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported")
 }
 
 func TestJWTVerifier_MalformedTokens(t *testing.T) {
@@ -187,7 +187,7 @@ func TestJWTVerifier_MalformedTokens(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := verifier.VerifyToken(tt.token)
-			assert.Error(t, err)
+			require.Error(t, err)
 		})
 	}
 }
@@ -233,7 +233,7 @@ func TestJWTVerifier_MissingRequiredClaims(t *testing.T) {
 			require.NoError(t, err)
 
 			_, err = verifier.VerifyToken(tokenString)
-			assert.Error(t, err)
+			require.Error(t, err)
 		})
 	}
 }
@@ -273,7 +273,7 @@ func TestJWTVerifier_TokenTiming(t *testing.T) {
 			exp:  now.Add(time.Hour).Unix(),
 		},
 		{
-			name: "token expires exactly now", 
+			name: "token expires exactly now",
 			iat:  now.Add(-time.Hour).Unix(),
 			exp:  now.Unix(),
 		},
@@ -294,7 +294,7 @@ func TestJWTVerifier_TokenTiming(t *testing.T) {
 			_, err = verifier.VerifyToken(tokenString)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 			}

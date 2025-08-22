@@ -78,12 +78,12 @@ func TestNewService_PanicsWithoutAuthConfig(t *testing.T) {
 
 func TestService_Authenticate_ValidToken(t *testing.T) {
 	tests := []struct {
-		name           string
-		tokenClaims    jwt.MapClaims
-		tenantMappings []config.TenantMapping
-		expectGroups   []string
+		name            string
+		tokenClaims     jwt.MapClaims
+		tenantMappings  []config.TenantMapping
+		expectGroups    []string
 		expectVMTenants []domain.VMTenant
-		expectError    bool
+		expectError     bool
 	}{
 		{
 			name: "valid token with groups",
@@ -113,8 +113,8 @@ func TestService_Authenticate_ValidToken(t *testing.T) {
 				"exp": time.Now().Add(time.Hour).Unix(),
 				"iat": time.Now().Unix(),
 			},
-			tenantMappings: []config.TenantMapping{},
-			expectGroups:   []string{},
+			tenantMappings:  []config.TenantMapping{},
+			expectGroups:    []string{},
 			expectVMTenants: []domain.VMTenant{},
 		},
 		{
@@ -161,7 +161,7 @@ func TestService_Authenticate_ValidToken(t *testing.T) {
 			user, err := service.Authenticate(context.Background(), tokenString)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, user)
 				return
 			}
@@ -211,7 +211,7 @@ func TestService_Authenticate_InvalidToken(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			user, err := service.Authenticate(context.Background(), tt.token)
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Nil(t, user)
 		})
 	}
@@ -219,10 +219,10 @@ func TestService_Authenticate_InvalidToken(t *testing.T) {
 
 func TestService_TenantMapping_ComplexScenarios(t *testing.T) {
 	tests := []struct {
-		name           string
-		userGroups     []string
-		tenantMappings []config.TenantMapping
-		expectedTenants []domain.VMTenant
+		name             string
+		userGroups       []string
+		tenantMappings   []config.TenantMapping
+		expectedTenants  []domain.VMTenant
 		expectedReadOnly bool
 	}{
 		{
@@ -376,12 +376,14 @@ func TestService_UserCaching(t *testing.T) {
 	assert.Equal(t, "cached-user@example.com", user3.ID)
 }
 
-// MockMetricsService implements domain.MetricsService for testing
+// MockMetricsService implements domain.MetricsService for testing.
 type MockMetricsService struct{}
 
-func (m *MockMetricsService) RecordRequest(context.Context, string, string, string, time.Duration, *domain.User) {}
-func (m *MockMetricsService) RecordUpstream(context.Context, string, string, string, time.Duration, []string) {}
+func (m *MockMetricsService) RecordRequest(context.Context, string, string, string, time.Duration, *domain.User) {
+}
+func (m *MockMetricsService) RecordUpstream(context.Context, string, string, string, time.Duration, []string) {
+}
 func (m *MockMetricsService) RecordQueryFilter(context.Context, string, int, bool, time.Duration) {}
-func (m *MockMetricsService) RecordAuthAttempt(ctx context.Context, userID, status string) {}
-func (m *MockMetricsService) RecordTenantAccess(context.Context, string, string, bool) {}
-func (m *MockMetricsService) Handler() http.Handler { return nil }
+func (m *MockMetricsService) RecordAuthAttempt(_ context.Context, _, _ string)                    {}
+func (m *MockMetricsService) RecordTenantAccess(context.Context, string, string, bool)            {}
+func (m *MockMetricsService) Handler() http.Handler                                               { return nil }

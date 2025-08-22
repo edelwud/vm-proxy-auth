@@ -36,7 +36,7 @@ func TestService_Forward_GET_Request(t *testing.T) {
 	// Create mock upstream server
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request was forwarded correctly
-		assert.Equal(t, "GET", r.Method)
+		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Equal(t, "/api/v1/query", r.URL.Path)
 		assert.Equal(t, "up", r.URL.Query().Get("query"))
 		assert.Equal(t, "test-value", r.Header.Get("X-Test-Header"))
@@ -53,7 +53,7 @@ func TestService_Forward_GET_Request(t *testing.T) {
 	service := proxy.NewService(upstream.URL, 30*time.Second, logger, metrics)
 
 	// Create test request
-	req, err := http.NewRequest("GET", "/api/v1/query?query=up", nil)
+	req, err := http.NewRequest(http.MethodGet, "/api/v1/query?query=up", nil)
 	require.NoError(t, err)
 	req.Header.Set("X-Test-Header", "test-value")
 
@@ -85,13 +85,13 @@ func TestService_Forward_POST_Request(t *testing.T) {
 	// Create mock upstream server
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request method and headers
-		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "/api/v1/write", r.URL.Path)
 		assert.Equal(t, "1000:test", r.Header.Get("X-Prometheus-Tenant"))
 
 		// Read and verify body
 		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		assert.Contains(t, string(body), "test_metric")
 
 		w.WriteHeader(http.StatusNoContent)
@@ -104,7 +104,7 @@ func TestService_Forward_POST_Request(t *testing.T) {
 
 	// Create test POST request with body
 	body := strings.NewReader("test_metric{job=\"test\"} 1")
-	req, err := http.NewRequest("POST", "/api/v1/write", body)
+	req, err := http.NewRequest(http.MethodPost, "/api/v1/write", body)
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/x-protobuf")
 
@@ -177,7 +177,7 @@ func TestService_Forward_QueryFiltering(t *testing.T) {
 				requestURL += "?query=" + url.QueryEscape(tt.originalQuery)
 			}
 
-			req, err := http.NewRequest("GET", requestURL, nil)
+			req, err := http.NewRequest(http.MethodGet, requestURL, nil)
 			require.NoError(t, err)
 
 			user := &domain.User{ID: "test-user"}
@@ -227,7 +227,7 @@ func TestService_Forward_ErrorHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tt.upstreamStatus)
 				w.Write([]byte(tt.upstreamBody))
 			}))
@@ -237,7 +237,7 @@ func TestService_Forward_ErrorHandling(t *testing.T) {
 			metrics := &MockMetricsService{}
 			service := proxy.NewService(upstream.URL, 30*time.Second, logger, metrics)
 
-			req, err := http.NewRequest("GET", "/api/v1/query?query=up", nil)
+			req, err := http.NewRequest(http.MethodGet, "/api/v1/query?query=up", nil)
 			require.NoError(t, err)
 
 			user := &domain.User{ID: "test-user"}
@@ -251,7 +251,7 @@ func TestService_Forward_ErrorHandling(t *testing.T) {
 			resp, err := service.Forward(context.Background(), proxyReq)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, resp)
@@ -298,7 +298,7 @@ func TestService_Forward_TenantHeaders(t *testing.T) {
 			metrics := &MockMetricsService{}
 			service := proxy.NewService(upstream.URL, 30*time.Second, logger, metrics)
 
-			req, err := http.NewRequest("POST", "/api/v1/write", strings.NewReader("test_metric 1"))
+			req, err := http.NewRequest(http.MethodPost, "/api/v1/write", strings.NewReader("test_metric 1"))
 			require.NoError(t, err)
 
 			user := &domain.User{ID: "test-user"}
@@ -319,7 +319,7 @@ func TestService_Forward_TenantHeaders(t *testing.T) {
 
 func TestService_Forward_RequestTimeout(t *testing.T) {
 	// Create slow upstream server
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(200 * time.Millisecond) // Longer than client timeout
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -330,7 +330,7 @@ func TestService_Forward_RequestTimeout(t *testing.T) {
 	// Short timeout for testing
 	service := proxy.NewService(upstream.URL, 100*time.Millisecond, logger, metrics)
 
-	req, err := http.NewRequest("GET", "/api/v1/query?query=up", nil)
+	req, err := http.NewRequest(http.MethodGet, "/api/v1/query?query=up", nil)
 	require.NoError(t, err)
 
 	user := &domain.User{ID: "test-user"}
@@ -342,7 +342,7 @@ func TestService_Forward_RequestTimeout(t *testing.T) {
 	}
 
 	_, err = service.Forward(context.Background(), proxyReq)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "timeout")
 }
 
@@ -351,7 +351,7 @@ func TestService_Forward_FormDataHandling(t *testing.T) {
 	var capturedQuery string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := r.ParseForm()
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		capturedQuery = r.Form.Get("query")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"success"}`))
@@ -367,7 +367,7 @@ func TestService_Forward_FormDataHandling(t *testing.T) {
 	formData.Set("query", "up")
 	formData.Set("step", "60s")
 
-	req, err := http.NewRequest("POST", "/api/v1/query_range", strings.NewReader(formData.Encode()))
+	req, err := http.NewRequest(http.MethodPost, "/api/v1/query_range", strings.NewReader(formData.Encode()))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
@@ -397,7 +397,7 @@ func TestService_Forward_HeaderPropagation(t *testing.T) {
 
 	// Headers that should be added/modified by proxy
 	expectedProxyHeaders := map[string]string{
-		"X-Forwarded-For":   "", // Will be set by proxy
+		"X-Forwarded-For":     "", // Will be set by proxy
 		"X-Prometheus-Tenant": "1000:test",
 	}
 
@@ -412,7 +412,7 @@ func TestService_Forward_HeaderPropagation(t *testing.T) {
 	metrics := &MockMetricsService{}
 	service := proxy.NewService(upstream.URL, 30*time.Second, logger, metrics)
 
-	req, err := http.NewRequest("GET", "/api/v1/query?query=up", nil)
+	req, err := http.NewRequest(http.MethodGet, "/api/v1/query?query=up", nil)
 	require.NoError(t, err)
 
 	// Set test headers
@@ -447,7 +447,7 @@ func TestService_Forward_NetworkError(t *testing.T) {
 	// Invalid upstream URL to trigger network error
 	service := proxy.NewService("http://invalid-host-that-does-not-exist.local:9999", 1*time.Second, logger, metrics)
 
-	req, err := http.NewRequest("GET", "/api/v1/query?query=up", nil)
+	req, err := http.NewRequest(http.MethodGet, "/api/v1/query?query=up", nil)
 	require.NoError(t, err)
 
 	user := &domain.User{ID: "test-user"}
@@ -459,15 +459,17 @@ func TestService_Forward_NetworkError(t *testing.T) {
 	}
 
 	_, err = service.Forward(context.Background(), proxyReq)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
-// MockMetricsService implements domain.MetricsService for testing
+// MockMetricsService implements domain.MetricsService for testing.
 type MockMetricsService struct{}
 
-func (m *MockMetricsService) RecordRequest(context.Context, string, string, string, time.Duration, *domain.User) {}
-func (m *MockMetricsService) RecordUpstream(context.Context, string, string, string, time.Duration, []string) {}
+func (m *MockMetricsService) RecordRequest(context.Context, string, string, string, time.Duration, *domain.User) {
+}
+func (m *MockMetricsService) RecordUpstream(context.Context, string, string, string, time.Duration, []string) {
+}
 func (m *MockMetricsService) RecordQueryFilter(context.Context, string, int, bool, time.Duration) {}
-func (m *MockMetricsService) RecordAuthAttempt(context.Context, string, string) {}
-func (m *MockMetricsService) RecordTenantAccess(context.Context, string, string, bool) {}
-func (m *MockMetricsService) Handler() http.Handler { return nil }
+func (m *MockMetricsService) RecordAuthAttempt(context.Context, string, string)                   {}
+func (m *MockMetricsService) RecordTenantAccess(context.Context, string, string, bool)            {}
+func (m *MockMetricsService) Handler() http.Handler                                               { return nil }

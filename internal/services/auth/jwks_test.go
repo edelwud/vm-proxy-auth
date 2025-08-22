@@ -24,9 +24,9 @@ func TestJWKSFetcher_ValidJWKS(t *testing.T) {
 
 	// Create mock JWKS response
 	jwks := createMockJWKS(t, &privateKey.PublicKey, "test-kid")
-	
+
 	// Create test server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(jwks)
 	}))
@@ -60,7 +60,7 @@ func TestJWKSFetcher_KeyNotFound(t *testing.T) {
 	}
 
 	// Create test server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(jwks)
 	}))
@@ -71,9 +71,9 @@ func TestJWKSFetcher_KeyNotFound(t *testing.T) {
 
 	// Test fetching non-existent key
 	publicKey, err := fetcher.GetPublicKey("non-existent-kid")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, publicKey)
-	assert.Contains(t, err.Error(), "key not found")
+	require.Contains(t, err.Error(), "key not found")
 }
 
 func TestJWKSFetcher_InvalidJWKSResponse(t *testing.T) {
@@ -107,7 +107,7 @@ func TestJWKSFetcher_InvalidJWKSResponse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create test server with error response
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tt.statusCode)
 				if tt.responseBody != nil {
 					if str, ok := tt.responseBody.(string); ok {
@@ -124,7 +124,7 @@ func TestJWKSFetcher_InvalidJWKSResponse(t *testing.T) {
 
 			// Test fetching key - should fail
 			publicKey, err := fetcher.GetPublicKey("test-kid")
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Nil(t, publicKey)
 		})
 	}
@@ -136,9 +136,9 @@ func TestJWKSFetcher_Caching(t *testing.T) {
 	require.NoError(t, err)
 
 	requestCount := 0
-	
+
 	// Create test server that counts requests
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requestCount++
 		jwks := createMockJWKS(t, &privateKey.PublicKey, "test-kid")
 		w.Header().Set("Content-Type", "application/json")
@@ -200,14 +200,14 @@ func TestJWKSFetcher_InvalidRSAKey(t *testing.T) {
 			name: "invalid modulus encoding",
 			jwk: map[string]interface{}{
 				"kty": "RSA",
-				"kid": "test-kid", 
+				"kid": "test-kid",
 				"use": "sig",
 				"n":   "invalid-base64!",
 				"e":   "AQAB",
 			},
 		},
 		{
-			name: "invalid exponent encoding", 
+			name: "invalid exponent encoding",
 			jwk: map[string]interface{}{
 				"kty": "RSA",
 				"kid": "test-kid",
@@ -225,7 +225,7 @@ func TestJWKSFetcher_InvalidRSAKey(t *testing.T) {
 			}
 
 			// Create test server
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(jwks)
 			}))
@@ -236,7 +236,7 @@ func TestJWKSFetcher_InvalidRSAKey(t *testing.T) {
 
 			// Test fetching key - should fail
 			publicKey, err := fetcher.GetPublicKey("test-kid")
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Nil(t, publicKey)
 		})
 	}
@@ -248,7 +248,7 @@ func TestJWKSFetcher_NetworkErrors(t *testing.T) {
 
 	// Test fetching key - should fail with network error
 	publicKey, err := fetcher.GetPublicKey("test-kid")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, publicKey)
 }
 
@@ -256,7 +256,7 @@ func TestJWKSFetcher_MultipleKeys(t *testing.T) {
 	// Generate multiple test keys
 	privateKey1, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	
+
 	privateKey2, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
@@ -269,7 +269,7 @@ func TestJWKSFetcher_MultipleKeys(t *testing.T) {
 	}
 
 	// Create test server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(jwks)
 	}))
@@ -284,7 +284,7 @@ func TestJWKSFetcher_MultipleKeys(t *testing.T) {
 	require.NotNil(t, publicKey1)
 
 	publicKey2, err := fetcher.GetPublicKey("key-2")
-	require.NoError(t, err) 
+	require.NoError(t, err)
 	require.NotNil(t, publicKey2)
 
 	// Verify they are different keys
@@ -301,7 +301,7 @@ func createMockJWKS(t *testing.T, publicKey *rsa.PublicKey, kid string) map[stri
 	}
 }
 
-func createJWK(t *testing.T, publicKey *rsa.PublicKey, kid string) map[string]interface{} {
+func createJWK(_ *testing.T, publicKey *rsa.PublicKey, kid string) map[string]interface{} {
 	// Convert RSA public key to JWK format
 	nBytes := publicKey.N.Bytes()
 	eBytes := big.NewInt(int64(publicKey.E)).Bytes()

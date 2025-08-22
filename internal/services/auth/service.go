@@ -158,9 +158,9 @@ func (s *Service) extractGroups(claims *Claims) []string {
 func (s *Service) determineUserPermissions(
 	userGroups []string,
 ) ([]string, []domain.VMTenant, bool) {
-	allowedTenants := []string{} // Initialize empty slice
+	allowedTenants := []string{}     // Initialize empty slice
 	vmTenants := []domain.VMTenant{} // Initialize empty slice
-	readOnly := false // Default to false when no mappings found
+	readOnly := false                // Default to false when no mappings found
 	hasMatchingGroups := false
 
 	for _, mapping := range s.tenantMaps {
