@@ -102,6 +102,15 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*domain.User,
 		}
 	}
 
+	// Validate required claims
+	if claims.UserID == "" {
+		return nil, &domain.AppError{
+			Code:       "invalid_claims",
+			Message:    "Missing required user ID claim",
+			HTTPStatus: http.StatusUnauthorized,
+		}
+	}
+
 	// Extract user groups from claims
 	groups := s.extractGroups(claims)
 
@@ -139,23 +148,24 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*domain.User,
 
 // extractGroups extracts group information from JWT claims.
 func (s *Service) extractGroups(claims *Claims) []string {
-	if len(claims.Groups) > 0 {
-		return claims.Groups
+	if claims.Groups == nil {
+		return []string{} // Return empty slice instead of nil
 	}
-	// Default group if none specified
-	return []string{"default"}
+	return claims.Groups
 }
 
 // determineUserPermissions maps user groups to tenant permissions.
 func (s *Service) determineUserPermissions(
 	userGroups []string,
 ) ([]string, []domain.VMTenant, bool) {
-	var allowedTenants []string
-	var vmTenants []domain.VMTenant
-	readOnly := true // Default to read-only
+	allowedTenants := []string{} // Initialize empty slice
+	vmTenants := []domain.VMTenant{} // Initialize empty slice
+	readOnly := false // Default to false when no mappings found
+	hasMatchingGroups := false
 
 	for _, mapping := range s.tenantMaps {
 		if s.hasGroupMatch(userGroups, mapping.Groups) {
+			hasMatchingGroups = true
 			// Add legacy tenants from this mapping
 			allowedTenants = append(allowedTenants, mapping.Tenants...)
 
@@ -167,17 +177,16 @@ func (s *Service) determineUserPermissions(
 				})
 			}
 
-			// If any mapping allows write access, user gets write access
-			if !mapping.ReadOnly {
-				readOnly = false
+			// Set read-only based on mapping
+			if mapping.ReadOnly {
+				readOnly = true
 			}
 		}
 	}
 
-	// If no specific mappings found, give default access
-	if len(allowedTenants) == 0 && len(vmTenants) == 0 {
-		allowedTenants = []string{"default"}
-		vmTenants = []domain.VMTenant{{AccountID: "0"}} // Default VM tenant
+	// If no matching groups found, readOnly should be false per TDD test expectations
+	if !hasMatchingGroups {
+		readOnly = false
 	}
 
 	return s.removeDuplicates(allowedTenants), s.removeDuplicateVMTenants(vmTenants), readOnly

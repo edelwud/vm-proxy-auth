@@ -2,7 +2,6 @@ package access
 
 import (
 	"context"
-	"net/http"
 	"strings"
 
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
@@ -22,22 +21,19 @@ func NewService(logger domain.Logger) *Service {
 
 // CanAccess checks if a user can access a specific path with given method.
 func (s *Service) CanAccess(_ context.Context, user *domain.User, path, method string) error {
-	// Check if user is read-only and this is a write operation
-	if user.ReadOnly && isWriteOperation(method, path) {
-		return &domain.AppError{
-			Code:       "read_only_access",
-			Message:    "User has read-only access",
-			HTTPStatus: http.StatusForbidden,
-		}
+	// Handle nil user
+	if user == nil {
+		return domain.ErrUnauthorized
 	}
 
-	// Check if path is restricted
-	if isRestrictedPath(path) {
-		return &domain.AppError{
-			Code:       "restricted_path",
-			Message:    "Access to this path is restricted",
-			HTTPStatus: http.StatusForbidden,
-		}
+	// Check if user is read-only and this is a write operation
+	if user.ReadOnly && isWriteOperation(method, path) {
+		return domain.ErrReadOnlyAccess
+	}
+
+	// Check if path is restricted and user is not admin
+	if isRestrictedPath(path) && !isAdmin(user) {
+		return domain.ErrAdminRequired
 	}
 
 	// All other checks pass
@@ -86,5 +82,15 @@ func isRestrictedPath(path string) bool {
 		}
 	}
 
+	return false
+}
+
+// isAdmin checks if a user has admin privileges.
+func isAdmin(user *domain.User) bool {
+	for _, group := range user.Groups {
+		if group == "admin" {
+			return true
+		}
+	}
 	return false
 }
