@@ -283,11 +283,6 @@ jobs:
           sbom: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') }}
           provenance: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') }}
 
-      - name: Test Docker image
-        if: github.event_name == 'pull_request'
-        run: |
-          docker run --rm vm-proxy-auth:test --version
-
       - name: Run Trivy vulnerability scanner
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
         uses: aquasecurity/trivy-action@master

@@ -8,13 +8,15 @@ import (
 
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
+
+	"github.com/edelwud/vm-proxy-auth/internal/services/tenant/filterstrategies"
 )
 
-// Service implements domain.TenantService using clean architecture with production-ready PromQL parsing.
+// Service implements domain.TenantService using secure OR-based tenant filtering.
 type Service struct {
 	config         config.UpstreamConfig
 	logger         domain.Logger
-	promqlInjector *PromQLTenantInjector
+	orQueryBuilder *filterstrategies.ORQueryBuilder
 	metrics        domain.MetricsService
 }
 
@@ -27,12 +29,12 @@ func NewService(
 	return &Service{
 		config:         *cfg,
 		logger:         logger,
-		promqlInjector: NewPromQLTenantInjector(logger),
+		orQueryBuilder: filterstrategies.NewORQueryBuilder(logger),
 		metrics:        metrics,
 	}
 }
 
-// FilterQuery adds tenant filtering to PromQL query for VictoriaMetrics using production-ready Prometheus parser.
+// FilterQuery adds tenant filtering to PromQL query for VictoriaMetrics using secure OR-based filtering.
 func (s *Service) FilterQuery(
 	ctx context.Context,
 	user *domain.User,
@@ -45,7 +47,7 @@ func (s *Service) FilterQuery(
 		return "", domain.ErrNoVMTenants
 	}
 
-	s.logger.Info("TENANT FILTER DEBUG",
+	s.logger.Info("SECURE TENANT FILTER",
 		domain.Field{Key: "user_id", Value: user.ID},
 		domain.Field{Key: "original_query", Value: query},
 		domain.Field{Key: "vm_tenants", Value: fmt.Sprintf("%v", user.VMTenants)},
@@ -53,15 +55,29 @@ func (s *Service) FilterQuery(
 		domain.Field{Key: "use_project_id", Value: s.config.UseProjectID},
 	)
 
-	// Use production ready PromQL parser for VM tenants
-	filteredQuery, err := s.promqlInjector.InjectTenantLabels(query, user.VMTenants, &s.config)
+	// Validate strategy configuration
+	strategy := domain.TenantFilterStrategy(s.config.TenantFilter.Strategy)
+	if !strategy.IsValid() {
+		s.logger.Error("Invalid tenant filter strategy configured",
+			domain.Field{Key: "configured_strategy", Value: s.config.TenantFilter.Strategy},
+			domain.Field{Key: "valid_strategies", Value: "or_conditions"})
+		return "", fmt.Errorf(
+			"invalid tenant filter strategy: %s (only 'or_conditions' is supported)",
+			s.config.TenantFilter.Strategy,
+		)
+	}
+
+	var filteredQuery string
+	var err error
+
+	filteredQuery, err = s.orQueryBuilder.BuildSecureQuery(query, user.VMTenants, &s.config)
 	duration := time.Since(startTime)
 
 	if err != nil {
 		// Record failed query filtering
 		s.metrics.RecordQueryFilter(ctx, user.ID, len(user.VMTenants), false, duration)
 
-		s.logger.Error("PromQL parsing failed",
+		s.logger.Error("Secure PromQL filtering failed",
 			domain.Field{Key: "error", Value: err.Error()},
 			domain.Field{Key: "original_query", Value: query})
 
@@ -73,12 +89,12 @@ func (s *Service) FilterQuery(
 	// Record successful query filtering metrics
 	s.metrics.RecordQueryFilter(ctx, user.ID, len(user.VMTenants), filterApplied, duration)
 
-	s.logger.Info("TENANT FILTER RESULT",
+	s.logger.Info("SECURE TENANT FILTER RESULT",
 		domain.Field{Key: "user_id", Value: user.ID},
 		domain.Field{Key: "original_query", Value: query},
 		domain.Field{Key: "filtered_query", Value: filteredQuery},
 		domain.Field{Key: "filter_applied", Value: filterApplied},
-		domain.Field{Key: "used_production_parser", Value: true},
+		domain.Field{Key: "secure_strategy", Value: "or_conditions"},
 		domain.Field{Key: "duration_ms", Value: duration.Milliseconds()},
 	)
 

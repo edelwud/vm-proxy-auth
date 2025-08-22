@@ -1,8 +1,7 @@
-package tenant
+package filterstrategies
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
@@ -10,8 +9,6 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
-
-// Remove local error as we'll use domain error
 
 // PromQLTenantInjector provides production-ready PromQL parsing and tenant injection.
 type PromQLTenantInjector struct {
@@ -107,8 +104,13 @@ func (p *PromQLTenantInjector) injectTenantLabelsToVectorSelector(
 		tenant := vmTenants[0]
 		p.addSingleTenantFilter(vs, tenant, tenantLabelName, projectLabelName, cfg.UseProjectID)
 	} else {
-		// Multiple tenants - create complex filter
-		p.addMultipleTenantFilter(vs, vmTenants, tenantLabelName, projectLabelName, cfg.UseProjectID)
+		// This should not be called anymore, but kept for compatibility
+		p.logger.Warn("Using legacy multiple tenant filter method, this is not secure",
+			domain.Field{Key: "metric", Value: vs.Name},
+			domain.Field{Key: "tenant_count", Value: len(vmTenants)})
+
+		// Multiple tenants - create simple filter for first tenant
+		p.addSingleTenantFilter(vs, vmTenants[0], tenantLabelName, projectLabelName, cfg.UseProjectID)
 	}
 }
 
@@ -128,7 +130,7 @@ func (p *PromQLTenantInjector) addSingleTenantFilter(
 	vs.LabelMatchers = append(vs.LabelMatchers, accountMatcher)
 
 	// Add project ID filter if configured and present
-	if useProjectID && tenant.ProjectID != "" {
+	if useProjectID && tenant.ProjectID != "" && tenant.ProjectID != ".*" {
 		projectMatcher := &labels.Matcher{
 			Type:  labels.MatchEqual,
 			Name:  projectLabel,
@@ -141,89 +143,4 @@ func (p *PromQLTenantInjector) addSingleTenantFilter(
 		domain.Field{Key: "metric", Value: vs.Name},
 		domain.Field{Key: "account_id", Value: tenant.AccountID},
 		domain.Field{Key: "project_id", Value: tenant.ProjectID})
-}
-
-// addMultipleTenantFilter adds multiple tenant filter using regex OR logic.
-func (p *PromQLTenantInjector) addMultipleTenantFilter(
-	vs *parser.VectorSelector,
-	vmTenants []domain.VMTenant,
-	tenantLabel, projectLabel string,
-	useProjectID bool,
-) {
-	if len(vmTenants) == 0 {
-		return
-	}
-
-	p.logger.Debug("Creating multiple tenant filter",
-		domain.Field{Key: "tenant_count", Value: len(vmTenants)},
-		domain.Field{Key: "use_project_id", Value: useProjectID})
-
-	// Build regex patterns for account IDs and project IDs
-	// Use maps to automatically deduplicate
-	accountIDMap := make(map[string]bool)
-	projectIDMap := make(map[string]bool)
-
-	for _, tenant := range vmTenants {
-		if tenant.AccountID != "" {
-			accountIDMap[tenant.AccountID] = true
-		}
-		if useProjectID && tenant.ProjectID != "" {
-			projectIDMap[tenant.ProjectID] = true
-		}
-	}
-
-	// Convert maps to slices
-	var accountIDs []string
-	for id := range accountIDMap {
-		accountIDs = append(accountIDs, id)
-	}
-
-	var projectIDs []string
-	for id := range projectIDMap {
-		projectIDs = append(projectIDs, id)
-	}
-
-	// Add account ID filter using regex
-	if len(accountIDs) > 0 {
-		var accountPattern string
-		if len(accountIDs) == 1 {
-			accountPattern = accountIDs[0]
-		} else {
-			accountPattern = "(" + strings.Join(accountIDs, "|") + ")"
-		}
-
-		accountMatcher := &labels.Matcher{
-			Type:  labels.MatchRegexp,
-			Name:  tenantLabel,
-			Value: accountPattern,
-		}
-		vs.LabelMatchers = append(vs.LabelMatchers, accountMatcher)
-
-		p.logger.Debug("Added account ID filter",
-			domain.Field{Key: "metric", Value: vs.Name},
-			domain.Field{Key: "account_pattern", Value: accountPattern},
-			domain.Field{Key: "account_count", Value: len(accountIDs)})
-	}
-
-	// Add project ID filter if needed
-	if useProjectID && len(projectIDs) > 0 {
-		var projectPattern string
-		if len(projectIDs) == 1 {
-			projectPattern = projectIDs[0]
-		} else {
-			projectPattern = "(" + strings.Join(projectIDs, "|") + ")"
-		}
-
-		projectMatcher := &labels.Matcher{
-			Type:  labels.MatchRegexp,
-			Name:  projectLabel,
-			Value: projectPattern,
-		}
-		vs.LabelMatchers = append(vs.LabelMatchers, projectMatcher)
-
-		p.logger.Debug("Added project ID filter",
-			domain.Field{Key: "metric", Value: vs.Name},
-			domain.Field{Key: "project_pattern", Value: projectPattern},
-			domain.Field{Key: "project_count", Value: len(projectIDs)})
-	}
 }

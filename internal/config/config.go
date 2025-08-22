@@ -38,6 +38,12 @@ type UpstreamConfig struct {
 	TenantLabel  string `yaml:"tenant_label"   default:"vm_account_id"`
 	ProjectLabel string `yaml:"project_label"  default:"vm_project_id"`
 	UseProjectID bool   `yaml:"use_project_id" default:"false"`
+	// Tenant filtering strategy configuration
+	TenantFilter TenantFilterConfig `yaml:"tenant_filter"`
+}
+
+type TenantFilterConfig struct {
+	Strategy string `yaml:"strategy" default:"regex"`
 }
 
 type AuthConfig struct {
@@ -185,6 +191,9 @@ func setUpstreamDefaults(upstream *UpstreamConfig) {
 	}
 	if upstream.ProjectLabel == "" {
 		upstream.ProjectLabel = "vm_project_id"
+	}
+	if upstream.TenantFilter.Strategy == "" {
+		upstream.TenantFilter.Strategy = "or_conditions" // Default to secure OR strategy
 	}
 }
 

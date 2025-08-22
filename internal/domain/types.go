@@ -135,3 +135,58 @@ type Field struct {
 	Key   string
 	Value interface{}
 }
+
+// TenantFilterStrategy defines how tenant filtering should be applied to PromQL queries.
+type TenantFilterStrategy string
+
+const (
+	// TenantFilterStrategyOR uses separate OR conditions for each tenant pair.
+	// This ensures exact tenant isolation and prevents cross-tenant data leakage.
+	// Example: {vm_account_id="1000"} or {vm_account_id="2000",vm_project_id="20"}.
+	TenantFilterStrategyOR TenantFilterStrategy = "or_conditions"
+)
+
+// TenantFilterConfig contains configuration for tenant filtering strategy.
+type TenantFilterConfig struct {
+	Strategy TenantFilterStrategy `yaml:"strategy" default:"or_conditions"`
+}
+
+// IsValid validates the tenant filter strategy.
+func (s TenantFilterStrategy) IsValid() bool {
+	return s == TenantFilterStrategyOR
+}
+
+// TenantFilter represents a filter that can be applied to PromQL queries.
+type TenantFilter interface {
+	// ApplyToVectorSelector applies tenant filtering to a single vector selector.
+	// Returns true if the selector was modified, false otherwise.
+	ApplyToVectorSelector(vs VectorSelector, tenants []VMTenant, config TenantLabelsConfig) (bool, error)
+}
+
+// VectorSelector represents a PromQL vector selector that can be modified.
+// This interface abstracts away the Prometheus parser dependency from domain layer.
+type VectorSelector interface {
+	// GetName returns the metric name.
+	GetName() string
+	// HasLabel checks if a label matcher exists.
+	HasLabel(name string) bool
+	// AddLabel adds a label matcher.
+	AddLabel(name, value string, matchType LabelMatchType) error
+}
+
+// LabelMatchType defines the type of label matching.
+type LabelMatchType int
+
+const (
+	// LabelMatchEqual represents exact equality (=).
+	LabelMatchEqual LabelMatchType = iota
+	// LabelMatchRegexp represents regex matching (=~).
+	LabelMatchRegexp
+)
+
+// TenantLabelsConfig contains configuration for tenant label names.
+type TenantLabelsConfig struct {
+	TenantLabel  string
+	ProjectLabel string
+	UseProjectID bool
+}
