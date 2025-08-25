@@ -73,7 +73,7 @@ func TestJWKSFetcher_KeyNotFound(t *testing.T) {
 	publicKey, err := fetcher.GetPublicKey("non-existent-kid")
 	require.Error(t, err)
 	assert.Nil(t, publicKey)
-	require.Contains(t, err.Error(), "key not found")
+	require.Contains(t, err.Error(), "Key not found")
 }
 
 func TestJWKSFetcher_InvalidJWKSResponse(t *testing.T) {
@@ -234,10 +234,12 @@ func TestJWKSFetcher_InvalidRSAKey(t *testing.T) {
 			// Create JWKS fetcher
 			fetcher := auth.NewJWKSFetcher(server.URL, 5*time.Minute)
 
-			// Test fetching key - should fail
+			// Test fetching key - invalid keys should not be found in cache
 			publicKey, err := fetcher.GetPublicKey("test-kid")
 			require.Error(t, err)
 			assert.Nil(t, publicKey)
+			// Key should not be found because it was skipped due to validation errors
+			require.Contains(t, err.Error(), "Key not found")
 		})
 	}
 }

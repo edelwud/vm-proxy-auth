@@ -128,13 +128,27 @@ func (v *JWTVerifier) getKeyFromJWKS(token *jwt.Token) (interface{}, error) {
 func (v *JWTVerifier) validateClaims(claims *Claims) error {
 	now := time.Now().Unix()
 
+	// Check required claims
+	if claims.ExpiresAt == 0 {
+		return domain.ErrInvalidTokenClaims
+	}
+	
+	if claims.IssuedAt == 0 {
+		return domain.ErrInvalidTokenClaims
+	}
+
 	// Check expiration
 	if claims.ExpiresAt < now {
 		return domain.ErrTokenExpiredClaims
 	}
 
 	// Check not before
-	if claims.NotBefore > now {
+	if claims.NotBefore > 0 && claims.NotBefore > now {
+		return domain.ErrTokenNotValid
+	}
+
+	// Check if token is issued in the future
+	if claims.IssuedAt > now {
 		return domain.ErrTokenNotValid
 	}
 

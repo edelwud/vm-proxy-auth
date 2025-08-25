@@ -38,7 +38,7 @@ func TestService_Forward_GET_Request(t *testing.T) {
 		// Verify request was forwarded correctly
 		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Equal(t, "/api/v1/query", r.URL.Path)
-		assert.Equal(t, "up", r.URL.Query().Get("query"))
+		assert.Equal(t, "up{vm_account_id=\"1000\"}", r.URL.Query().Get("query"))
 		assert.Equal(t, "test-value", r.Header.Get("X-Test-Header"))
 
 		// Send response

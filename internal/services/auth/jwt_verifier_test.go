@@ -52,7 +52,7 @@ func TestJWTVerifier_HS256_ExpiredToken(t *testing.T) {
 	// Verify token - should fail
 	_, err = verifier.VerifyToken(tokenString)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "token is expired")
+	require.Contains(t, err.Error(), "Token has expired")
 }
 
 func TestJWTVerifier_HS256_InvalidSignature(t *testing.T) {
@@ -151,7 +151,7 @@ func TestJWTVerifier_UnsupportedAlgorithm(t *testing.T) {
 	// Verify token should fail with unsupported algorithm
 	_, err = verifier.VerifyToken(tokenString)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "unsupported")
+	require.Contains(t, err.Error(), "Unsupported")
 }
 
 func TestJWTVerifier_MalformedTokens(t *testing.T) {

@@ -115,6 +115,14 @@ func (f *JWKSFetcher) fetchJWKS() error {
 
 // jwkToRSAPublicKey converts a JWK to an RSA public key.
 func (f *JWKSFetcher) jwkToRSAPublicKey(jwk JWK) (*rsa.PublicKey, error) {
+	// Check required fields
+	if jwk.N == "" {
+		return nil, fmt.Errorf("missing required field 'n' (modulus) in JWK")
+	}
+	if jwk.E == "" {
+		return nil, fmt.Errorf("missing required field 'e' (exponent) in JWK")
+	}
+
 	// Decode base64url encoded n and e
 	nBytes, err := base64.RawURLEncoding.DecodeString(jwk.N)
 	if err != nil {
