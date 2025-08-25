@@ -4,6 +4,7 @@ import "github.com/edelwud/vm-proxy-auth/internal/domain"
 
 // MockLogger implements domain.Logger for testing purposes.
 // Use blank identifier for unused parameters to satisfy revive linter.
+// This shared mock eliminates duplicate implementations across test files.
 type MockLogger struct{}
 
 // Debug implements domain.Logger interface.
