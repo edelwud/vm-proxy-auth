@@ -25,8 +25,6 @@ contents:
     type: dir
     file_info:
       mode: 0755
-      owner: vm-proxy-auth
-      group: vm-proxy-auth
   - dst: /etc/vm-proxy-auth
     type: dir
     file_info:
@@ -34,21 +32,42 @@ contents:
 
 scripts:
   preinstall: |
+    #!/bin/sh
+    set -e
     # Create system user and group
     if ! id vm-proxy-auth >/dev/null 2>&1; then
-      useradd --system --no-create-home --shell /bin/false vm-proxy-auth
+      useradd --system --no-create-home --shell /bin/false vm-proxy-auth 2>/dev/null || true
     fi
   postinstall: |
-    systemctl daemon-reload
-    systemctl enable vm-proxy-auth
+    #!/bin/sh
+    set -e
     # Set proper ownership
-    chown -R vm-proxy-auth:vm-proxy-auth /var/log/vm-proxy-auth
-    chown vm-proxy-auth:vm-proxy-auth /etc/vm-proxy-auth
+    if [ -d "/var/log/vm-proxy-auth" ]; then
+      chown -R vm-proxy-auth:vm-proxy-auth /var/log/vm-proxy-auth || true
+    fi
+    if [ -d "/etc/vm-proxy-auth" ]; then
+      chown vm-proxy-auth:vm-proxy-auth /etc/vm-proxy-auth || true
+    fi
+    # Enable systemd service if systemctl is available
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl daemon-reload || true
+      systemctl enable vm-proxy-auth || true
+    fi
   preremove: |
-    systemctl stop vm-proxy-auth
-    systemctl disable vm-proxy-auth
+    #!/bin/sh
+    set -e
+    # Stop and disable service if systemctl is available
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl stop vm-proxy-auth || true
+      systemctl disable vm-proxy-auth || true
+    fi
   postremove: |
-    systemctl daemon-reload
+    #!/bin/sh
+    set -e
+    # Reload systemd if available
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl daemon-reload || true
+    fi
     # Remove user if no other packages need it
     if id vm-proxy-auth >/dev/null 2>&1; then
       userdel vm-proxy-auth >/dev/null 2>&1 || true
