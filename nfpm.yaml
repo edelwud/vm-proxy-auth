@@ -1,0 +1,55 @@
+name: vm-proxy-auth
+arch: amd64
+platform: linux
+version: ${NFPM_VERSION}
+maintainer: edelwud <noreply@yer.sh>
+description: VictoriaMetrics Proxy with Authentication and Multi-tenant Support
+homepage: https://github.com/edelwud/vm-proxy-auth
+license: MIT
+section: default
+priority: extra
+
+contents:
+  - src: vm-proxy-auth
+    dst: /usr/bin/vm-proxy-auth
+    file_info:
+      mode: 0755
+  - src: examples/
+    dst: /etc/vm-proxy-auth/examples/
+    type: tree
+  - src: systemd/vm-proxy-auth.service
+    dst: /lib/systemd/system/vm-proxy-auth.service
+    file_info:
+      mode: 0644
+  - dst: /var/log/vm-proxy-auth
+    type: dir
+    file_info:
+      mode: 0755
+      owner: vm-proxy-auth
+      group: vm-proxy-auth
+  - dst: /etc/vm-proxy-auth
+    type: dir
+    file_info:
+      mode: 0755
+
+scripts:
+  preinstall: |
+    # Create system user and group
+    if ! id vm-proxy-auth >/dev/null 2>&1; then
+      useradd --system --no-create-home --shell /bin/false vm-proxy-auth
+    fi
+  postinstall: |
+    systemctl daemon-reload
+    systemctl enable vm-proxy-auth
+    # Set proper ownership
+    chown -R vm-proxy-auth:vm-proxy-auth /var/log/vm-proxy-auth
+    chown vm-proxy-auth:vm-proxy-auth /etc/vm-proxy-auth
+  preremove: |
+    systemctl stop vm-proxy-auth
+    systemctl disable vm-proxy-auth
+  postremove: |
+    systemctl daemon-reload
+    # Remove user if no other packages need it
+    if id vm-proxy-auth >/dev/null 2>&1; then
+      userdel vm-proxy-auth >/dev/null 2>&1 || true
+    fi

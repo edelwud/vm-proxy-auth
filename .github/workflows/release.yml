@@ -284,41 +284,9 @@ jobs:
           curl -sSfL https://github.com/goreleaser/nfpm/releases/latest/download/nfpm_2.43.0_Linux_x86_64.tar.gz | \
           sudo tar -xzf - -C /usr/local/bin nfpm
 
-      - name: Create nFPM config
+      - name: Setup nFPM version
         run: |
-          cat > nfpm.yaml << 'EOF'
-          name: vm-proxy-auth
-          arch: amd64
-          platform: linux
-          version: ${{ needs.create-release.outputs.version }}
-          maintainer: edelwud <noreply@yer.sh>
-          description: VictoriaMetrics Proxy with Authentication and Multi-tenant Support
-          homepage: https://github.com/edelwud/vm-proxy-auth
-          license: MIT
-
-          contents:
-            - src: vm-proxy-auth
-              dst: /usr/bin/vm-proxy-auth
-              file_info:
-                mode: 0755
-            - src: examples/
-              dst: /etc/vm-proxy-auth/examples/
-              type: tree
-            - src: systemd/vm-proxy-auth.service
-              dst: /lib/systemd/system/vm-proxy-auth.service
-              file_info:
-                mode: 0644
-
-          scripts:
-            postinstall: |
-              systemctl daemon-reload
-              systemctl enable vm-proxy-auth
-            preremove: |
-              systemctl stop vm-proxy-auth
-              systemctl disable vm-proxy-auth
-            postremove: |
-              systemctl daemon-reload
-          EOF
+          echo "NFPM_VERSION=${{ needs.create-release.outputs.version }}" >> $GITHUB_ENV
 
       - name: Create systemd service
         run: |
@@ -353,9 +321,13 @@ jobs:
             ./cmd/gateway
 
       - name: Build DEB package
+        env:
+          NFPM_VERSION: ${{ needs.create-release.outputs.version }}
         run: nfpm package --packager deb --target vm-proxy-auth_${{ needs.create-release.outputs.version }}_amd64.deb
 
       - name: Build RPM package
+        env:
+          NFPM_VERSION: ${{ needs.create-release.outputs.version }}
         run: nfpm package --packager rpm --target vm-proxy-auth-${{ needs.create-release.outputs.version }}.x86_64.rpm
 
       - name: Upload DEB package to release
