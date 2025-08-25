@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-01-25
+
+### Added
+- **Comprehensive test coverage** - Achieved 82.4% test coverage across all services
+- **Pre-commit hook system** - Automated code formatting, linting, and testing
+- **Setup script** (`scripts/setup-hooks.sh`) for easy development environment configuration
+- **Mock services** - Shared testing utilities in `internal/testutils/`
+
+### Enhanced
+- **Auth service tests** - JWT validation, JWKS fetching, user mapping scenarios
+- **Proxy service tests** - HTTP forwarding, query filtering, error handling
+- **Access control tests** - Authorization logic, role-based access, path restrictions
+- **Code quality** - Fixed all golangci-lint issues following TDD principles
+
+### Developer Experience
+- **Automated formatting** - goimports integration in pre-commit hooks
+- **Quality gates** - Prevent commits with failing tests or linting issues
+- **Colored output** - Improved developer feedback in hook execution
+- **Sensitive file detection** - Automatic scanning for potential secrets
+
+### Technical Improvements
+- **JWT claims validation** - Enhanced timing and required field checks
+- **JWKS error handling** - Improved RSA key validation and error messages
+- **Access control logic** - TDD-compliant authorization implementation
+- **Test isolation** - Proper mocking and dependency injection
+
 ## [0.1.0] - 2025-01-22
 
 ### Added
