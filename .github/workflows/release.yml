@@ -296,8 +296,6 @@ jobs:
           homepage: https://github.com/edelwud/vm-proxy-auth
           license: MIT
 
-          bindir: /usr/bin
-
           contents:
             - src: vm-proxy-auth
               dst: /usr/bin/vm-proxy-auth
@@ -305,6 +303,7 @@ jobs:
                 mode: 0755
             - src: examples/
               dst: /etc/vm-proxy-auth/examples/
+              type: tree
             - src: systemd/vm-proxy-auth.service
               dst: /lib/systemd/system/vm-proxy-auth.service
               file_info:
