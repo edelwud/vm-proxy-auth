@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -86,6 +87,14 @@ func (s *Service) Forward(
 	// Execute request
 	resp, err := s.client.Do(httpReq)
 	if err != nil {
+		// Check if it's a timeout error
+		if os.IsTimeout(err) || strings.Contains(err.Error(), "timeout") {
+			return nil, &domain.AppError{
+				Code:       "upstream_timeout",
+				Message:    "Upstream request timeout",
+				HTTPStatus: http.StatusGatewayTimeout,
+			}
+		}
 		return nil, &domain.AppError{
 			Code:       "upstream_error",
 			Message:    "Upstream server unavailable",
