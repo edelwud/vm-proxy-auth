@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -117,10 +118,10 @@ func (f *JWKSFetcher) fetchJWKS() error {
 func (f *JWKSFetcher) jwkToRSAPublicKey(jwk JWK) (*rsa.PublicKey, error) {
 	// Check required fields
 	if jwk.N == "" {
-		return nil, fmt.Errorf("missing required field 'n' (modulus) in JWK")
+		return nil, errors.New("missing required field 'n' (modulus) in JWK")
 	}
 	if jwk.E == "" {
-		return nil, fmt.Errorf("missing required field 'e' (exponent) in JWK")
+		return nil, errors.New("missing required field 'e' (exponent) in JWK")
 	}
 
 	// Decode base64url encoded n and e

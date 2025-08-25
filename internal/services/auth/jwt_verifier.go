@@ -132,7 +132,7 @@ func (v *JWTVerifier) validateClaims(claims *Claims) error {
 	if claims.ExpiresAt == 0 {
 		return domain.ErrInvalidTokenClaims
 	}
-	
+
 	if claims.IssuedAt == 0 {
 		return domain.ErrInvalidTokenClaims
 	}
