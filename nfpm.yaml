@@ -31,44 +31,49 @@ contents:
       mode: 0755
 
 scripts:
-  preinstall: |
+  preinstall: >-
     #!/bin/sh
+
     set -e
-    # Create system user and group
+
     if ! id vm-proxy-auth >/dev/null 2>&1; then
       useradd --system --no-create-home --shell /bin/false vm-proxy-auth 2>/dev/null || true
     fi
-  postinstall: |
+  postinstall: >-
     #!/bin/sh
+
     set -e
-    # Set proper ownership
+
     if [ -d "/var/log/vm-proxy-auth" ]; then
       chown -R vm-proxy-auth:vm-proxy-auth /var/log/vm-proxy-auth || true
     fi
+
     if [ -d "/etc/vm-proxy-auth" ]; then
       chown vm-proxy-auth:vm-proxy-auth /etc/vm-proxy-auth || true
     fi
-    # Enable systemd service if systemctl is available
+
     if command -v systemctl >/dev/null 2>&1; then
       systemctl daemon-reload || true
       systemctl enable vm-proxy-auth || true
     fi
-  preremove: |
+  preremove: >-
     #!/bin/sh
+
     set -e
-    # Stop and disable service if systemctl is available
+
     if command -v systemctl >/dev/null 2>&1; then
       systemctl stop vm-proxy-auth || true
       systemctl disable vm-proxy-auth || true
     fi
-  postremove: |
+  postremove: >-
     #!/bin/sh
+
     set -e
-    # Reload systemd if available
+
     if command -v systemctl >/dev/null 2>&1; then
       systemctl daemon-reload || true
     fi
-    # Remove user if no other packages need it
+
     if id vm-proxy-auth >/dev/null 2>&1; then
       userdel vm-proxy-auth >/dev/null 2>&1 || true
     fi
