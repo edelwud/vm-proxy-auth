@@ -14,7 +14,8 @@ import (
 
 // Service implements domain.TenantService using secure OR-based tenant filtering.
 type Service struct {
-	config         config.UpstreamConfig
+	upstreamConfig config.UpstreamSettings
+	tenantConfig   config.TenantFilterSettings
 	logger         domain.Logger
 	orQueryBuilder *filterstrategies.ORQueryBuilder
 	metrics        domain.MetricsService
@@ -22,12 +23,14 @@ type Service struct {
 
 // NewService creates a new tenant service.
 func NewService(
-	cfg *config.UpstreamConfig,
+	upstreamCfg *config.UpstreamSettings,
+	tenantCfg *config.TenantFilterSettings,
 	logger domain.Logger,
 	metrics domain.MetricsService,
 ) domain.TenantService {
 	return &Service{
-		config:         *cfg,
+		upstreamConfig: *upstreamCfg,
+		tenantConfig:   *tenantCfg,
 		logger:         logger,
 		orQueryBuilder: filterstrategies.NewORQueryBuilder(logger),
 		metrics:        metrics,
@@ -52,25 +55,25 @@ func (s *Service) FilterQuery(
 		domain.Field{Key: "original_query", Value: query},
 		domain.Field{Key: "vm_tenants", Value: fmt.Sprintf("%v", user.VMTenants)},
 		domain.Field{Key: "vm_tenant_count", Value: len(user.VMTenants)},
-		domain.Field{Key: "use_project_id", Value: s.config.UseProjectID},
+		domain.Field{Key: "use_project_id", Value: s.tenantConfig.Labels.UseProjectID},
 	)
 
 	// Validate strategy configuration
-	strategy := domain.TenantFilterStrategy(s.config.TenantFilter.Strategy)
+	strategy := domain.TenantFilterStrategy(s.tenantConfig.Strategy)
 	if !strategy.IsValid() {
 		s.logger.Error("Invalid tenant filter strategy configured",
-			domain.Field{Key: "configured_strategy", Value: s.config.TenantFilter.Strategy},
+			domain.Field{Key: "configured_strategy", Value: s.tenantConfig.Strategy},
 			domain.Field{Key: "valid_strategies", Value: "or_conditions"})
 		return "", fmt.Errorf(
 			"invalid tenant filter strategy: %s (only 'or_conditions' is supported)",
-			s.config.TenantFilter.Strategy,
+			s.tenantConfig.Strategy,
 		)
 	}
 
 	var filteredQuery string
 	var err error
 
-	filteredQuery, err = s.orQueryBuilder.BuildSecureQuery(query, user.VMTenants, &s.config)
+	filteredQuery, err = s.orQueryBuilder.BuildSecureQuery(query, user.VMTenants, &s.upstreamConfig, &s.tenantConfig)
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -130,9 +133,8 @@ func (s *Service) DetermineTargetTenant(
 		return "", domain.ErrNoVMTenants
 	}
 
-	// Check for explicit tenant header (X-Prometheus-Tenant or custom header)
+	// Check for explicit tenant header (X-Prometheus-Tenant or standard headers)
 	tenantHeaders := []string{
-		s.config.TenantHeader,
 		"X-Prometheus-Tenant",
 		"X-Tenant-ID",
 	}

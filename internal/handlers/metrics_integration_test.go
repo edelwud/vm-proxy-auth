@@ -22,19 +22,30 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 	logger := &testutils.MockLogger{}
 	metricsService := metrics.NewService(logger)
 
-	// Create auth service with invalid config to force authentication failure
-	authConfig := config.AuthConfig{
-		JWTSecret: "test-secret",
+	// Create auth service with config
+	authConfig := config.AuthSettings{
+		JWT: config.JWTSettings{
+			Algorithm: "HS256",
+			Secret:    "test-secret",
+		},
 	}
-	authService := auth.NewService(authConfig, []config.TenantMapping{}, logger, metricsService)
+	authService := auth.NewService(authConfig, []config.TenantMap{}, logger, metricsService)
 
 	// Create other services
-	upstreamConfig := config.UpstreamConfig{
-		URL:          "http://localhost:8428",
-		TenantLabel:  "vm_account_id",
-		ProjectLabel: "vm_project_id",
+	upstreamConfig := config.UpstreamSettings{
+		URL: "http://localhost:8428",
 	}
-	tenantService := tenant.NewService(&upstreamConfig, logger, metricsService)
+
+	tenantConfig := config.TenantFilterSettings{
+		Strategy: "or_conditions",
+		Labels: config.TenantFilterLabels{
+			AccountLabel: "vm_account_id",
+			ProjectLabel: "vm_project_id",
+			UseProjectID: true,
+		},
+	}
+
+	tenantService := tenant.NewService(&upstreamConfig, &tenantConfig, logger, metricsService)
 	accessService := access.NewService(logger)
 	proxyService := proxy.NewService("http://localhost:8428", 30*time.Second, logger, metricsService)
 

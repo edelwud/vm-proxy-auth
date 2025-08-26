@@ -14,8 +14,8 @@ import (
 
 // Service implements domain.AuthService using clean architecture.
 type Service struct {
-	config     config.AuthConfig
-	tenantMaps []config.TenantMapping
+	config     config.AuthSettings
+	tenantMaps []config.TenantMap
 	verifier   *JWTVerifier
 	logger     domain.Logger
 	metrics    domain.MetricsService
@@ -30,8 +30,8 @@ type cachedUser struct {
 
 // NewService creates a new auth service.
 func NewService(
-	cfg config.AuthConfig,
-	tenantMaps []config.TenantMapping,
+	cfg config.AuthSettings,
+	tenantMaps []config.TenantMap,
 	logger domain.Logger,
 	metrics domain.MetricsService,
 ) domain.AuthService {
@@ -39,12 +39,12 @@ func NewService(
 	var verifier *JWTVerifier
 
 	switch {
-	case cfg.JWTSecret != "":
+	case cfg.JWT.Secret != "":
 		// Use secret-based verification (typically HS256)
-		verifier = NewJWTVerifier(nil, []byte(cfg.JWTSecret), cfg.JWTAlgorithm)
-	case cfg.JWKSURL != "":
+		verifier = NewJWTVerifier(nil, []byte(cfg.JWT.Secret), cfg.JWT.Algorithm)
+	case cfg.JWT.JwksURL != "":
 		// Use JWKS-based verification (typically RS256)
-		verifier = NewJWKSVerifier(cfg.JWKSURL, cfg.JWTAlgorithm, cfg.CacheTTL)
+		verifier = NewJWKSVerifier(cfg.JWT.JwksURL, cfg.JWT.Algorithm, cfg.JWT.CacheTTL)
 	default:
 		// Error: must have either secret or JWKS URL
 		panic("JWT authentication requires either jwt_secret or jwks_url to be configured")
@@ -56,7 +56,7 @@ func NewService(
 		verifier:   verifier,
 		logger:     logger,
 		metrics:    metrics,
-		cacheTTL:   cfg.CacheTTL,
+		cacheTTL:   cfg.JWT.CacheTTL,
 	}
 }
 
@@ -166,8 +166,7 @@ func (s *Service) determineUserPermissions(
 	for _, mapping := range s.tenantMaps {
 		if s.hasGroupMatch(userGroups, mapping.Groups) {
 			hasMatchingGroups = true
-			// Add legacy tenants from this mapping
-			allowedTenants = append(allowedTenants, mapping.Tenants...)
+			// Add VictoriaMetrics tenants from mapping (legacy tenants removed)
 
 			// Add VictoriaMetrics tenants if specified
 			for _, vmMapping := range mapping.VMTenants {

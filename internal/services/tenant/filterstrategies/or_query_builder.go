@@ -36,7 +36,8 @@ func NewORQueryBuilder(logger domain.Logger) *ORQueryBuilder {
 func (b *ORQueryBuilder) BuildSecureQuery(
 	originalQuery string,
 	tenants []domain.VMTenant,
-	cfg *config.UpstreamConfig,
+	upstreamCfg *config.UpstreamSettings,
+	tenantCfg *config.TenantFilterSettings,
 ) (string, error) {
 	if len(tenants) == 0 {
 		return "", domain.ErrNoVMTenantsForFiltering
@@ -45,7 +46,7 @@ func (b *ORQueryBuilder) BuildSecureQuery(
 	if len(tenants) == 1 {
 		// Single tenant - inject labels directly without OR
 		promqlInjector := NewPromQLTenantInjector(b.logger)
-		return promqlInjector.InjectTenantLabels(originalQuery, tenants, cfg)
+		return promqlInjector.InjectTenantLabels(originalQuery, tenants, upstreamCfg, tenantCfg)
 	}
 
 	// Parse the original query
@@ -55,7 +56,7 @@ func (b *ORQueryBuilder) BuildSecureQuery(
 	}
 
 	// Create OR expression for multiple tenants
-	orExpr := b.createSecureORExpression(expr, tenants, cfg)
+	orExpr := b.createSecureORExpression(expr, tenants, tenantCfg)
 
 	result := orExpr.String()
 
@@ -72,15 +73,15 @@ func (b *ORQueryBuilder) BuildSecureQuery(
 func (b *ORQueryBuilder) createSecureORExpression(
 	originalExpr parser.Expr,
 	tenants []domain.VMTenant,
-	cfg *config.UpstreamConfig,
+	tenantCfg *config.TenantFilterSettings,
 ) parser.Expr {
 	// Group tenants for optimization
-	tenantGroups := b.optimizeGroups(tenants, cfg)
+	tenantGroups := b.optimizeGroups(tenants, tenantCfg)
 
 	if len(tenantGroups) == 1 {
 		// Only one effective tenant group - no OR needed
 		// Still need to inject tenant to the expression
-		return b.injectTenantToExpression(originalExpr, tenantGroups[0], cfg)
+		return b.injectTenantToExpression(originalExpr, tenantGroups[0], tenantCfg)
 	}
 
 	// Create OR expressions for each tenant group
@@ -88,7 +89,7 @@ func (b *ORQueryBuilder) createSecureORExpression(
 
 	for _, group := range tenantGroups {
 		clonedExpr := b.cloneExpression(originalExpr)
-		modifiedExpr := b.injectTenantToExpression(clonedExpr, group, cfg)
+		modifiedExpr := b.injectTenantToExpression(clonedExpr, group, tenantCfg)
 		orExpressions = append(orExpressions, modifiedExpr)
 	}
 
@@ -116,7 +117,7 @@ type Group struct {
 // If a tenant has project_id=".*", it grants access to all projects in that account.
 func (b *ORQueryBuilder) optimizeGroups(
 	tenants []domain.VMTenant,
-	_ *config.UpstreamConfig,
+	_ *config.TenantFilterSettings,
 ) []Group {
 	accountGroups := make(map[string][]string)
 	accountWildcards := make(map[string]bool)
@@ -199,14 +200,14 @@ func (b *ORQueryBuilder) cloneExpression(expr parser.Expr) parser.Expr {
 func (b *ORQueryBuilder) injectTenantToExpression(
 	expr parser.Expr,
 	group Group,
-	cfg *config.UpstreamConfig,
+	tenantCfg *config.TenantFilterSettings,
 ) parser.Expr {
-	tenantLabel := cfg.TenantLabel
+	tenantLabel := tenantCfg.Labels.AccountLabel
 	if tenantLabel == "" {
 		tenantLabel = defaultTenantLabel
 	}
 
-	projectLabel := cfg.ProjectLabel
+	projectLabel := tenantCfg.Labels.ProjectLabel
 	if projectLabel == "" {
 		projectLabel = defaultProjectLabel
 	}
@@ -214,7 +215,7 @@ func (b *ORQueryBuilder) injectTenantToExpression(
 	// Walk the AST and inject tenant labels
 	parser.Inspect(expr, func(node parser.Node, _ []parser.Node) error {
 		if vs, ok := node.(*parser.VectorSelector); ok {
-			b.injectTenantToVectorSelector(vs, group, tenantLabel, projectLabel, cfg.UseProjectID)
+			b.injectTenantToVectorSelector(vs, group, tenantLabel, projectLabel, tenantCfg.Labels.UseProjectID)
 		}
 		return nil
 	})

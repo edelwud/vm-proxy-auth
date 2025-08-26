@@ -26,7 +26,8 @@ func NewPromQLTenantInjector(logger domain.Logger) *PromQLTenantInjector {
 func (p *PromQLTenantInjector) InjectTenantLabels(
 	query string,
 	vmTenants []domain.VMTenant,
-	cfg *config.UpstreamConfig,
+	_ *config.UpstreamSettings,
+	tenantCfg *config.TenantFilterSettings,
 ) (string, error) {
 	p.logger.Debug("Starting production PromQL tenant injection",
 		domain.Field{Key: "original_query", Value: query},
@@ -52,7 +53,7 @@ func (p *PromQLTenantInjector) InjectTenantLabels(
 	parser.Inspect(expr, func(node parser.Node, _ []parser.Node) error {
 		// Find Vector Selectors (metric names with optional labels)
 		if vs, ok := node.(*parser.VectorSelector); ok {
-			p.injectTenantLabelsToVectorSelector(vs, vmTenants, cfg)
+			p.injectTenantLabelsToVectorSelector(vs, vmTenants, tenantCfg)
 		}
 
 		return nil
@@ -74,15 +75,15 @@ func (p *PromQLTenantInjector) InjectTenantLabels(
 func (p *PromQLTenantInjector) injectTenantLabelsToVectorSelector(
 	vs *parser.VectorSelector,
 	vmTenants []domain.VMTenant,
-	cfg *config.UpstreamConfig,
+	tenantCfg *config.TenantFilterSettings,
 ) {
 	// Check if tenant labels already exist
-	tenantLabelName := cfg.TenantLabel
+	tenantLabelName := tenantCfg.Labels.AccountLabel
 	if tenantLabelName == "" {
 		tenantLabelName = "vm_account_id"
 	}
 
-	projectLabelName := cfg.ProjectLabel
+	projectLabelName := tenantCfg.Labels.ProjectLabel
 	if projectLabelName == "" {
 		projectLabelName = "vm_project_id"
 	}
@@ -102,7 +103,7 @@ func (p *PromQLTenantInjector) injectTenantLabelsToVectorSelector(
 	if len(vmTenants) == 1 {
 		// Single tenant - simple case
 		tenant := vmTenants[0]
-		p.addSingleTenantFilter(vs, tenant, tenantLabelName, projectLabelName, cfg.UseProjectID)
+		p.addSingleTenantFilter(vs, tenant, tenantLabelName, projectLabelName, tenantCfg.Labels.UseProjectID)
 	} else {
 		// This should not be called anymore, but kept for compatibility
 		p.logger.Warn("Using legacy multiple tenant filter method, this is not secure",
@@ -110,7 +111,7 @@ func (p *PromQLTenantInjector) injectTenantLabelsToVectorSelector(
 			domain.Field{Key: "tenant_count", Value: len(vmTenants)})
 
 		// Multiple tenants - create simple filter for first tenant
-		p.addSingleTenantFilter(vs, vmTenants[0], tenantLabelName, projectLabelName, cfg.UseProjectID)
+		p.addSingleTenantFilter(vs, vmTenants[0], tenantLabelName, projectLabelName, tenantCfg.Labels.UseProjectID)
 	}
 }
 
