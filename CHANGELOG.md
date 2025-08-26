@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-01-26
+
+### Added
+- **Viper-based configuration system** - Modern configuration management with camelCase naming
+- **Environment variable support** - Complete environment variable overrides with `VM_PROXY_AUTH_` prefix
+- **Comprehensive configuration validation** - Enhanced validation with detailed error messages
+- **Multiple configuration examples** - RS256, HS256, multi-tenancy, and testing configurations
+- **Nested configuration structures** - Clean organization of server, upstream, auth, and tenant settings
+
+### Enhanced
+- **Configuration testing** - Extensive test coverage for all configuration scenarios
+- **Default value management** - Proper defaults for all configuration parameters
+- **Error handling** - Clear validation messages for configuration issues
+- **Documentation** - Updated examples and README for new configuration format
+
+### Migration
+- **Breaking Change**: Legacy snake_case configuration format deprecated
+- **Environment Variables**: New structured environment variable support
+- **Configuration Files**: Updated all example configurations to new format
+- **Validation**: Enhanced configuration validation with specific error messages
+
+### Developer Experience
+- **camelCase Naming**: Modern Go naming conventions in configuration structs
+- **Type Safety**: Strong typing for all configuration parameters
+- **IDE Support**: Better autocomplete and validation in IDEs
+- **Documentation**: Comprehensive configuration documentation and examples
+
+### Configuration Features
+- **Nested Structures**: Organized configuration into logical sections
+- **Duration Parsing**: Automatic parsing of duration strings (e.g., "30s", "1h")
+- **Array Support**: Full support for array configurations (audiences, groups)
+- **Default Merging**: Intelligent merging of defaults, config files, and environment variables
+
+### Removed
+- **Legacy Configuration**: Removed deprecated snake_case configuration files
+- **Unused Examples**: Cleaned up obsolete configuration examples
+- **Redundant Files**: Removed duplicate and unused configuration files
+
 ## [0.2.0] - 2025-01-25
 
 ### Added
