@@ -2,7 +2,7 @@ server:
   address: "0.0.0.0:8080"
   timeouts:
     readTimeout: "30s"
-    writeTimeout: "30s"
+    writeTimeout: "30s"  
     idleTimeout: "60s"
 
 upstream:
@@ -30,41 +30,38 @@ auth:
 tenantMapping:
   - groups: ["developers", "platform-admin"]
     vmTenants:
-      - accountId: "2000"
-        # No projectId means access to all projects in account
+      - accountId: "1000"
+        projectId: "10"
     readOnly: false
     
   - groups: ["team-alpha", "dev-alpha"]
     vmTenants:
-      - accountId: "1000"  # alpha
-        projectId: "10"
-      - accountId: "1001"  # alpha-dev  
-        projectId: "11"
-      - accountId: "1002"  # alpha-staging
-        projectId: "12"
+      - accountId: "2000"
+        projectId: "20"
+      - accountId: "2000"
+        projectId: "21"
     readOnly: false
     
   - groups: ["team-beta"]
     vmTenants:
-      - accountId: "2000"  # beta
-        projectId: "20"
-      - accountId: "2001"  # beta-prod
-        projectId: "21"
+      - accountId: "3000"
+        # No projectId means access to all projects in account
     readOnly: false
     
   - groups: ["readonly-users", "auditors"]
     vmTenants:
-      - accountId: "1000"  # alpha
+      - accountId: "1000"
         projectId: "10"
-      - accountId: "2000"  # beta
+      - accountId: "2000"
         projectId: "20"
     readOnly: true
 
 tenantFilter:
   strategy: "orConditions"  # Secure OR-based filtering (recommended)
+  # strategy: "regex"       # Legacy regex filtering (deprecated)
   labels:
     accountLabel: "vm_account_id"
-    projectLabel: "vm_project_id" 
+    projectLabel: "vm_project_id"
     useProjectId: true
 
 metrics:

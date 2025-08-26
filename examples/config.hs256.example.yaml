@@ -1,12 +1,12 @@
 server:
-  address: "127.0.0.1:8080"
+  address: "0.0.0.0:8080"
   timeouts:
     readTimeout: "30s"
     writeTimeout: "30s"
     idleTimeout: "60s"
 
 upstream:
-  url: "http://localhost:9090"
+  url: "https://vmselect.example.com"
   timeout: "30s"
   retry:
     maxRetries: 3
@@ -14,14 +14,14 @@ upstream:
 
 auth:
   jwt:
-    # For RS256 with JWKS (e.g., Keycloak, Auth0)
-    algorithm: "RS256"
-    jwksUrl: "https://your-auth-server.com/.well-known/jwks.json"
+    # For HS256 with shared secret
+    algorithm: "HS256"
+    secret: "your-256-bit-secret-key-here-must-be-long-enough"
     validation:
       validateAudience: false
-      validateIssuer: false
-      requiredIssuer: "https://your-auth-server.com"
-      requiredAudience: []
+      validateIssuer: true
+      requiredIssuer: "https://your-service.com"
+      requiredAudience: ["vm-proxy-auth"]
     claims:
       userGroupsClaim: "groups"
     tokenTtl: "1h"
@@ -30,25 +30,20 @@ auth:
 tenantMapping:
   - groups: ["admin"]
     vmTenants:
-      - accountId: "*"  # Access to all accounts
+      - accountId: "1000"
+        # No projectId means access to all projects
     readOnly: false
     
   - groups: ["developers"]
     vmTenants:
-      - accountId: "1000"  # dev
+      - accountId: "2000"
         projectId: "10"
-      - accountId: "1001"  # test
-        projectId: "11"
     readOnly: false
     
   - groups: ["viewers"]
     vmTenants:
-      - accountId: "1000"  # dev
+      - accountId: "2000"
         projectId: "10"
-      - accountId: "1001"  # test
-        projectId: "11"
-      - accountId: "2000"  # prod
-        projectId: "20"
     readOnly: true
 
 tenantFilter:
