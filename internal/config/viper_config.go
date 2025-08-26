@@ -111,6 +111,7 @@ func LoadViperConfig(configPath string) (*ViperConfig, error) {
 	v.AddConfigPath(".")
 	v.AddConfigPath("./examples")
 	v.AddConfigPath("/etc/vm-proxy-auth")
+	v.AddConfigPath("$HOME/.vm-proxy-auth")
 
 	if configPath != "" {
 		v.SetConfigFile(configPath)
