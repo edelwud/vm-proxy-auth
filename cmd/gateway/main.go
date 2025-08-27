@@ -64,7 +64,7 @@ func main() {
 	}
 
 	// Initialize logger
-	appLogger := logger.NewStructuredLogger(cfg.Logging.Level, cfg.Logging.Format)
+	appLogger := logger.NewEnhancedStructuredLogger(cfg.Logging.Level, cfg.Logging.Format)
 
 	appLogger.Info("Starting vm-proxy-auth (VictoriaMetrics Proxy with Authentication)",
 		domain.Field{Key: "version", Value: version},

@@ -31,9 +31,11 @@ func NewService(
 	return &Service{
 		upstreamConfig: *upstreamCfg,
 		tenantConfig:   *tenantCfg,
-		logger:         logger,
-		orQueryBuilder: filterstrategies.NewORQueryBuilder(logger),
-		metrics:        metrics,
+		logger:         logger.With(domain.Field{Key: "component", Value: "tenant"}),
+		orQueryBuilder: filterstrategies.NewORQueryBuilder(
+			logger.With(domain.Field{Key: "component", Value: "tenant.or_query"}),
+		),
+		metrics: metrics,
 	}
 }
 

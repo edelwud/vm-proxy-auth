@@ -54,7 +54,7 @@ func NewService(
 		config:     cfg,
 		tenantMaps: tenantMaps,
 		verifier:   verifier,
-		logger:     logger,
+		logger:     logger.With(domain.Field{Key: "component", Value: "auth"}),
 		metrics:    metrics,
 		cacheTTL:   cfg.JWT.CacheTTL,
 	}

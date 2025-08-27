@@ -17,7 +17,7 @@ type HealthHandler struct {
 // NewHealthHandler creates a new health handler.
 func NewHealthHandler(logger domain.Logger, version string) *HealthHandler {
 	return &HealthHandler{
-		logger:  logger,
+		logger:  logger.With(domain.Field{Key: "component", Value: "health"}),
 		version: version,
 	}
 }

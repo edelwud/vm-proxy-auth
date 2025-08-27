@@ -136,6 +136,47 @@ type Field struct {
 	Value interface{}
 }
 
+// LogFormat represents the output format for logs.
+type LogFormat string
+
+const (
+	// LogFormatJSON outputs logs in JSON format (default for production).
+	LogFormatJSON LogFormat = "json"
+	// LogFormatLogFmt outputs logs in logfmt format (structured key=value pairs).
+	LogFormatLogFmt LogFormat = "logfmt"
+	// LogFormatPretty outputs logs in human-readable format with colors (development).
+	LogFormatPretty LogFormat = "pretty"
+	// LogFormatConsole outputs logs in simple console format (minimal output).
+	LogFormatConsole LogFormat = "console"
+)
+
+// LogLevel represents the logging level.
+type LogLevel string
+
+const (
+	// LogLevelDebug enables debug-level logging.
+	LogLevelDebug LogLevel = "debug"
+	// LogLevelInfo enables info-level logging.
+	LogLevelInfo LogLevel = "info"
+	// LogLevelWarn enables warning-level logging.
+	LogLevelWarn LogLevel = "warn"
+	// LogLevelError enables error-level logging.
+	LogLevelError LogLevel = "error"
+)
+
+// ContextualLogger provides contextual logging capabilities for specific components.
+type ContextualLogger interface {
+	Logger
+	// WithComponent creates a logger with pre-configured component context.
+	WithComponent(component string) Logger
+	// WithRequestID creates a logger with request ID context.
+	WithRequestID(requestID string) Logger
+	// WithUser creates a logger with user context.
+	WithUser(userID string) Logger
+	// WithTenant creates a logger with tenant context.
+	WithTenant(accountID, projectID string) Logger
+}
+
 // TenantFilterStrategy defines how tenant filtering should be applied to PromQL queries.
 type TenantFilterStrategy string
 

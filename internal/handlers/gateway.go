@@ -46,7 +46,7 @@ func NewGatewayHandler(
 		accessService:  accessService,
 		proxyService:   proxyService,
 		metricsService: metricsService,
-		logger:         logger,
+		logger:         logger.With(domain.Field{Key: "component", Value: "gateway"}),
 	}
 }
 
