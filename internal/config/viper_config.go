@@ -248,10 +248,13 @@ func validateViperConfig(config *ViperConfig) error {
 
 	// Logging format validation
 	switch strings.ToLower(config.Logging.Format) {
-	case "json", "text":
+	case "json", "text", "logfmt", "pretty", "console":
 		// Valid formats
 	default:
-		return fmt.Errorf("unsupported logging format: %s (supported: json, text)", config.Logging.Format)
+		return fmt.Errorf(
+			"unsupported logging format: %s (supported: json, text, logfmt, pretty, console)",
+			config.Logging.Format,
+		)
 	}
 
 	return nil
