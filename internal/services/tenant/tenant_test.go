@@ -19,16 +19,20 @@ func TestService_FilterQuery_ORStrategy(t *testing.T) {
 	logger := &testutils.MockLogger{}
 	metrics := &MockMetricsService{}
 
-	cfg := &config.UpstreamConfig{
-		TenantLabel:  "vm_account_id",
-		ProjectLabel: "vm_project_id",
-		UseProjectID: true,
-		TenantFilter: config.TenantFilterConfig{
-			Strategy: "or_conditions", // Use secure OR strategy
+	upstreamCfg := &config.UpstreamSettings{
+		URL: "https://test.example.com",
+	}
+
+	tenantCfg := &config.TenantFilterSettings{
+		Strategy: "or_conditions", // Use secure OR strategy
+		Labels: config.TenantFilterLabels{
+			AccountLabel: "vm_account_id",
+			ProjectLabel: "vm_project_id",
+			UseProjectID: true,
 		},
 	}
 
-	service := tenant.NewService(cfg, logger, metrics)
+	service := tenant.NewService(upstreamCfg, tenantCfg, logger, metrics)
 
 	user := &domain.User{
 		ID: "test-user",
@@ -55,16 +59,20 @@ func TestService_FilterQuery_SingleTenant(t *testing.T) {
 	logger := &testutils.MockLogger{}
 	metrics := &MockMetricsService{}
 
-	cfg := &config.UpstreamConfig{
-		TenantLabel:  "vm_account_id",
-		ProjectLabel: "vm_project_id",
-		UseProjectID: true,
-		TenantFilter: config.TenantFilterConfig{
-			Strategy: "or_conditions", // OR strategy configured
+	upstreamCfg := &config.UpstreamSettings{
+		URL: "https://test.example.com",
+	}
+
+	tenantCfg := &config.TenantFilterSettings{
+		Strategy: "or_conditions", // OR strategy configured
+		Labels: config.TenantFilterLabels{
+			AccountLabel: "vm_account_id",
+			ProjectLabel: "vm_project_id",
+			UseProjectID: true,
 		},
 	}
 
-	service := tenant.NewService(cfg, logger, metrics)
+	service := tenant.NewService(upstreamCfg, tenantCfg, logger, metrics)
 
 	user := &domain.User{
 		ID: "test-user",
@@ -90,16 +98,20 @@ func TestService_FilterQuery_ComplexQuery_ORStrategy(t *testing.T) {
 	logger := &testutils.MockLogger{}
 	metrics := &MockMetricsService{}
 
-	cfg := &config.UpstreamConfig{
-		TenantLabel:  "vm_account_id",
-		ProjectLabel: "vm_project_id",
-		UseProjectID: true,
-		TenantFilter: config.TenantFilterConfig{
-			Strategy: "or_conditions",
+	upstreamCfg := &config.UpstreamSettings{
+		URL: "https://test.example.com",
+	}
+
+	tenantCfg := &config.TenantFilterSettings{
+		Strategy: "or_conditions",
+		Labels: config.TenantFilterLabels{
+			AccountLabel: "vm_account_id",
+			ProjectLabel: "vm_project_id",
+			UseProjectID: true,
 		},
 	}
 
-	service := tenant.NewService(cfg, logger, metrics)
+	service := tenant.NewService(upstreamCfg, tenantCfg, logger, metrics)
 
 	user := &domain.User{
 		ID: "test-user",

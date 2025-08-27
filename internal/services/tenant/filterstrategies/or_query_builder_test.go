@@ -118,13 +118,20 @@ func TestORQueryBuilder_BuildSecureQuery(t *testing.T) {
 			logger := &testutils.MockLogger{}
 			builder := filterstrategies.NewORQueryBuilder(logger)
 
-			cfg := &config.UpstreamConfig{
-				TenantLabel:  "vm_account_id",
-				ProjectLabel: "vm_project_id",
-				UseProjectID: tt.useProject,
+			upstreamCfg := &config.UpstreamSettings{
+				URL: "https://test.example.com",
 			}
 
-			result, err := builder.BuildSecureQuery(tt.query, tt.tenants, cfg)
+			tenantCfg := &config.TenantFilterSettings{
+				Strategy: "or_conditions",
+				Labels: config.TenantFilterLabels{
+					AccountLabel: "vm_account_id",
+					ProjectLabel: "vm_project_id",
+					UseProjectID: tt.useProject,
+				},
+			}
+
+			result, err := builder.BuildSecureQuery(tt.query, tt.tenants, upstreamCfg, tenantCfg)
 
 			if tt.expectError {
 				assert.Error(t, err)

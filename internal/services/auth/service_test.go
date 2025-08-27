@@ -20,18 +20,19 @@ func TestNewService_WithSecretAuth(t *testing.T) {
 	logger := &testutils.MockLogger{}
 	metrics := &MockMetricsService{}
 
-	cfg := config.AuthConfig{
-		Type:         "jwt",
-		JWTSecret:    "test-secret-key",
-		JWTAlgorithm: "HS256",
-		TokenTTL:     time.Hour,
-		CacheTTL:     5 * time.Minute,
+	cfg := config.AuthSettings{
+		JWT: config.JWTSettings{
+			Algorithm: "HS256",
+			Secret:    "test-secret-key",
+			TokenTTL:  time.Hour,
+			CacheTTL:  5 * time.Minute,
+		},
 	}
 
-	tenantMaps := []config.TenantMapping{
+	tenantMaps := []config.TenantMap{
 		{
 			Groups: []string{"admin"},
-			VMTenants: []config.VMTenantMapping{
+			VMTenants: []config.VMTenantInfo{
 				{AccountID: "1000", ProjectID: "admin"},
 			},
 		},
@@ -45,15 +46,16 @@ func TestNewService_WithJWKSAuth(t *testing.T) {
 	logger := &testutils.MockLogger{}
 	metrics := &MockMetricsService{}
 
-	cfg := config.AuthConfig{
-		Type:         "jwt",
-		JWKSURL:      "https://example.com/.well-known/jwks.json",
-		JWTAlgorithm: "RS256",
-		TokenTTL:     time.Hour,
-		CacheTTL:     5 * time.Minute,
+	cfg := config.AuthSettings{
+		JWT: config.JWTSettings{
+			Algorithm: "RS256",
+			JwksURL:   "https://example.com/.well-known/jwks.json",
+			TokenTTL:  time.Hour,
+			CacheTTL:  5 * time.Minute,
+		},
 	}
 
-	tenantMaps := []config.TenantMapping{}
+	tenantMaps := []config.TenantMap{}
 
 	service := auth.NewService(cfg, tenantMaps, logger, metrics)
 	require.NotNil(t, service)
@@ -63,13 +65,14 @@ func TestNewService_PanicsWithoutAuthConfig(t *testing.T) {
 	logger := &testutils.MockLogger{}
 	metrics := &MockMetricsService{}
 
-	cfg := config.AuthConfig{
-		Type:         "jwt",
-		JWTAlgorithm: "HS256",
-		// No JWTSecret or JWKSURL - should panic
+	cfg := config.AuthSettings{
+		JWT: config.JWTSettings{
+			Algorithm: "HS256",
+			// No Secret or JwksURL - should panic
+		},
 	}
 
-	tenantMaps := []config.TenantMapping{}
+	tenantMaps := []config.TenantMap{}
 
 	assert.Panics(t, func() {
 		auth.NewService(cfg, tenantMaps, logger, metrics)
@@ -80,7 +83,7 @@ func TestService_Authenticate_ValidToken(t *testing.T) {
 	tests := []struct {
 		name            string
 		tokenClaims     jwt.MapClaims
-		tenantMappings  []config.TenantMapping
+		tenantMappings  []config.TenantMap
 		expectGroups    []string
 		expectVMTenants []domain.VMTenant
 		expectError     bool
@@ -93,10 +96,10 @@ func TestService_Authenticate_ValidToken(t *testing.T) {
 				"exp":    time.Now().Add(time.Hour).Unix(),
 				"iat":    time.Now().Unix(),
 			},
-			tenantMappings: []config.TenantMapping{
+			tenantMappings: []config.TenantMap{
 				{
 					Groups: []string{"admin"},
-					VMTenants: []config.VMTenantMapping{
+					VMTenants: []config.VMTenantInfo{
 						{AccountID: "1000", ProjectID: "admin"},
 					},
 				},
@@ -113,7 +116,7 @@ func TestService_Authenticate_ValidToken(t *testing.T) {
 				"exp": time.Now().Add(time.Hour).Unix(),
 				"iat": time.Now().Unix(),
 			},
-			tenantMappings:  []config.TenantMapping{},
+			tenantMappings:  []config.TenantMap{},
 			expectGroups:    []string{},
 			expectVMTenants: []domain.VMTenant{},
 		},
@@ -142,12 +145,13 @@ func TestService_Authenticate_ValidToken(t *testing.T) {
 			logger := &testutils.MockLogger{}
 			metrics := &MockMetricsService{}
 
-			cfg := config.AuthConfig{
-				Type:         "jwt",
-				JWTSecret:    "test-secret-key",
-				JWTAlgorithm: "HS256",
-				TokenTTL:     time.Hour,
-				CacheTTL:     5 * time.Minute,
+			cfg := config.AuthSettings{
+				JWT: config.JWTSettings{
+					Algorithm: "HS256",
+					Secret:    "test-secret-key",
+					TokenTTL:  time.Hour,
+					CacheTTL:  5 * time.Minute,
+				},
 			}
 
 			service := auth.NewService(cfg, tt.tenantMappings, logger, metrics)
@@ -180,15 +184,16 @@ func TestService_Authenticate_InvalidToken(t *testing.T) {
 	logger := &testutils.MockLogger{}
 	metrics := &MockMetricsService{}
 
-	cfg := config.AuthConfig{
-		Type:         "jwt",
-		JWTSecret:    "test-secret-key",
-		JWTAlgorithm: "HS256",
-		TokenTTL:     time.Hour,
-		CacheTTL:     5 * time.Minute,
+	cfg := config.AuthSettings{
+		JWT: config.JWTSettings{
+			Algorithm: "HS256",
+			Secret:    "test-secret-key",
+			TokenTTL:  time.Hour,
+			CacheTTL:  5 * time.Minute,
+		},
 	}
 
-	service := auth.NewService(cfg, []config.TenantMapping{}, logger, metrics)
+	service := auth.NewService(cfg, []config.TenantMap{}, logger, metrics)
 
 	tests := []struct {
 		name  string
@@ -221,23 +226,23 @@ func TestService_TenantMapping_ComplexScenarios(t *testing.T) {
 	tests := []struct {
 		name             string
 		userGroups       []string
-		tenantMappings   []config.TenantMapping
+		tenantMappings   []config.TenantMap
 		expectedTenants  []domain.VMTenant
 		expectedReadOnly bool
 	}{
 		{
 			name:       "multiple group mappings",
 			userGroups: []string{"dev", "qa"},
-			tenantMappings: []config.TenantMapping{
+			tenantMappings: []config.TenantMap{
 				{
 					Groups: []string{"dev"},
-					VMTenants: []config.VMTenantMapping{
+					VMTenants: []config.VMTenantInfo{
 						{AccountID: "1000", ProjectID: "dev"},
 					},
 				},
 				{
 					Groups: []string{"qa"},
-					VMTenants: []config.VMTenantMapping{
+					VMTenants: []config.VMTenantInfo{
 						{AccountID: "2000", ProjectID: "qa"},
 					},
 				},
@@ -250,11 +255,11 @@ func TestService_TenantMapping_ComplexScenarios(t *testing.T) {
 		{
 			name:       "read-only mapping",
 			userGroups: []string{"viewers"},
-			tenantMappings: []config.TenantMapping{
+			tenantMappings: []config.TenantMap{
 				{
 					Groups:   []string{"viewers"},
 					ReadOnly: true,
-					VMTenants: []config.VMTenantMapping{
+					VMTenants: []config.VMTenantInfo{
 						{AccountID: "3000", ProjectID: "readonly"},
 					},
 				},
@@ -267,22 +272,22 @@ func TestService_TenantMapping_ComplexScenarios(t *testing.T) {
 		{
 			name:            "no matching groups",
 			userGroups:      []string{"unknown"},
-			tenantMappings:  []config.TenantMapping{},
+			tenantMappings:  []config.TenantMap{},
 			expectedTenants: []domain.VMTenant{},
 		},
 		{
 			name:       "duplicate tenant deduplication",
 			userGroups: []string{"group1", "group2"},
-			tenantMappings: []config.TenantMapping{
+			tenantMappings: []config.TenantMap{
 				{
 					Groups: []string{"group1"},
-					VMTenants: []config.VMTenantMapping{
+					VMTenants: []config.VMTenantInfo{
 						{AccountID: "1000", ProjectID: "shared"},
 					},
 				},
 				{
 					Groups: []string{"group2"},
-					VMTenants: []config.VMTenantMapping{
+					VMTenants: []config.VMTenantInfo{
 						{AccountID: "1000", ProjectID: "shared"}, // Same tenant
 					},
 				},
@@ -298,13 +303,16 @@ func TestService_TenantMapping_ComplexScenarios(t *testing.T) {
 			logger := &testutils.MockLogger{}
 			metrics := &MockMetricsService{}
 
-			cfg := config.AuthConfig{
-				Type:            "jwt",
-				JWTSecret:       "test-secret-key",
-				JWTAlgorithm:    "HS256",
-				TokenTTL:        time.Hour,
-				CacheTTL:        5 * time.Minute,
-				UserGroupsClaim: "groups",
+			cfg := config.AuthSettings{
+				JWT: config.JWTSettings{
+					Algorithm: "HS256",
+					Secret:    "test-secret-key",
+					TokenTTL:  time.Hour,
+					CacheTTL:  5 * time.Minute,
+					Claims: config.JWTClaimsSettings{
+						UserGroupsClaim: "groups",
+					},
+				},
 			}
 
 			service := auth.NewService(cfg, tt.tenantMappings, logger, metrics)
@@ -336,15 +344,16 @@ func TestService_UserCaching(t *testing.T) {
 	logger := &testutils.MockLogger{}
 	metrics := &MockMetricsService{}
 
-	cfg := config.AuthConfig{
-		Type:         "jwt",
-		JWTSecret:    "test-secret-key",
-		JWTAlgorithm: "HS256",
-		TokenTTL:     time.Hour,
-		CacheTTL:     100 * time.Millisecond, // Short TTL for testing
+	cfg := config.AuthSettings{
+		JWT: config.JWTSettings{
+			Algorithm: "HS256",
+			Secret:    "test-secret-key",
+			TokenTTL:  time.Hour,
+			CacheTTL:  100 * time.Millisecond, // Short TTL for testing
+		},
 	}
 
-	service := auth.NewService(cfg, []config.TenantMapping{}, logger, metrics)
+	service := auth.NewService(cfg, []config.TenantMap{}, logger, metrics)
 
 	// Create test token
 	tokenClaims := jwt.MapClaims{

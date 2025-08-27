@@ -310,7 +310,7 @@ auth:
 logging:
   format: "invalid"
 `,
-			expectedError: "unsupported logging format: invalid",
+			expectedError: "unsupported logging format: invalid (supported: json, text, logfmt, pretty, console)",
 		},
 	}
 

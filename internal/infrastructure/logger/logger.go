@@ -4,6 +4,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
+	"github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger/formatters"
 )
 
 // StructuredLogger wraps logrus to implement domain.Logger interface.
@@ -12,7 +13,7 @@ type StructuredLogger struct {
 	fields logrus.Fields
 }
 
-// NewStructuredLogger creates a new structured logger.
+// NewStructuredLogger creates a new structured logger with enhanced format support.
 func NewStructuredLogger(level, format string) domain.Logger {
 	logger := logrus.New()
 
@@ -30,20 +31,32 @@ func NewStructuredLogger(level, format string) domain.Logger {
 		logger.SetLevel(logrus.InfoLevel)
 	}
 
-	// Set format
-	if format == "json" {
+	// Set formatter based on format
+	switch format {
+	case "json":
 		logger.SetFormatter(&logrus.JSONFormatter{
-			TimestampFormat: "2006-01-02T15:04:05.000Z07:00",
+			TimestampFormat: "2006-01-02T15:04:05.000Z",
 			FieldMap: logrus.FieldMap{
-				logrus.FieldKeyTime:  "timestamp",
+				logrus.FieldKeyTime:  "time",
 				logrus.FieldKeyLevel: "level",
-				logrus.FieldKeyMsg:   "message",
+				logrus.FieldKeyMsg:   "msg",
 			},
 		})
-	} else {
-		logger.SetFormatter(&logrus.TextFormatter{
-			TimestampFormat: "2006-01-02 15:04:05",
-			FullTimestamp:   true,
+	case "logfmt":
+		logger.SetFormatter(formatters.NewLogFmtFormatter())
+	case "pretty":
+		logger.SetFormatter(formatters.NewPrettyFormatter())
+	case "console":
+		logger.SetFormatter(formatters.NewConsoleFormatter())
+	default:
+		// Default to JSON
+		logger.SetFormatter(&logrus.JSONFormatter{
+			TimestampFormat: "2006-01-02T15:04:05.000Z",
+			FieldMap: logrus.FieldMap{
+				logrus.FieldKeyTime:  "time",
+				logrus.FieldKeyLevel: "level",
+				logrus.FieldKeyMsg:   "msg",
+			},
 		})
 	}
 
@@ -136,4 +149,45 @@ func Method(method string) domain.Field {
 
 func StatusCode(code int) domain.Field {
 	return domain.Field{Key: "status_code", Value: code}
+}
+
+// EnhancedStructuredLogger provides contextual logging capabilities.
+type EnhancedStructuredLogger struct {
+	domain.Logger
+}
+
+// NewEnhancedStructuredLogger creates a logger with contextual capabilities.
+func NewEnhancedStructuredLogger(level, format string) *EnhancedStructuredLogger {
+	baseLogger := NewStructuredLogger(level, format)
+	return &EnhancedStructuredLogger{
+		Logger: baseLogger,
+	}
+}
+
+// WithComponent creates a logger with pre-configured component context.
+func (e *EnhancedStructuredLogger) WithComponent(component string) domain.Logger {
+	return e.Logger.With(domain.Field{Key: "component", Value: component})
+}
+
+// WithRequestID creates a logger with request ID context.
+func (e *EnhancedStructuredLogger) WithRequestID(requestID string) domain.Logger {
+	return e.Logger.With(domain.Field{Key: "request_id", Value: requestID})
+}
+
+// WithUser creates a logger with user context.
+func (e *EnhancedStructuredLogger) WithUser(userID string) domain.Logger {
+	return e.Logger.With(domain.Field{Key: "user_id", Value: userID})
+}
+
+// WithTenant creates a logger with tenant context.
+func (e *EnhancedStructuredLogger) WithTenant(accountID, projectID string) domain.Logger {
+	fields := []domain.Field{
+		{Key: "tenant_account", Value: accountID},
+	}
+
+	if projectID != "" {
+		fields = append(fields, domain.Field{Key: "tenant_project", Value: projectID})
+	}
+
+	return e.Logger.With(fields...)
 }

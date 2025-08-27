@@ -32,7 +32,7 @@ func NewService(
 		client: &http.Client{
 			Timeout: timeout,
 		},
-		logger:  logger,
+		logger:  logger.With(domain.Field{Key: "component", Value: "proxy"}),
 		metrics: metrics,
 	}
 }

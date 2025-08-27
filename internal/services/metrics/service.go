@@ -119,7 +119,7 @@ func NewService(logger domain.Logger) *Service {
 	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
 	return &Service{
-		logger:   logger,
+		logger:   logger.With(domain.Field{Key: "component", Value: "metrics"}),
 		registry: registry,
 		metrics:  metrics,
 	}

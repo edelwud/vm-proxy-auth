@@ -44,7 +44,7 @@ func main() {
 	}
 
 	// Load configuration
-	cfg, err := config.Load(*configPath)
+	cfg, err := config.LoadViperConfig(*configPath)
 	if err != nil {
 		// For configuration load errors, we output to stderr before logger initialization
 		// This is necessary as we can't initialize logger without configuration
@@ -64,7 +64,7 @@ func main() {
 	}
 
 	// Initialize logger
-	appLogger := logger.NewStructuredLogger(cfg.Logging.Level, cfg.Logging.Format)
+	appLogger := logger.NewEnhancedStructuredLogger(cfg.Logging.Level, cfg.Logging.Format)
 
 	appLogger.Info("Starting vm-proxy-auth (VictoriaMetrics Proxy with Authentication)",
 		domain.Field{Key: "version", Value: version},
@@ -78,8 +78,8 @@ func main() {
 
 	// Initialize all services using clean architecture
 	metricsService := metrics.NewService(appLogger)
-	authService := auth.NewService(cfg.Auth, cfg.TenantMaps, appLogger, metricsService)
-	tenantService := tenant.NewService(&cfg.Upstream, appLogger, metricsService)
+	authService := auth.NewService(cfg.Auth, cfg.TenantMapping, appLogger, metricsService)
+	tenantService := tenant.NewService(&cfg.Upstream, &cfg.TenantFilter, appLogger, metricsService)
 	accessService := access.NewService(appLogger)
 	proxyService := proxy.NewService(cfg.Upstream.URL, cfg.Upstream.Timeout, appLogger, metricsService)
 
@@ -113,9 +113,9 @@ func main() {
 	server := &http.Server{
 		Addr:         cfg.Server.Address,
 		Handler:      mux,
-		ReadTimeout:  cfg.Server.ReadTimeout,
-		WriteTimeout: cfg.Server.WriteTimeout,
-		IdleTimeout:  cfg.Server.IdleTimeout,
+		ReadTimeout:  cfg.Server.Timeouts.ReadTimeout,
+		WriteTimeout: cfg.Server.Timeouts.WriteTimeout,
+		IdleTimeout:  cfg.Server.Timeouts.IdleTimeout,
 	}
 
 	// Channel to signal server startup errors

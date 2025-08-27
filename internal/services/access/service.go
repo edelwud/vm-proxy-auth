@@ -15,7 +15,7 @@ type Service struct {
 // NewService creates a new access control service.
 func NewService(logger domain.Logger) *Service {
 	return &Service{
-		logger: logger,
+		logger: logger.With(domain.Field{Key: "component", Value: "access"}),
 	}
 }
 
