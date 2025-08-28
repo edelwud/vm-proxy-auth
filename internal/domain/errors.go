@@ -282,6 +282,12 @@ var (
 		HTTPStatus: http.StatusTooManyRequests,
 	}
 
+	ErrQueueEmpty = &AppError{
+		Code:       ErrCodeInternalError,
+		Message:    "Request queue is empty",
+		HTTPStatus: http.StatusNoContent,
+	}
+
 	ErrQueueTimeout = &AppError{
 		Code:       ErrCodeInternalError,
 		Message:    "Request timeout in queue",
