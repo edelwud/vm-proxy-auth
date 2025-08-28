@@ -395,4 +395,17 @@ func (m *MockMetricsService) RecordUpstream(context.Context, string, string, str
 func (m *MockMetricsService) RecordQueryFilter(context.Context, string, int, bool, time.Duration) {}
 func (m *MockMetricsService) RecordAuthAttempt(_ context.Context, _, _ string)                    {}
 func (m *MockMetricsService) RecordTenantAccess(context.Context, string, string, bool)            {}
-func (m *MockMetricsService) Handler() http.Handler                                               { return nil }
+
+// Backend-specific metrics
+func (m *MockMetricsService) RecordUpstreamBackend(context.Context, string, string, string, string, time.Duration, []string) {
+}
+func (m *MockMetricsService) RecordHealthCheck(context.Context, string, bool, time.Duration) {}
+func (m *MockMetricsService) RecordBackendStateChange(context.Context, string, domain.BackendState, domain.BackendState) {
+}
+func (m *MockMetricsService) RecordCircuitBreakerStateChange(context.Context, string, domain.CircuitBreakerState) {
+}
+func (m *MockMetricsService) RecordQueueOperation(context.Context, string, time.Duration, int) {}
+func (m *MockMetricsService) RecordLoadBalancerSelection(context.Context, domain.LoadBalancingStrategy, string, time.Duration) {
+}
+
+func (m *MockMetricsService) Handler() http.Handler { return nil }
