@@ -239,8 +239,8 @@ func setViperDefaults(v *viper.Viper) {
 
 // validateViperConfig validates the loaded configuration.
 func validateViperConfig(config *ViperConfig) error {
-	// Required fields validation
-	if config.Upstream.URL == "" {
+	// Check upstream configuration: either single URL or multiple upstreams
+	if config.Upstream.URL == "" && !config.IsMultipleUpstreamsEnabled() {
 		return domain.ErrUpstreamURLRequired
 	}
 
@@ -421,6 +421,7 @@ func (c *ViperConfig) ToEnhancedServiceConfig() (*EnhancedServiceConfig, error) 
 
 	return config, nil
 }
+
 
 // EnhancedServiceConfig represents the enhanced service configuration.
 // This mirrors the struct in the proxy package to avoid circular dependencies.
