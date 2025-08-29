@@ -29,7 +29,7 @@ func createTestRequest(userID string, path string, query string) *domain.ProxyRe
 	}
 
 	req := &http.Request{
-		Method: "GET",
+		Method: http.MethodGet,
 		URL:    u,
 		Header: make(http.Header),
 		Body:   io.NopCloser(strings.NewReader("")),
@@ -531,7 +531,7 @@ type MockEnhancedMetricsService struct {
 	upstreamBackendCallCount    int
 }
 
-// Add all the required methods for domain.MetricsService
+// Add all the required methods for domain.MetricsService.
 func (m *MockEnhancedMetricsService) RecordRequest(context.Context, string, string, string, time.Duration, *domain.User) {
 }
 func (m *MockEnhancedMetricsService) RecordUpstream(context.Context, string, string, string, time.Duration, []string) {

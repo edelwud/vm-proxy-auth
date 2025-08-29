@@ -334,7 +334,7 @@ func TestStateEvent_IsValid(t *testing.T) {
 	}
 }
 
-// Mock implementations for testing
+// Mock implementations for testing.
 type mockLoadBalancer struct {
 	nextBackendFunc    func(ctx context.Context) (*domain.Backend, error)
 	reportResultFunc   func(backend *domain.Backend, err error, statusCode int)
@@ -429,7 +429,7 @@ func TestLoadBalancerInterface(t *testing.T) {
 	assert.True(t, closeCalled)
 }
 
-// Mock health checker for testing
+// Mock health checker for testing.
 type mockHealthChecker struct {
 	checkHealthFunc     func(ctx context.Context, backend *domain.Backend) error
 	startMonitoringFunc func(ctx context.Context) error

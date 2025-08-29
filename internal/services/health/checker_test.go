@@ -378,7 +378,7 @@ func TestChecker_CustomHealthEndpoint(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// Helper type for tracking state changes
+// Helper type for tracking state changes.
 type stateChange struct {
 	url      string
 	oldState domain.BackendState
