@@ -34,14 +34,57 @@ type ServerTimeouts struct {
 }
 
 type UpstreamSettings struct {
+	// Legacy single upstream configuration (for backward compatibility)
 	URL     string        `mapstructure:"url"`
 	Timeout time.Duration `mapstructure:"timeout"`
 	Retry   RetrySettings `mapstructure:"retry"`
+	
+	// New multiple upstreams configuration
+	Multiple MultipleUpstreamSettings `mapstructure:"multiple"`
 }
 
 type RetrySettings struct {
 	MaxRetries int           `mapstructure:"maxRetries"`
 	RetryDelay time.Duration `mapstructure:"retryDelay"`
+}
+
+// MultipleUpstreamSettings configures multiple upstream backends.
+type MultipleUpstreamSettings struct {
+	Enabled       bool                    `mapstructure:"enabled"`
+	Backends      []BackendSettings       `mapstructure:"backends"`
+	LoadBalancing LoadBalancingSettings   `mapstructure:"loadBalancing"`
+	HealthCheck   HealthCheckSettings     `mapstructure:"healthCheck"`
+	Queue         QueueSettings           `mapstructure:"queue"`
+	Timeout       time.Duration           `mapstructure:"timeout"`
+	MaxRetries    int                     `mapstructure:"maxRetries"`
+	RetryBackoff  time.Duration           `mapstructure:"retryBackoff"`
+}
+
+// BackendSettings represents a single backend configuration.
+type BackendSettings struct {
+	URL    string `mapstructure:"url"`
+	Weight int    `mapstructure:"weight"`
+}
+
+// LoadBalancingSettings configures load balancing behavior.
+type LoadBalancingSettings struct {
+	Strategy string `mapstructure:"strategy"`
+}
+
+// HealthCheckSettings configures health check behavior.
+type HealthCheckSettings struct {
+	CheckInterval      time.Duration `mapstructure:"checkInterval"`
+	Timeout            time.Duration `mapstructure:"timeout"`
+	HealthyThreshold   int           `mapstructure:"healthyThreshold"`
+	UnhealthyThreshold int           `mapstructure:"unhealthyThreshold"`
+	HealthEndpoint     string        `mapstructure:"healthEndpoint"`
+}
+
+// QueueSettings configures request queuing behavior.
+type QueueSettings struct {
+	Enabled bool          `mapstructure:"enabled"`
+	MaxSize int           `mapstructure:"maxSize"`
+	Timeout time.Duration `mapstructure:"timeout"`
 }
 
 type AuthSettings struct {
@@ -258,6 +301,164 @@ func validateViperConfig(config *ViperConfig) error {
 	}
 
 	return nil
+}
+
+// IsMultipleUpstreamsEnabled returns true if multiple upstream configuration is enabled.
+func (c *ViperConfig) IsMultipleUpstreamsEnabled() bool {
+	return c.Upstream.Multiple.Enabled && len(c.Upstream.Multiple.Backends) > 0
+}
+
+// ValidateMultipleUpstreams validates the multiple upstream configuration.
+func (c *ViperConfig) ValidateMultipleUpstreams() error {
+	if !c.Upstream.Multiple.Enabled {
+		return nil // Skip validation if not enabled
+	}
+
+	if len(c.Upstream.Multiple.Backends) == 0 {
+		return errors.New("multiple upstreams enabled but no backends configured")
+	}
+
+	// Validate strategy
+	strategy := c.Upstream.Multiple.LoadBalancing.Strategy
+	validStrategies := []string{"round-robin", "weighted-round-robin", "least-connections"}
+	isValidStrategy := false
+	for _, valid := range validStrategies {
+		if strategy == valid {
+			isValidStrategy = true
+			break
+		}
+	}
+	if !isValidStrategy {
+		return fmt.Errorf("invalid load balancing strategy: %s. Valid strategies: %v", strategy, validStrategies)
+	}
+
+	// Validate backends
+	for i, backend := range c.Upstream.Multiple.Backends {
+		if backend.URL == "" {
+			return fmt.Errorf("backend %d: URL is required", i)
+		}
+		if backend.Weight < 0 {
+			return fmt.Errorf("backend %d: weight must be non-negative, got %d", i, backend.Weight)
+		}
+	}
+
+	// Validate timeouts
+	if c.Upstream.Multiple.Timeout <= 0 {
+		return fmt.Errorf("multiple upstreams timeout must be positive, got %v", c.Upstream.Multiple.Timeout)
+	}
+
+	if c.Upstream.Multiple.HealthCheck.CheckInterval < 0 {
+		return fmt.Errorf("health check interval cannot be negative, got %v", c.Upstream.Multiple.HealthCheck.CheckInterval)
+	}
+
+	return nil
+}
+
+// ToEnhancedServiceConfig converts the multiple upstream settings to EnhancedServiceConfig.
+func (c *ViperConfig) ToEnhancedServiceConfig() (*EnhancedServiceConfig, error) {
+	if !c.IsMultipleUpstreamsEnabled() {
+		return nil, errors.New("multiple upstreams not enabled")
+	}
+
+	if err := c.ValidateMultipleUpstreams(); err != nil {
+		return nil, fmt.Errorf("invalid multiple upstream configuration: %w", err)
+	}
+
+	config := &EnhancedServiceConfig{
+		Backends:       make([]BackendConfig, len(c.Upstream.Multiple.Backends)),
+		LoadBalancing:  LoadBalancingConfig{Strategy: domain.LoadBalancingStrategy(c.Upstream.Multiple.LoadBalancing.Strategy)},
+		Timeout:        c.Upstream.Multiple.Timeout,
+		MaxRetries:     c.Upstream.Multiple.MaxRetries,
+		RetryBackoff:   c.Upstream.Multiple.RetryBackoff,
+		EnableQueueing: c.Upstream.Multiple.Queue.Enabled,
+	}
+
+	// Convert backends
+	for i, backend := range c.Upstream.Multiple.Backends {
+		weight := backend.Weight
+		if weight <= 0 {
+			weight = 1 // Default weight
+		}
+		config.Backends[i] = BackendConfig{
+			URL:    backend.URL,
+			Weight: weight,
+		}
+	}
+
+	// Convert health check settings
+	config.HealthCheck = HealthCheckConfig{
+		CheckInterval:      c.Upstream.Multiple.HealthCheck.CheckInterval,
+		Timeout:            c.Upstream.Multiple.HealthCheck.Timeout,
+		HealthyThreshold:   c.Upstream.Multiple.HealthCheck.HealthyThreshold,
+		UnhealthyThreshold: c.Upstream.Multiple.HealthCheck.UnhealthyThreshold,
+		HealthEndpoint:     c.Upstream.Multiple.HealthCheck.HealthEndpoint,
+	}
+
+	// Convert queue settings
+	if c.Upstream.Multiple.Queue.Enabled {
+		config.Queue = QueueConfig{
+			MaxSize: c.Upstream.Multiple.Queue.MaxSize,
+			Timeout: c.Upstream.Multiple.Queue.Timeout,
+		}
+	}
+
+	// Set defaults
+	if config.MaxRetries <= 0 {
+		config.MaxRetries = 3
+	}
+	if config.RetryBackoff <= 0 {
+		config.RetryBackoff = 100 * time.Millisecond
+	}
+	if config.HealthCheck.HealthEndpoint == "" {
+		config.HealthCheck.HealthEndpoint = "/health"
+	}
+	if config.Queue.MaxSize <= 0 && config.EnableQueueing {
+		config.Queue.MaxSize = 1000
+	}
+	if config.Queue.Timeout <= 0 && config.EnableQueueing {
+		config.Queue.Timeout = 5 * time.Second
+	}
+
+	return config, nil
+}
+
+// EnhancedServiceConfig represents the enhanced service configuration.
+// This mirrors the struct in the proxy package to avoid circular dependencies.
+type EnhancedServiceConfig struct {
+	Backends       []BackendConfig      `yaml:"backends"`
+	LoadBalancing  LoadBalancingConfig  `yaml:"load_balancing"`
+	HealthCheck    HealthCheckConfig    `yaml:"health_check"`
+	Queue          QueueConfig          `yaml:"queue"`
+	Timeout        time.Duration        `yaml:"timeout"`
+	MaxRetries     int                  `yaml:"max_retries"`
+	RetryBackoff   time.Duration        `yaml:"retry_backoff"`
+	EnableQueueing bool                 `yaml:"enable_queueing"`
+}
+
+// BackendConfig represents configuration for a single backend.
+type BackendConfig struct {
+	URL    string `yaml:"url"`
+	Weight int    `yaml:"weight"`
+}
+
+// LoadBalancingConfig holds load balancing configuration.
+type LoadBalancingConfig struct {
+	Strategy domain.LoadBalancingStrategy `yaml:"strategy"`
+}
+
+// HealthCheckConfig holds health check configuration.
+type HealthCheckConfig struct {
+	CheckInterval      time.Duration `yaml:"check_interval"`
+	Timeout            time.Duration `yaml:"timeout"`
+	HealthyThreshold   int           `yaml:"healthy_threshold"`
+	UnhealthyThreshold int           `yaml:"unhealthy_threshold"`
+	HealthEndpoint     string        `yaml:"health_endpoint"`
+}
+
+// QueueConfig holds request queue configuration.
+type QueueConfig struct {
+	MaxSize int           `yaml:"max_size"`
+	Timeout time.Duration `yaml:"timeout"`
 }
 
 // ToLegacyConfig converts ViperConfig to legacy Config for backward compatibility during migration.

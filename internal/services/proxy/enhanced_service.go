@@ -102,8 +102,9 @@ func NewEnhancedService(
 		metrics: metrics,
 	}
 
-	// Create load balancer based on strategy
-	loadBalancer, err := createLoadBalancer(config.LoadBalancing.Strategy, backends, logger)
+	// Create load balancer using factory
+	lbFactory := loadbalancer.NewFactory(logger)
+	loadBalancer, err := lbFactory.CreateLoadBalancer(config.LoadBalancing.Strategy, backends)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create load balancer: %w", err)
 	}
@@ -136,19 +137,6 @@ func NewEnhancedService(
 	return service, nil
 }
 
-// createLoadBalancer creates a load balancer based on the specified strategy.
-func createLoadBalancer(strategy domain.LoadBalancingStrategy, backends []domain.Backend, logger domain.Logger) (domain.LoadBalancer, error) {
-	switch strategy {
-	case domain.LoadBalancingRoundRobin:
-		return loadbalancer.NewRoundRobinBalancer(backends, logger), nil
-	case domain.LoadBalancingWeightedRoundRobin:
-		return loadbalancer.NewWeightedRoundRobinBalancer(backends, logger), nil
-	case domain.LoadBalancingLeastConnections:
-		return loadbalancer.NewLeastConnectionsBalancer(backends, logger), nil
-	default:
-		return nil, fmt.Errorf("unsupported load balancing strategy: %s", strategy)
-	}
-}
 
 // Start initializes and starts the enhanced proxy service.
 func (es *EnhancedService) Start(ctx context.Context) error {
