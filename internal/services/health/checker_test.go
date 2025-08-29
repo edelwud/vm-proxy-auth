@@ -29,10 +29,10 @@ func TestChecker_CheckHealth_Success(t *testing.T) {
 	}
 
 	config := health.CheckerConfig{
-		Timeout:           time.Second,
-		HealthyThreshold:  1,
+		Timeout:            time.Second,
+		HealthyThreshold:   1,
 		UnhealthyThreshold: 1,
-		HealthEndpoint:    "/health",
+		HealthEndpoint:     "/health",
 	}
 
 	logger := testutils.NewMockLogger()
@@ -72,10 +72,10 @@ func TestChecker_CheckHealth_Failure(t *testing.T) {
 	}
 
 	config := health.CheckerConfig{
-		Timeout:           time.Second,
-		HealthyThreshold:  1,
+		Timeout:            time.Second,
+		HealthyThreshold:   1,
 		UnhealthyThreshold: 1,
-		HealthEndpoint:    "/health",
+		HealthEndpoint:     "/health",
 	}
 
 	logger := testutils.NewMockLogger()
@@ -113,10 +113,10 @@ func TestChecker_StateTransitions(t *testing.T) {
 	}
 
 	config := health.CheckerConfig{
-		Timeout:           time.Second,
-		HealthyThreshold:  2,  // Need 2 consecutive successes
+		Timeout:            time.Second,
+		HealthyThreshold:   2, // Need 2 consecutive successes
 		UnhealthyThreshold: 2, // Need 2 consecutive failures
-		HealthEndpoint:    "/health",
+		HealthEndpoint:     "/health",
 	}
 
 	logger := testutils.NewMockLogger()
@@ -170,10 +170,10 @@ func TestChecker_MaintenanceMode(t *testing.T) {
 	}
 
 	config := health.CheckerConfig{
-		Timeout:           time.Second,
-		HealthyThreshold:  1,
+		Timeout:            time.Second,
+		HealthyThreshold:   1,
 		UnhealthyThreshold: 1,
-		HealthEndpoint:    "/health",
+		HealthEndpoint:     "/health",
 	}
 
 	logger := testutils.NewMockLogger()
@@ -184,7 +184,7 @@ func TestChecker_MaintenanceMode(t *testing.T) {
 	}, logger)
 
 	ctx := context.Background()
-	
+
 	// Health check should not change maintenance state
 	checker.CheckHealth(ctx, &backends[0])
 	assert.Len(t, stateChanges, 0) // Should not change from maintenance
@@ -194,7 +194,7 @@ func TestChecker_ConcurrentChecks(t *testing.T) {
 	// Create multiple mock servers
 	servers := make([]*httptest.Server, 5)
 	backends := make([]domain.Backend, 5)
-	
+
 	for i := 0; i < 5; i++ {
 		servers[i] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Add small delay to simulate network latency
@@ -202,7 +202,7 @@ func TestChecker_ConcurrentChecks(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer servers[i].Close()
-		
+
 		backends[i] = domain.Backend{
 			URL:    servers[i].URL,
 			Weight: 1,
@@ -211,10 +211,10 @@ func TestChecker_ConcurrentChecks(t *testing.T) {
 	}
 
 	config := health.CheckerConfig{
-		Timeout:           time.Second,
-		HealthyThreshold:  1,
+		Timeout:            time.Second,
+		HealthyThreshold:   1,
 		UnhealthyThreshold: 1,
-		HealthEndpoint:    "/health",
+		HealthEndpoint:     "/health",
 	}
 
 	logger := testutils.NewMockLogger()
@@ -242,7 +242,7 @@ func TestChecker_ConcurrentChecks(t *testing.T) {
 	// Verify all checks completed
 	stats := checker.GetStats()
 	assert.Len(t, stats, 5)
-	
+
 	for _, server := range servers {
 		backendStats := stats[server.URL]
 		assert.Equal(t, int64(1), backendStats.TotalChecks)
@@ -261,11 +261,11 @@ func TestChecker_StartStopMonitoring(t *testing.T) {
 	}
 
 	config := health.CheckerConfig{
-		CheckInterval:     50 * time.Millisecond, // Fast interval for testing
-		Timeout:           time.Second,
-		HealthyThreshold:  1,
+		CheckInterval:      50 * time.Millisecond, // Fast interval for testing
+		Timeout:            time.Second,
+		HealthyThreshold:   1,
 		UnhealthyThreshold: 1,
-		HealthEndpoint:    "/health",
+		HealthEndpoint:     "/health",
 	}
 
 	logger := testutils.NewMockLogger()
@@ -313,10 +313,10 @@ func TestChecker_ContextCancellation(t *testing.T) {
 	}
 
 	config := health.CheckerConfig{
-		Timeout:           time.Second,
-		HealthyThreshold:  1,
+		Timeout:            time.Second,
+		HealthyThreshold:   1,
 		UnhealthyThreshold: 1,
-		HealthEndpoint:    "/health",
+		HealthEndpoint:     "/health",
 	}
 
 	logger := testutils.NewMockLogger()
@@ -396,10 +396,10 @@ func BenchmarkChecker_CheckHealth(b *testing.B) {
 	}
 
 	config := health.CheckerConfig{
-		Timeout:           time.Second,
-		HealthyThreshold:  1,
+		Timeout:            time.Second,
+		HealthyThreshold:   1,
 		UnhealthyThreshold: 1,
-		HealthEndpoint:    "/health",
+		HealthEndpoint:     "/health",
 	}
 
 	logger := testutils.NewMockLogger()

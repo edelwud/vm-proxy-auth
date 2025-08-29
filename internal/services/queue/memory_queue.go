@@ -10,16 +10,16 @@ import (
 
 // MemoryQueue implements a thread-safe in-memory request queue.
 type MemoryQueue struct {
-	queue        chan *domain.ProxyRequest
-	maxSize      int
-	timeout      time.Duration
-	logger       domain.Logger
-	closed       bool
-	closeMu      sync.RWMutex
+	queue         chan *domain.ProxyRequest
+	maxSize       int
+	timeout       time.Duration
+	logger        domain.Logger
+	closed        bool
+	closeMu       sync.RWMutex
 	enqueuedCount int64
 	dequeuedCount int64
 	droppedCount  int64
-	mu           sync.RWMutex
+	mu            sync.RWMutex
 }
 
 // NewMemoryQueue creates a new in-memory request queue.
@@ -73,7 +73,7 @@ func (mq *MemoryQueue) Enqueue(ctx context.Context, req *domain.ProxyRequest) er
 			domain.Field{Key: "queue_size", Value: len(mq.queue)},
 			domain.Field{Key: "max_size", Value: mq.maxSize},
 			domain.Field{Key: "dropped_total", Value: droppedCount})
-		
+
 		return domain.ErrQueueFull
 	}
 }
@@ -105,7 +105,7 @@ func (mq *MemoryQueue) Dequeue(ctx context.Context) (*domain.ProxyRequest, error
 			domain.Field{Key: "user_id", Value: req.User.ID},
 			domain.Field{Key: "queue_size", Value: len(mq.queue)},
 			domain.Field{Key: "dequeued_total", Value: dequeuedCount})
-		
+
 		return req, nil
 
 	case <-ctx.Done():
@@ -135,7 +135,7 @@ func (mq *MemoryQueue) Dequeue(ctx context.Context) (*domain.ProxyRequest, error
 				domain.Field{Key: "user_id", Value: req.User.ID},
 				domain.Field{Key: "queue_size", Value: len(mq.queue)},
 				domain.Field{Key: "dequeued_total", Value: dequeuedCount})
-			
+
 			return req, nil
 
 		case <-ctx.Done():
@@ -211,7 +211,7 @@ func (qs QueueStats) IsHealthy() bool {
 	if qs.IsClosed {
 		return false
 	}
-	
+
 	// Consider queue unhealthy if it's consistently near capacity
 	utilizationPercent := float64(qs.Size) / float64(qs.MaxSize) * 100
 	return utilizationPercent < 90 // Less than 90% full

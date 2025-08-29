@@ -137,7 +137,6 @@ func NewEnhancedService(
 	return service, nil
 }
 
-
 // Start initializes and starts the enhanced proxy service.
 func (es *EnhancedService) Start(ctx context.Context) error {
 	es.mu.Lock()

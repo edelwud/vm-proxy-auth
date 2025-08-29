@@ -57,12 +57,13 @@ upstream:
 auth:
   jwt:
     # Option 1: JWKS (JSON Web Key Set) - recommended for production
-    jwks:
-      url: "https://your-auth-provider.com/.well-known/jwks.json"
-      cacheTTL: 1h
+    # jwks:
+    #   url: "https://your-auth-provider.com/.well-known/jwks.json"
+    #   cacheTTL: 1h
     
-    # Option 2: Shared secret (for development/testing)
-    # secret: "your-jwt-secret-key"
+    # Option 2: Shared secret (for development/testing)  
+    algorithm: "HS256"
+    secret: "your-jwt-secret-key-for-demo-purposes-change-in-production"
     
     # JWT validation settings
     issuer: "your-auth-provider"
@@ -79,7 +80,7 @@ tenantMapping:
 
 # Advanced tenant filtering
 tenantFilter:
-  strategy: "or_conditions"  # or_conditions for multiple tenant access
+  strategy: "orConditions"  # orConditions for multiple tenant access
   labels:
     accountLabel: "vm_account_id"
     projectLabel: "vm_project_id"

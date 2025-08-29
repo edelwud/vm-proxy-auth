@@ -22,14 +22,14 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
-func createTestRequest(userID string, method string, path string, query string) *domain.ProxyRequest {
+func createTestRequest(userID string, path string, query string) *domain.ProxyRequest {
 	u, _ := url.Parse(fmt.Sprintf("http://localhost%s", path))
 	if query != "" {
 		u.RawQuery = query
 	}
 
 	req := &http.Request{
-		Method: method,
+		Method: "GET",
 		URL:    u,
 		Header: make(http.Header),
 		Body:   io.NopCloser(strings.NewReader("")),
@@ -84,7 +84,7 @@ func TestEnhancedService_BasicForwarding(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create test request
-	req := createTestRequest("test-user", "GET", "/api/v1/query", "query=up")
+	req := createTestRequest("test-user", "/api/v1/query", "query=up")
 	req.FilteredQuery = "up"
 
 	// Forward request
@@ -102,7 +102,6 @@ func TestEnhancedService_LoadBalancing_RoundRobin(t *testing.T) {
 	var backends [3]*httptest.Server
 
 	for i := 0; i < 3; i++ {
-		i := i // Capture loop variable
 		backends[i] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&requestCounts[i], 1)
 			w.WriteHeader(http.StatusOK)
@@ -139,7 +138,7 @@ func TestEnhancedService_LoadBalancing_RoundRobin(t *testing.T) {
 	// Send multiple requests
 	const numRequests = 12
 	for i := 0; i < numRequests; i++ {
-		req := createTestRequest("test-user", "GET", "/api/v1/query", "query=up")
+		req := createTestRequest("test-user", "/api/v1/query", "query=up")
 		_, err := service.Forward(ctx, req)
 		require.NoError(t, err)
 	}
@@ -156,7 +155,6 @@ func TestEnhancedService_LoadBalancing_WeightedRoundRobin(t *testing.T) {
 	var backends [2]*httptest.Server
 
 	for i := 0; i < 2; i++ {
-		i := i // Capture loop variable
 		backends[i] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&requestCounts[i], 1)
 			w.WriteHeader(http.StatusOK)
@@ -192,7 +190,7 @@ func TestEnhancedService_LoadBalancing_WeightedRoundRobin(t *testing.T) {
 	// Send requests
 	const numRequests = 40
 	for i := 0; i < numRequests; i++ {
-		req := createTestRequest("test-user", "GET", "/api/v1/query", "query=up")
+		req := createTestRequest("test-user", "/api/v1/query", "query=up")
 		_, err := service.Forward(ctx, req)
 		require.NoError(t, err)
 	}
@@ -247,7 +245,7 @@ func TestEnhancedService_RetryOnFailure(t *testing.T) {
 	err = service.Start(ctx)
 	require.NoError(t, err)
 
-	req := createTestRequest("test-user", "GET", "/api/v1/query", "query=up")
+	req := createTestRequest("test-user", "/api/v1/query", "query=up")
 
 	start := time.Now()
 	response, err := service.Forward(ctx, req)
@@ -293,7 +291,7 @@ func TestEnhancedService_MaxRetriesExceeded(t *testing.T) {
 	err = service.Start(ctx)
 	require.NoError(t, err)
 
-	req := createTestRequest("test-user", "GET", "/api/v1/query", "query=up")
+	req := createTestRequest("test-user", "/api/v1/query", "query=up")
 
 	_, err = service.Forward(ctx, req)
 	assert.Error(t, err)
@@ -330,7 +328,7 @@ func TestEnhancedService_NoHealthyBackends(t *testing.T) {
 	// Wait for health check to mark backend as unhealthy
 	time.Sleep(100 * time.Millisecond)
 
-	req := createTestRequest("test-user", "GET", "/api/v1/query", "query=up")
+	req := createTestRequest("test-user", "/api/v1/query", "query=up")
 
 	_, err = service.Forward(ctx, req)
 	assert.Error(t, err)
@@ -371,7 +369,7 @@ func TestEnhancedService_MaintenanceMode(t *testing.T) {
 	err = service.SetMaintenanceMode(backend.URL, true)
 	require.NoError(t, err)
 
-	req := createTestRequest("test-user", "GET", "/api/v1/query", "query=up")
+	req := createTestRequest("test-user", "/api/v1/query", "query=up")
 
 	// Should fail because backend is in maintenance
 	_, err = service.Forward(ctx, req)
@@ -464,7 +462,7 @@ func TestEnhancedService_ConcurrentRequests(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			req := createTestRequest(fmt.Sprintf("user-%d", id), "GET", "/api/v1/query", "query=up")
+			req := createTestRequest(fmt.Sprintf("user-%d", id), "/api/v1/query", "query=up")
 			_, err := service.Forward(ctx, req)
 			if err != nil {
 				atomic.AddInt32(&errors, 1)
@@ -517,7 +515,7 @@ func TestEnhancedService_ContextCancellation(t *testing.T) {
 	err = service.Start(context.Background()) // Use different context for startup
 	require.NoError(t, err)
 
-	req := createTestRequest("test-user", "GET", "/api/v1/query", "query=up")
+	req := createTestRequest("test-user", "/api/v1/query", "query=up")
 
 	// Request should be cancelled
 	_, err = service.Forward(ctx, req)

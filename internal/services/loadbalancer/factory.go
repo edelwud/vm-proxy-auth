@@ -63,7 +63,7 @@ func (f *Factory) GetSupportedStrategies() []domain.LoadBalancingStrategy {
 // ValidateStrategy checks if the given strategy is supported.
 func (f *Factory) ValidateStrategy(strategy domain.LoadBalancingStrategy) error {
 	supportedStrategies := f.GetSupportedStrategies()
-	
+
 	for _, supported := range supportedStrategies {
 		if strategy == supported {
 			return nil

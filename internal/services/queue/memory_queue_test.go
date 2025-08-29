@@ -2,6 +2,7 @@ package queue_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -58,12 +59,12 @@ func TestMemoryQueue_QueueFull(t *testing.T) {
 	// Fill queue to capacity
 	req1 := createTestRequest("user1")
 	req2 := createTestRequest("user2")
-	
+
 	err := q.Enqueue(ctx, req1)
 	require.NoError(t, err)
 	err = q.Enqueue(ctx, req2)
 	require.NoError(t, err)
-	
+
 	assert.Equal(t, 2, q.Size())
 
 	// Try to enqueue when full
@@ -118,7 +119,7 @@ func TestMemoryQueue_ContextCancellation(t *testing.T) {
 	// Test enqueue cancellation - fill queue first to make enqueue block
 	ctx := context.Background()
 	req := createTestRequest("test-user")
-	
+
 	// Fill queue to capacity
 	for i := 0; i < 10; i++ {
 		err := q.Enqueue(ctx, req)
@@ -155,7 +156,7 @@ func TestMemoryQueue_ConcurrentAccess(t *testing.T) {
 
 	var producerWg sync.WaitGroup
 	var consumerWg sync.WaitGroup
-	
+
 	results := make(chan *domain.ProxyRequest, numProducers*itemsPerProducer)
 	done := make(chan struct{})
 
@@ -170,7 +171,7 @@ func TestMemoryQueue_ConcurrentAccess(t *testing.T) {
 					return
 				default:
 					req, err := q.Dequeue(ctx)
-					if err == domain.ErrQueueEmpty {
+					if errors.Is(err, domain.ErrQueueEmpty) {
 						time.Sleep(1 * time.Millisecond)
 						continue
 					}
@@ -193,7 +194,7 @@ func TestMemoryQueue_ConcurrentAccess(t *testing.T) {
 				req := createTestRequest(fmt.Sprintf("producer-%d-item-%d", producerID, j))
 				for {
 					err := q.Enqueue(ctx, req)
-					if err == domain.ErrQueueFull {
+					if errors.Is(err, domain.ErrQueueFull) {
 						time.Sleep(1 * time.Millisecond)
 						continue
 					}
@@ -232,7 +233,7 @@ func TestMemoryQueue_ConcurrentAccess(t *testing.T) {
 	stats := q.Stats()
 	assert.Equal(t, int64(expectedItems), stats.EnqueuedTotal)
 	assert.Equal(t, int64(expectedItems), stats.DequeuedTotal)
-	t.Logf("Stats - Enqueued: %d, Dequeued: %d, Dropped: %d", 
+	t.Logf("Stats - Enqueued: %d, Dequeued: %d, Dropped: %d",
 		stats.EnqueuedTotal, stats.DequeuedTotal, stats.DroppedTotal)
 }
 
@@ -296,7 +297,7 @@ func TestMemoryQueue_Stats(t *testing.T) {
 	assert.Equal(t, 3, stats.Size)
 	assert.Equal(t, int64(3), stats.EnqueuedTotal)
 	assert.Equal(t, 60.0, stats.UtilizationPercent()) // 3/5 * 100 = 60%
-	assert.True(t, stats.IsHealthy()) // 60% is healthy
+	assert.True(t, stats.IsHealthy())                 // 60% is healthy
 
 	// Fill queue nearly to capacity
 	for i := 3; i < 5; i++ {
@@ -307,7 +308,7 @@ func TestMemoryQueue_Stats(t *testing.T) {
 	stats = q.Stats()
 	assert.Equal(t, 5, stats.Size)
 	assert.Equal(t, 100.0, stats.UtilizationPercent()) // 5/5 * 100 = 100%
-	assert.False(t, stats.IsHealthy()) // 100% is unhealthy (>= 90%)
+	assert.False(t, stats.IsHealthy())                 // 100% is unhealthy (>= 90%)
 
 	// Try to add one more (should be dropped)
 	req := createTestRequest("overflow-user")
@@ -327,14 +328,14 @@ func TestMemoryQueue_HealthyUtilization(t *testing.T) {
 
 	// Test different utilization levels
 	testCases := []struct {
-		items     int
-		healthy   bool
+		items       int
+		healthy     bool
 		utilization float64
 	}{
-		{0, true, 0.0},    // Empty
-		{5, true, 50.0},   // Half full
-		{8, true, 80.0},   // High but healthy
-		{9, false, 90.0},  // At threshold (unhealthy)
+		{0, true, 0.0},     // Empty
+		{5, true, 50.0},    // Half full
+		{8, true, 80.0},    // High but healthy
+		{9, false, 90.0},   // At threshold (unhealthy)
 		{10, false, 100.0}, // Full (unhealthy)
 	}
 
@@ -342,7 +343,7 @@ func TestMemoryQueue_HealthyUtilization(t *testing.T) {
 		// Reset queue
 		q.Close()
 		q = queue.NewMemoryQueue(10, time.Second, logger)
-		
+
 		// Add items
 		for i := 0; i < tc.items; i++ {
 			req := createTestRequest(fmt.Sprintf("user-%d", i))
@@ -397,4 +398,3 @@ func BenchmarkMemoryQueue_EnqueueOnly(b *testing.B) {
 		}
 	}
 }
-

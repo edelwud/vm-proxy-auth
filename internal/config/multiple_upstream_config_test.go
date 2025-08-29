@@ -227,7 +227,7 @@ func TestViperConfig_ValidateMultipleUpstreams(t *testing.T) {
 
 func TestViperConfig_ToEnhancedServiceConfig(t *testing.T) {
 	config := createValidMultipleUpstreamConfig()
-	
+
 	serviceConfig, err := config.ToEnhancedServiceConfig()
 	require.NoError(t, err)
 	require.NotNil(t, serviceConfig)
@@ -288,12 +288,12 @@ func TestViperConfig_ToEnhancedServiceConfig_Defaults(t *testing.T) {
 	require.NotNil(t, serviceConfig)
 
 	// Verify defaults
-	assert.Equal(t, 1, serviceConfig.Backends[0].Weight) // Zero weight became 1
-	assert.Equal(t, 3, serviceConfig.MaxRetries)         // Default
-	assert.Equal(t, 100*time.Millisecond, serviceConfig.RetryBackoff) // Default
+	assert.Equal(t, 1, serviceConfig.Backends[0].Weight)                 // Zero weight became 1
+	assert.Equal(t, 3, serviceConfig.MaxRetries)                         // Default
+	assert.Equal(t, 100*time.Millisecond, serviceConfig.RetryBackoff)    // Default
 	assert.Equal(t, "/health", serviceConfig.HealthCheck.HealthEndpoint) // Default
-	assert.Equal(t, 1000, serviceConfig.Queue.MaxSize)   // Default
-	assert.Equal(t, 5*time.Second, serviceConfig.Queue.Timeout) // Default
+	assert.Equal(t, 1000, serviceConfig.Queue.MaxSize)                   // Default
+	assert.Equal(t, 5*time.Second, serviceConfig.Queue.Timeout)          // Default
 }
 
 func TestViperConfig_ToEnhancedServiceConfig_NotEnabled(t *testing.T) {
@@ -336,7 +336,7 @@ func TestViperConfig_ToEnhancedServiceConfig_InvalidConfig(t *testing.T) {
 func TestViperConfig_LoadBalancingStrategies(t *testing.T) {
 	strategies := []string{
 		"round-robin",
-		"weighted-round-robin", 
+		"weighted-round-robin",
 		"least-connections",
 	}
 

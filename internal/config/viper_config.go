@@ -38,7 +38,7 @@ type UpstreamSettings struct {
 	URL     string        `mapstructure:"url"`
 	Timeout time.Duration `mapstructure:"timeout"`
 	Retry   RetrySettings `mapstructure:"retry"`
-	
+
 	// New multiple upstreams configuration
 	Multiple MultipleUpstreamSettings `mapstructure:"multiple"`
 }
@@ -50,14 +50,14 @@ type RetrySettings struct {
 
 // MultipleUpstreamSettings configures multiple upstream backends.
 type MultipleUpstreamSettings struct {
-	Enabled       bool                    `mapstructure:"enabled"`
-	Backends      []BackendSettings       `mapstructure:"backends"`
-	LoadBalancing LoadBalancingSettings   `mapstructure:"loadBalancing"`
-	HealthCheck   HealthCheckSettings     `mapstructure:"healthCheck"`
-	Queue         QueueSettings           `mapstructure:"queue"`
-	Timeout       time.Duration           `mapstructure:"timeout"`
-	MaxRetries    int                     `mapstructure:"maxRetries"`
-	RetryBackoff  time.Duration           `mapstructure:"retryBackoff"`
+	Enabled       bool                  `mapstructure:"enabled"`
+	Backends      []BackendSettings     `mapstructure:"backends"`
+	LoadBalancing LoadBalancingSettings `mapstructure:"loadBalancing"`
+	HealthCheck   HealthCheckSettings   `mapstructure:"healthCheck"`
+	Queue         QueueSettings         `mapstructure:"queue"`
+	Timeout       time.Duration         `mapstructure:"timeout"`
+	MaxRetries    int                   `mapstructure:"maxRetries"`
+	RetryBackoff  time.Duration         `mapstructure:"retryBackoff"`
 }
 
 // BackendSettings represents a single backend configuration.
@@ -425,14 +425,14 @@ func (c *ViperConfig) ToEnhancedServiceConfig() (*EnhancedServiceConfig, error) 
 // EnhancedServiceConfig represents the enhanced service configuration.
 // This mirrors the struct in the proxy package to avoid circular dependencies.
 type EnhancedServiceConfig struct {
-	Backends       []BackendConfig      `yaml:"backends"`
-	LoadBalancing  LoadBalancingConfig  `yaml:"load_balancing"`
-	HealthCheck    HealthCheckConfig    `yaml:"health_check"`
-	Queue          QueueConfig          `yaml:"queue"`
-	Timeout        time.Duration        `yaml:"timeout"`
-	MaxRetries     int                  `yaml:"max_retries"`
-	RetryBackoff   time.Duration        `yaml:"retry_backoff"`
-	EnableQueueing bool                 `yaml:"enable_queueing"`
+	Backends       []BackendConfig     `yaml:"backends"`
+	LoadBalancing  LoadBalancingConfig `yaml:"load_balancing"`
+	HealthCheck    HealthCheckConfig   `yaml:"health_check"`
+	Queue          QueueConfig         `yaml:"queue"`
+	Timeout        time.Duration       `yaml:"timeout"`
+	MaxRetries     int                 `yaml:"max_retries"`
+	RetryBackoff   time.Duration       `yaml:"retry_backoff"`
+	EnableQueueing bool                `yaml:"enable_queueing"`
 }
 
 // BackendConfig represents configuration for a single backend.

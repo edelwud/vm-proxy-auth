@@ -88,7 +88,7 @@ func TestFactory_GetSupportedStrategies(t *testing.T) {
 	factory := loadbalancer.NewFactory(logger)
 
 	strategies := factory.GetSupportedStrategies()
-	
+
 	expectedStrategies := []domain.LoadBalancingStrategy{
 		domain.LoadBalancingRoundRobin,
 		domain.LoadBalancingWeightedRoundRobin,
@@ -148,23 +148,23 @@ func TestFactory_GetStrategyDescription(t *testing.T) {
 	factory := loadbalancer.NewFactory(logger)
 
 	testCases := []struct {
-		strategy    domain.LoadBalancingStrategy
+		strategy      domain.LoadBalancingStrategy
 		shouldContain string
 	}{
 		{
-			strategy:    domain.LoadBalancingRoundRobin,
+			strategy:      domain.LoadBalancingRoundRobin,
 			shouldContain: "Round Robin",
 		},
 		{
-			strategy:    domain.LoadBalancingWeightedRoundRobin,
+			strategy:      domain.LoadBalancingWeightedRoundRobin,
 			shouldContain: "Weighted Round Robin",
 		},
 		{
-			strategy:    domain.LoadBalancingLeastConnections,
+			strategy:      domain.LoadBalancingLeastConnections,
 			shouldContain: "Least Connections",
 		},
 		{
-			strategy:    "unknown-strategy",
+			strategy:      "unknown-strategy",
 			shouldContain: "Unknown strategy",
 		},
 	}
@@ -199,7 +199,7 @@ func TestFactory_CreatedLoadBalancersWork(t *testing.T) {
 			backend, err := lb.NextBackend(context.Background())
 			assert.NoError(t, err)
 			assert.NotNil(t, backend)
-			
+
 			// Verify backend is from our list
 			found := false
 			for _, b := range backends {
