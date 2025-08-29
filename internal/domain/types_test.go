@@ -386,7 +386,7 @@ func TestLoadBalancerInterface(t *testing.T) {
 
 	// Test NextBackend
 	lb := &mockLoadBalancer{
-		nextBackendFunc: func(ctx context.Context) (*domain.Backend, error) {
+		nextBackendFunc: func(_ context.Context) (*domain.Backend, error) {
 			return backend, nil
 		},
 	}
@@ -466,7 +466,7 @@ func TestHealthCheckerInterface(t *testing.T) {
 
 	// Test CheckHealth
 	hc := &mockHealthChecker{
-		checkHealthFunc: func(ctx context.Context, b *domain.Backend) error {
+		checkHealthFunc: func(_ context.Context, b *domain.Backend) error {
 			assert.Equal(t, backend, b)
 			return nil
 		},
@@ -478,7 +478,7 @@ func TestHealthCheckerInterface(t *testing.T) {
 
 	// Test StartMonitoring
 	monitoringStarted := false
-	hc.startMonitoringFunc = func(ctx context.Context) error {
+	hc.startMonitoringFunc = func(_ context.Context) error {
 		monitoringStarted = true
 		return nil
 	}

@@ -23,7 +23,7 @@ type metricsSet struct {
 	queryFilteringTotal     *prometheus.CounterVec
 	queryFilteringDuration  *prometheus.HistogramVec
 	tenantAccessTotal       *prometheus.CounterVec
-	// Backend-specific metrics
+	// Backend-specific metrics.
 	upstreamBackendRequestsTotal   *prometheus.CounterVec
 	upstreamBackendRequestDuration *prometheus.HistogramVec
 	healthCheckTotal               *prometheus.CounterVec
@@ -98,7 +98,7 @@ func newMetricsSet() *metricsSet {
 			},
 			[]string{"user_id", "tenant_id", "allowed"},
 		),
-		// Backend-specific metrics
+		// Backend-specific metrics.
 		upstreamBackendRequestsTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "vm_proxy_auth_upstream_backend_requests_total",
@@ -198,7 +198,7 @@ func NewService(logger domain.Logger) *Service {
 		metrics.queryFilteringTotal,
 		metrics.queryFilteringDuration,
 		metrics.tenantAccessTotal,
-		// Backend-specific metrics
+		// Backend-specific metrics.
 		metrics.upstreamBackendRequestsTotal,
 		metrics.upstreamBackendRequestDuration,
 		metrics.healthCheckTotal,

@@ -10,6 +10,13 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
+// Health check constants.
+const (
+	defaultHealthCheckTimeoutSeconds = 10
+	successfulResponseCode           = 200
+	maxSuccessfulResponseCode        = 300
+)
+
 // CheckerConfig holds configuration for the health checker.
 type CheckerConfig struct {
 	CheckInterval      time.Duration `yaml:"check_interval" default:"30s"`
@@ -116,7 +123,7 @@ func (hc *Checker) CheckHealth(ctx context.Context, backend *domain.Backend) err
 	}
 	defer resp.Body.Close()
 
-	isHealthy := resp.StatusCode >= 200 && resp.StatusCode < 300
+	isHealthy := resp.StatusCode >= successfulResponseCode && resp.StatusCode < maxSuccessfulResponseCode
 
 	if !isHealthy {
 		err = fmt.Errorf("health check returned status: %d", resp.StatusCode)
@@ -180,11 +187,12 @@ func (hc *Checker) recordHealthCheck(backendURL string, isHealthy bool, duration
 	currentState := currentBackend.State
 
 	// Determine new state
-	if isHealthy && state.consecutiveSuccesses >= hc.config.HealthyThreshold {
+	switch {
+	case isHealthy && state.consecutiveSuccesses >= hc.config.HealthyThreshold:
 		newState = domain.BackendHealthy
-	} else if !isHealthy && state.consecutiveFailures >= hc.config.UnhealthyThreshold {
+	case !isHealthy && state.consecutiveFailures >= hc.config.UnhealthyThreshold:
 		newState = domain.BackendUnhealthy
-	} else {
+	default:
 		// Keep current state
 		newState = currentState
 	}

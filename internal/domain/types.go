@@ -124,7 +124,7 @@ type MetricsService interface {
 	RecordAuthAttempt(ctx context.Context, userID, status string)
 	RecordTenantAccess(ctx context.Context, userID, tenantID string, allowed bool)
 
-	// Backend-specific metrics
+	// Backend-specific metrics.
 	RecordUpstreamBackend(
 		ctx context.Context,
 		backendURL, method, path, status string,

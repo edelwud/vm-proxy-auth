@@ -30,6 +30,18 @@ var (
 	gitCommit = "unknown"
 )
 
+// Default configuration constants for single upstream backward compatibility.
+const (
+	defaultHealthCheckInterval      = 30 * time.Second
+	defaultHealthCheckTimeout       = 10 * time.Second
+	defaultHealthyThreshold         = 2
+	defaultUnhealthyThreshold       = 3
+	defaultQueueMaxSize             = 1000
+	defaultQueueTimeout             = 5 * time.Second
+	defaultRetryBackoffMilliseconds = 100
+	defaultRetryBackoffSeconds      = 5
+)
+
 //nolint:funlen
 func main() {
 	var (
@@ -83,14 +95,14 @@ func main() {
 	authService := auth.NewService(cfg.Auth, cfg.TenantMapping, appLogger, metricsService)
 	tenantService := tenant.NewService(&cfg.Upstream, &cfg.TenantFilter, appLogger, metricsService)
 	accessService := access.NewService(appLogger)
-	
+
 	// Initialize enhanced proxy service (supports both single and multiple upstreams)
 	var configData *config.EnhancedServiceConfig
-	
+
 	if cfg.IsMultipleUpstreamsEnabled() {
 		configData, err = cfg.ToEnhancedServiceConfig()
 		if err != nil {
-			appLogger.Error("Failed to create enhanced service configuration", 
+			appLogger.Error("Failed to create enhanced service configuration",
 				domain.Field{Key: "error", Value: err.Error()})
 			os.Exit(1)
 		}
@@ -104,15 +116,15 @@ func main() {
 				Strategy: "round-robin",
 			},
 			HealthCheck: config.HealthCheckConfig{
-				CheckInterval:      30 * time.Second,
-				Timeout:            10 * time.Second,
-				HealthyThreshold:   2,
-				UnhealthyThreshold: 3,
+				CheckInterval:      defaultHealthCheckInterval,
+				Timeout:            defaultHealthCheckTimeout,
+				HealthyThreshold:   defaultHealthyThreshold,
+				UnhealthyThreshold: defaultUnhealthyThreshold,
 				HealthEndpoint:     "/health",
 			},
 			Queue: config.QueueConfig{
-				MaxSize: 1000,
-				Timeout: 5 * time.Second,
+				MaxSize: defaultQueueMaxSize,
+				Timeout: defaultQueueTimeout,
 			},
 			Timeout:        cfg.Upstream.Timeout,
 			MaxRetries:     cfg.Upstream.Retry.MaxRetries,
@@ -120,12 +132,12 @@ func main() {
 			EnableQueueing: false, // Disabled by default for single upstream
 		}
 	}
-	
+
 	// Convert config.EnhancedServiceConfig to proxy.EnhancedServiceConfig
 	enhancedConfig := proxy.EnhancedServiceConfig{
-		Backends:       make([]proxy.BackendConfig, len(configData.Backends)),
-		LoadBalancing:  proxy.LoadBalancingConfig{Strategy: configData.LoadBalancing.Strategy},
-		HealthCheck:    health.CheckerConfig{
+		Backends:      make([]proxy.BackendConfig, len(configData.Backends)),
+		LoadBalancing: proxy.LoadBalancingConfig{Strategy: configData.LoadBalancing.Strategy},
+		HealthCheck: health.CheckerConfig{
 			CheckInterval:      configData.HealthCheck.CheckInterval,
 			Timeout:            configData.HealthCheck.Timeout,
 			HealthyThreshold:   configData.HealthCheck.HealthyThreshold,
@@ -138,7 +150,7 @@ func main() {
 		RetryBackoff:   configData.RetryBackoff,
 		EnableQueueing: configData.EnableQueueing,
 	}
-	
+
 	// Convert backends
 	for i, backend := range configData.Backends {
 		enhancedConfig.Backends[i] = proxy.BackendConfig{
@@ -146,14 +158,14 @@ func main() {
 			Weight: backend.Weight,
 		}
 	}
-	
+
 	proxyService, err := proxy.NewEnhancedService(enhancedConfig, appLogger, metricsService)
 	if err != nil {
 		appLogger.Error("Failed to create enhanced proxy service",
 			domain.Field{Key: "error", Value: err.Error()})
 		os.Exit(1)
 	}
-	
+
 	// Start enhanced service
 	ctx := context.Background()
 	if err := proxyService.Start(ctx); err != nil {
@@ -161,7 +173,7 @@ func main() {
 			domain.Field{Key: "error", Value: err.Error()})
 		os.Exit(1)
 	}
-	
+
 	if cfg.IsMultipleUpstreamsEnabled() {
 		appLogger.Info("Enhanced proxy service started with multiple upstreams",
 			domain.Field{Key: "backends", Value: len(enhancedConfig.Backends)},

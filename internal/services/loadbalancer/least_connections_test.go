@@ -29,7 +29,7 @@ func TestLeastConnectionsBalancer_BasicDistribution(t *testing.T) {
 
 	// Initially all backends have 0 connections, so should distribute round-robin style
 	selectedBackends := make(map[string]int)
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		backend, err := balancer.NextBackend(ctx)
 		require.NoError(t, err)
 		selectedBackends[backend.URL]++
@@ -131,11 +131,11 @@ func TestLeastConnectionsBalancer_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Start concurrent goroutines
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < requestsPerGoroutine; j++ {
+			for range requestsPerGoroutine {
 				backend, err := balancer.NextBackend(ctx)
 				require.NoError(t, err)
 				results <- backend
@@ -269,9 +269,10 @@ func TestLeastConnectionsBalancer_BackendsStatus(t *testing.T) {
 	// Find backend status entries
 	var backend1Status, backend2Status *domain.BackendStatus
 	for _, s := range status {
-		if s.Backend.URL == "http://backend1.com" {
+		switch s.Backend.URL {
+		case "http://backend1.com":
 			backend1Status = s
-		} else if s.Backend.URL == "http://backend2.com" {
+		case "http://backend2.com":
 			backend2Status = s
 		}
 	}

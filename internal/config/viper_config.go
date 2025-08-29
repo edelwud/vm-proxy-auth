@@ -11,6 +11,13 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
+// Default configuration values.
+const (
+	defaultRetryBackoffMilliseconds = 100
+	defaultQueueMaxSize             = 1000
+	defaultQueueTimeoutSeconds      = 5
+)
+
 // ViperConfig represents the new configuration structure with camelCase naming.
 type ViperConfig struct {
 	Server        ServerSettings       `mapstructure:"server"`
@@ -348,7 +355,10 @@ func (c *ViperConfig) ValidateMultipleUpstreams() error {
 	}
 
 	if c.Upstream.Multiple.HealthCheck.CheckInterval < 0 {
-		return fmt.Errorf("health check interval cannot be negative, got %v", c.Upstream.Multiple.HealthCheck.CheckInterval)
+		return fmt.Errorf(
+			"health check interval cannot be negative, got %v",
+			c.Upstream.Multiple.HealthCheck.CheckInterval,
+		)
 	}
 
 	return nil
@@ -407,21 +417,20 @@ func (c *ViperConfig) ToEnhancedServiceConfig() (*EnhancedServiceConfig, error) 
 		config.MaxRetries = 3
 	}
 	if config.RetryBackoff <= 0 {
-		config.RetryBackoff = 100 * time.Millisecond
+		config.RetryBackoff = defaultRetryBackoffMilliseconds * time.Millisecond
 	}
 	if config.HealthCheck.HealthEndpoint == "" {
 		config.HealthCheck.HealthEndpoint = "/health"
 	}
 	if config.Queue.MaxSize <= 0 && config.EnableQueueing {
-		config.Queue.MaxSize = 1000
+		config.Queue.MaxSize = defaultQueueMaxSize
 	}
 	if config.Queue.Timeout <= 0 && config.EnableQueueing {
-		config.Queue.Timeout = 5 * time.Second
+		config.Queue.Timeout = defaultQueueTimeoutSeconds * time.Second
 	}
 
 	return config, nil
 }
-
 
 // EnhancedServiceConfig represents the enhanced service configuration.
 // This mirrors the struct in the proxy package to avoid circular dependencies.

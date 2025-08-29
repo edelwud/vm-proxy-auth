@@ -195,7 +195,7 @@ func TestChecker_ConcurrentChecks(t *testing.T) {
 	servers := make([]*httptest.Server, 5)
 	backends := make([]domain.Backend, 5)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		servers[i] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Add small delay to simulate network latency
 			time.Sleep(10 * time.Millisecond)

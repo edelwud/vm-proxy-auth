@@ -120,16 +120,19 @@ func (t *TestableMetricsCollector) RecordTenantAccess(_ context.Context, userID,
 	})
 }
 
-// Backend-specific metrics (no-op implementations for testing)
+// Backend-specific metrics (no-op implementations for testing).
 func (t *TestableMetricsCollector) RecordUpstreamBackend(context.Context, string, string, string, string, time.Duration, []string) {
 }
 func (t *TestableMetricsCollector) RecordHealthCheck(context.Context, string, bool, time.Duration) {}
 func (t *TestableMetricsCollector) RecordBackendStateChange(context.Context, string, domain.BackendState, domain.BackendState) {
 }
+
 func (t *TestableMetricsCollector) RecordCircuitBreakerStateChange(context.Context, string, domain.CircuitBreakerState) {
 }
+
 func (t *TestableMetricsCollector) RecordQueueOperation(context.Context, string, time.Duration, int) {
 }
+
 func (t *TestableMetricsCollector) RecordLoadBalancerSelection(context.Context, domain.LoadBalancingStrategy, string, time.Duration) {
 }
 
@@ -247,7 +250,7 @@ func (m *testableProxyService) GetBackendsStatus() []*domain.BackendStatus {
 }
 
 // SetMaintenanceMode is a no-op for testing.
-func (m *testableProxyService) SetMaintenanceMode(backend string, enabled bool) error {
+func (m *testableProxyService) SetMaintenanceMode(_ string, enabled bool) error {
 	return nil
 }
 

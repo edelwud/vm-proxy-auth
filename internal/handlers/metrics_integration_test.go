@@ -49,7 +49,7 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 
 	tenantService := tenant.NewService(&upstreamConfig, &tenantConfig, logger, metricsService)
 	accessService := access.NewService(logger)
-	
+
 	// Create enhanced proxy service for single upstream
 	enhancedConfig := proxy.EnhancedServiceConfig{
 		Backends: []proxy.BackendConfig{
@@ -72,10 +72,10 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 		RetryBackoff:   100 * time.Millisecond,
 		EnableQueueing: false,
 	}
-	
+
 	proxyService, err := proxy.NewEnhancedService(enhancedConfig, logger, metricsService)
 	require.NoError(t, err)
-	
+
 	// Start the service
 	ctx := context.Background()
 	err = proxyService.Start(ctx)
