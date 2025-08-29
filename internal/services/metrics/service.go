@@ -23,6 +23,17 @@ type metricsSet struct {
 	queryFilteringTotal     *prometheus.CounterVec
 	queryFilteringDuration  *prometheus.HistogramVec
 	tenantAccessTotal       *prometheus.CounterVec
+	// Backend-specific metrics
+	upstreamBackendRequestsTotal   *prometheus.CounterVec
+	upstreamBackendRequestDuration *prometheus.HistogramVec
+	healthCheckTotal               *prometheus.CounterVec
+	healthCheckDuration            *prometheus.HistogramVec
+	backendStateChangesTotal       *prometheus.CounterVec
+	circuitBreakerStateTotal       *prometheus.CounterVec
+	queueOperationsTotal           *prometheus.CounterVec
+	queueOperationsDuration        *prometheus.HistogramVec
+	loadBalancerSelectionsTotal    *prometheus.CounterVec
+	loadBalancerSelectionDuration  *prometheus.HistogramVec
 }
 
 // newMetricsSet creates a new set of metrics with proper initialization.
@@ -87,6 +98,81 @@ func newMetricsSet() *metricsSet {
 			},
 			[]string{"user_id", "tenant_id", "allowed"},
 		),
+		// Backend-specific metrics
+		upstreamBackendRequestsTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "vm_proxy_auth_upstream_backend_requests_total",
+				Help: "Total number of requests to specific upstream backends",
+			},
+			[]string{"backend_url", "method", "path", "status_code"},
+		),
+		upstreamBackendRequestDuration: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "vm_proxy_auth_upstream_backend_request_duration_seconds",
+				Help:    "Duration of requests to specific upstream backends",
+				Buckets: prometheus.DefBuckets,
+			},
+			[]string{"backend_url", "method", "path", "status_code"},
+		),
+		healthCheckTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "vm_proxy_auth_health_check_total",
+				Help: "Total number of health checks performed",
+			},
+			[]string{"backend_url", "result"},
+		),
+		healthCheckDuration: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "vm_proxy_auth_health_check_duration_seconds",
+				Help:    "Duration of health checks",
+				Buckets: prometheus.DefBuckets,
+			},
+			[]string{"backend_url"},
+		),
+		backendStateChangesTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "vm_proxy_auth_backend_state_changes_total",
+				Help: "Total number of backend state changes",
+			},
+			[]string{"backend_url", "old_state", "new_state"},
+		),
+		circuitBreakerStateTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "vm_proxy_auth_circuit_breaker_state_total",
+				Help: "Total number of circuit breaker state changes",
+			},
+			[]string{"backend_url", "state"},
+		),
+		queueOperationsTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "vm_proxy_auth_queue_operations_total",
+				Help: "Total number of queue operations",
+			},
+			[]string{"operation"},
+		),
+		queueOperationsDuration: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "vm_proxy_auth_queue_operations_duration_seconds",
+				Help:    "Duration of queue operations",
+				Buckets: prometheus.DefBuckets,
+			},
+			[]string{"operation"},
+		),
+		loadBalancerSelectionsTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "vm_proxy_auth_load_balancer_selections_total",
+				Help: "Total number of load balancer selections",
+			},
+			[]string{"strategy"},
+		),
+		loadBalancerSelectionDuration: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "vm_proxy_auth_load_balancer_selection_duration_seconds",
+				Help:    "Duration of load balancer selections",
+				Buckets: prometheus.DefBuckets,
+			},
+			[]string{"strategy"},
+		),
 	}
 }
 
@@ -112,6 +198,17 @@ func NewService(logger domain.Logger) *Service {
 		metrics.queryFilteringTotal,
 		metrics.queryFilteringDuration,
 		metrics.tenantAccessTotal,
+		// Backend-specific metrics
+		metrics.upstreamBackendRequestsTotal,
+		metrics.upstreamBackendRequestDuration,
+		metrics.healthCheckTotal,
+		metrics.healthCheckDuration,
+		metrics.backendStateChangesTotal,
+		metrics.circuitBreakerStateTotal,
+		metrics.queueOperationsTotal,
+		metrics.queueOperationsDuration,
+		metrics.loadBalancerSelectionsTotal,
+		metrics.loadBalancerSelectionDuration,
 	)
 
 	// Also register Go runtime metrics.
@@ -225,5 +322,90 @@ func (s *Service) RecordTenantAccess(_ context.Context, userID, tenantID string,
 		domain.Field{Key: "user_id", Value: userID},
 		domain.Field{Key: "tenant_id", Value: tenantID},
 		domain.Field{Key: "allowed", Value: allowed},
+	)
+}
+
+// RecordUpstreamBackend records metrics for requests to specific upstream backends.
+func (s *Service) RecordUpstreamBackend(
+	_ context.Context,
+	backendURL,
+	method,
+	path,
+	status string,
+	duration time.Duration,
+	tenants []string,
+) {
+	s.metrics.upstreamBackendRequestsTotal.WithLabelValues(backendURL, method, path, status).Inc()
+	s.metrics.upstreamBackendRequestDuration.WithLabelValues(backendURL, method, path, status).Observe(duration.Seconds())
+
+	s.logger.Debug("Upstream backend metrics recorded",
+		domain.Field{Key: "backend_url", Value: backendURL},
+		domain.Field{Key: "method", Value: method},
+		domain.Field{Key: "path", Value: path},
+		domain.Field{Key: "status", Value: status},
+		domain.Field{Key: "duration", Value: duration},
+		domain.Field{Key: "tenants", Value: tenants},
+	)
+}
+
+// RecordHealthCheck records metrics for health check operations.
+func (s *Service) RecordHealthCheck(_ context.Context, backendURL string, success bool, duration time.Duration) {
+	result := "failure"
+	if success {
+		result = "success"
+	}
+
+	s.metrics.healthCheckTotal.WithLabelValues(backendURL, result).Inc()
+	s.metrics.healthCheckDuration.WithLabelValues(backendURL).Observe(duration.Seconds())
+
+	s.logger.Debug("Health check metrics recorded",
+		domain.Field{Key: "backend_url", Value: backendURL},
+		domain.Field{Key: "success", Value: success},
+		domain.Field{Key: "duration", Value: duration},
+	)
+}
+
+// RecordBackendStateChange records metrics for backend state changes.
+func (s *Service) RecordBackendStateChange(_ context.Context, backendURL string, oldState, newState domain.BackendState) {
+	s.metrics.backendStateChangesTotal.WithLabelValues(backendURL, oldState.String(), newState.String()).Inc()
+
+	s.logger.Debug("Backend state change metrics recorded",
+		domain.Field{Key: "backend_url", Value: backendURL},
+		domain.Field{Key: "old_state", Value: oldState.String()},
+		domain.Field{Key: "new_state", Value: newState.String()},
+	)
+}
+
+// RecordCircuitBreakerStateChange records metrics for circuit breaker state changes.
+func (s *Service) RecordCircuitBreakerStateChange(_ context.Context, backendURL string, state domain.CircuitBreakerState) {
+	s.metrics.circuitBreakerStateTotal.WithLabelValues(backendURL, state.String()).Inc()
+
+	s.logger.Debug("Circuit breaker state change metrics recorded",
+		domain.Field{Key: "backend_url", Value: backendURL},
+		domain.Field{Key: "state", Value: state.String()},
+	)
+}
+
+// RecordQueueOperation records metrics for queue operations.
+func (s *Service) RecordQueueOperation(_ context.Context, operation string, duration time.Duration, queueSize int) {
+	s.metrics.queueOperationsTotal.WithLabelValues(operation).Inc()
+	s.metrics.queueOperationsDuration.WithLabelValues(operation).Observe(duration.Seconds())
+
+	s.logger.Debug("Queue operation metrics recorded",
+		domain.Field{Key: "operation", Value: operation},
+		domain.Field{Key: "duration", Value: duration},
+		domain.Field{Key: "queue_size", Value: queueSize},
+	)
+}
+
+// RecordLoadBalancerSelection records metrics for load balancer selections.
+func (s *Service) RecordLoadBalancerSelection(_ context.Context, strategy domain.LoadBalancingStrategy, backendURL string, duration time.Duration) {
+	s.metrics.loadBalancerSelectionsTotal.WithLabelValues(string(strategy)).Inc()
+	s.metrics.loadBalancerSelectionDuration.WithLabelValues(string(strategy)).Observe(duration.Seconds())
+
+	s.logger.Debug("Load balancer selection metrics recorded",
+		domain.Field{Key: "strategy", Value: string(strategy)},
+		domain.Field{Key: "backend_url", Value: backendURL},
+		domain.Field{Key: "duration", Value: duration},
 	)
 }

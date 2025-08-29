@@ -244,3 +244,33 @@ func (s *Service) updateFormDataQuery(bodyStr, filteredQuery string) string {
 
 	return bodyStr
 }
+
+// GetBackendsStatus returns the status of all backends (single backend for basic service).
+func (s *Service) GetBackendsStatus() []*domain.BackendStatus {
+	// Basic proxy service only has one backend (the configured upstream)
+	backend := &domain.Backend{
+		URL:    s.upstreamURL,
+		Weight: 1,
+		State:  domain.BackendHealthy, // Assume healthy since we don't track health
+	}
+
+	return []*domain.BackendStatus{
+		{
+			Backend:   *backend,
+			IsHealthy: true, // Basic service assumes backend is always healthy
+			LastCheck: time.Now(),
+		},
+	}
+}
+
+// SetMaintenanceMode enables or disables maintenance mode for a backend.
+// For basic proxy service with single backend, this is a no-op since we don't support maintenance mode.
+func (s *Service) SetMaintenanceMode(backend string, enabled bool) error {
+	s.logger.Debug("Maintenance mode not supported in basic proxy service",
+		domain.Field{Key: "backend", Value: backend},
+		domain.Field{Key: "enabled", Value: enabled})
+
+	// Basic proxy service doesn't support maintenance mode
+	// This is a no-op to maintain interface compatibility
+	return nil
+}

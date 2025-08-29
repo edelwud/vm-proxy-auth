@@ -120,6 +120,19 @@ func (t *TestableMetricsCollector) RecordTenantAccess(_ context.Context, userID,
 	})
 }
 
+// Backend-specific metrics (no-op implementations for testing)
+func (t *TestableMetricsCollector) RecordUpstreamBackend(context.Context, string, string, string, string, time.Duration, []string) {
+}
+func (t *TestableMetricsCollector) RecordHealthCheck(context.Context, string, bool, time.Duration) {}
+func (t *TestableMetricsCollector) RecordBackendStateChange(context.Context, string, domain.BackendState, domain.BackendState) {
+}
+func (t *TestableMetricsCollector) RecordCircuitBreakerStateChange(context.Context, string, domain.CircuitBreakerState) {
+}
+func (t *TestableMetricsCollector) RecordQueueOperation(context.Context, string, time.Duration, int) {
+}
+func (t *TestableMetricsCollector) RecordLoadBalancerSelection(context.Context, domain.LoadBalancingStrategy, string, time.Duration) {
+}
+
 func (t *TestableMetricsCollector) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
@@ -216,6 +229,26 @@ func (m *testableProxyService) Forward(ctx context.Context, req *domain.ProxyReq
 	}
 
 	return m.response, nil
+}
+
+// GetBackendsStatus returns mock backend status for testing.
+func (m *testableProxyService) GetBackendsStatus() []*domain.BackendStatus {
+	return []*domain.BackendStatus{
+		{
+			Backend: domain.Backend{
+				URL:    "http://localhost:8080",
+				Weight: 1,
+				State:  domain.BackendHealthy,
+			},
+			IsHealthy: true,
+			LastCheck: time.Now(),
+		},
+	}
+}
+
+// SetMaintenanceMode is a no-op for testing.
+func (m *testableProxyService) SetMaintenanceMode(backend string, enabled bool) error {
+	return nil
 }
 
 func TestGatewayHandler_MetricsCollection_Success(t *testing.T) {

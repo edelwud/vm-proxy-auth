@@ -12,11 +12,11 @@ import (
 
 // CheckerConfig holds configuration for the health checker.
 type CheckerConfig struct {
-	CheckInterval     time.Duration `yaml:"check_interval" default:"30s"`
-	Timeout           time.Duration `yaml:"timeout" default:"10s"`
-	HealthyThreshold  int           `yaml:"healthy_threshold" default:"2"`
-	UnhealthyThreshold int          `yaml:"unhealthy_threshold" default:"3"`
-	HealthEndpoint    string        `yaml:"health_endpoint" default:"/health"`
+	CheckInterval      time.Duration `yaml:"check_interval" default:"30s"`
+	Timeout            time.Duration `yaml:"timeout" default:"10s"`
+	HealthyThreshold   int           `yaml:"healthy_threshold" default:"2"`
+	UnhealthyThreshold int           `yaml:"unhealthy_threshold" default:"3"`
+	HealthEndpoint     string        `yaml:"health_endpoint" default:"/health"`
 }
 
 // Checker monitors backend health using HTTP health checks.
@@ -51,10 +51,8 @@ func NewChecker(
 	onStateChange func(string, domain.BackendState, domain.BackendState),
 	logger domain.Logger,
 ) *Checker {
-	// Set defaults
-	if config.CheckInterval == 0 {
-		config.CheckInterval = 30 * time.Second
-	}
+	// Set defaults only when not specified (-1 or 0 means disabled)
+	// We'll check for disabled state in StartMonitoring
 	if config.Timeout == 0 {
 		config.Timeout = 10 * time.Second
 	}
@@ -97,7 +95,7 @@ func (hc *Checker) CheckHealth(ctx context.Context, backend *domain.Backend) err
 	}
 
 	healthURL := backend.URL + hc.config.HealthEndpoint
-	
+
 	hc.logger.Debug("Performing health check",
 		domain.Field{Key: "backend_url", Value: backend.URL},
 		domain.Field{Key: "health_url", Value: healthURL})
@@ -111,7 +109,7 @@ func (hc *Checker) CheckHealth(ctx context.Context, backend *domain.Backend) err
 
 	resp, err := hc.httpClient.Do(req)
 	duration := time.Since(start)
-	
+
 	if err != nil {
 		hc.recordHealthCheck(backend.URL, false, duration, err)
 		return fmt.Errorf("health check request failed: %w", err)
@@ -119,7 +117,7 @@ func (hc *Checker) CheckHealth(ctx context.Context, backend *domain.Backend) err
 	defer resp.Body.Close()
 
 	isHealthy := resp.StatusCode >= 200 && resp.StatusCode < 300
-	
+
 	if !isHealthy {
 		err = fmt.Errorf("health check returned status: %d", resp.StatusCode)
 		hc.recordHealthCheck(backend.URL, false, duration, err)
@@ -159,7 +157,7 @@ func (hc *Checker) recordHealthCheck(backendURL string, isHealthy bool, duration
 	// Determine new state based on thresholds
 	var newState domain.BackendState
 	var currentBackend *domain.Backend
-	
+
 	// Find current backend
 	for i, backend := range hc.backends {
 		if backend.URL == backendURL {
@@ -235,6 +233,12 @@ func (hc *Checker) findBackendIndex(backendURL string) int {
 
 // StartMonitoring begins continuous health monitoring.
 func (hc *Checker) StartMonitoring(ctx context.Context) error {
+	// Skip monitoring if check interval is 0 or negative (disabled)
+	if hc.config.CheckInterval <= 0 {
+		hc.logger.Debug("Health monitoring disabled (CheckInterval<=0)")
+		return nil
+	}
+
 	hc.runningMu.Lock()
 	if hc.running {
 		hc.runningMu.Unlock()
@@ -284,7 +288,7 @@ func (hc *Checker) monitoringLoop(ctx context.Context) {
 // performHealthChecks performs health checks on all backends concurrently.
 func (hc *Checker) performHealthChecks(ctx context.Context) {
 	var wg sync.WaitGroup
-	
+
 	for _, backend := range hc.backends {
 		if backend.State == domain.BackendMaintenance {
 			continue // Skip maintenance backends
@@ -293,10 +297,10 @@ func (hc *Checker) performHealthChecks(ctx context.Context) {
 		wg.Add(1)
 		go func(b domain.Backend) {
 			defer wg.Done()
-			
+
 			checkCtx, cancel := context.WithTimeout(ctx, hc.config.Timeout)
 			defer cancel()
-			
+
 			err := hc.CheckHealth(checkCtx, &b)
 			if err != nil {
 				hc.logger.Debug("Health check failed",
@@ -319,7 +323,7 @@ func (hc *Checker) Stop() error {
 	hc.runningMu.RUnlock()
 
 	close(hc.stopCh)
-	
+
 	// Wait for monitoring loop to stop
 	select {
 	case <-hc.stoppedCh:
@@ -352,11 +356,11 @@ func (hc *Checker) GetStats() map[string]BackendHealthStats {
 				Backend:              *backend,
 				ConsecutiveSuccesses: state.consecutiveSuccesses,
 				ConsecutiveFailures:  state.consecutiveFailures,
-				TotalChecks:         state.totalChecks,
-				TotalFailures:       state.totalFailures,
-				LastCheckTime:       state.lastCheckTime,
-				LastError:           state.lastError,
-				SuccessRate:         hc.calculateSuccessRate(state),
+				TotalChecks:          state.totalChecks,
+				TotalFailures:        state.totalFailures,
+				LastCheckTime:        state.lastCheckTime,
+				LastError:            state.lastError,
+				SuccessRate:          hc.calculateSuccessRate(state),
 			}
 		}
 	}
@@ -378,11 +382,11 @@ type BackendHealthStats struct {
 	Backend              domain.Backend `json:"backend"`
 	ConsecutiveSuccesses int            `json:"consecutive_successes"`
 	ConsecutiveFailures  int            `json:"consecutive_failures"`
-	TotalChecks         int64          `json:"total_checks"`
-	TotalFailures       int64          `json:"total_failures"`
-	LastCheckTime       time.Time      `json:"last_check_time"`
-	LastError           error          `json:"last_error,omitempty"`
-	SuccessRate         float64        `json:"success_rate"`
+	TotalChecks          int64          `json:"total_checks"`
+	TotalFailures        int64          `json:"total_failures"`
+	LastCheckTime        time.Time      `json:"last_check_time"`
+	LastError            error          `json:"last_error,omitempty"`
+	SuccessRate          float64        `json:"success_rate"`
 }
 
 // IsHealthy returns true if the backend is considered healthy.
