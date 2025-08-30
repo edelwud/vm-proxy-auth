@@ -32,7 +32,7 @@ func NewLeastConnectionsBalancer(backends []domain.Backend, logger domain.Logger
 }
 
 // NextBackend returns the backend with the least active connections.
-func (lcb *LeastConnectionsBalancer) NextBackend(ctx context.Context) (*domain.Backend, error) {
+func (lcb *LeastConnectionsBalancer) NextBackend(_ context.Context) (*domain.Backend, error) {
 	lcb.closeMu.RLock()
 	if lcb.closed {
 		lcb.closeMu.RUnlock()

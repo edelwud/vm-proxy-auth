@@ -29,7 +29,7 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Health responds to health check requests.
 func (h *HealthHandler) Health(w http.ResponseWriter, _ *http.Request) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"status":    "healthy",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"version":   h.version,
@@ -40,7 +40,7 @@ func (h *HealthHandler) Health(w http.ResponseWriter, _ *http.Request) {
 
 // Readiness responds to readiness check requests.
 func (h *HealthHandler) Readiness(w http.ResponseWriter, _ *http.Request) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"status": "ready",
 		"checks": map[string]string{
 			"upstream": "ok",
@@ -50,7 +50,7 @@ func (h *HealthHandler) Readiness(w http.ResponseWriter, _ *http.Request) {
 	h.writeJSON(w, http.StatusOK, response)
 }
 
-func (h *HealthHandler) writeJSON(w http.ResponseWriter, status int, data interface{}) {
+func (h *HealthHandler) writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 

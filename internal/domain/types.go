@@ -175,7 +175,7 @@ type Logger interface {
 // Field represents a structured log field.
 type Field struct {
 	Key   string
-	Value interface{}
+	Value any
 }
 
 // LogFormat represents the output format for logs.

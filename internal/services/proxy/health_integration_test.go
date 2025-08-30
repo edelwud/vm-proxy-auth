@@ -19,9 +19,11 @@ import (
 
 // TestHealthCheckerLoadBalancerIntegration tests that health checker properly
 // updates load balancer state when backends become unhealthy or recover.
+//
+//nolint:gocognit // test cases
 func TestHealthCheckerLoadBalancerIntegration(t *testing.T) {
 	// Create controllable mock backends
-	var backend1Healthy, backend2Healthy bool = true, true
+	backend1Healthy, backend2Healthy := true, true
 	var backend1Calls, backend2Calls int32
 	var mu sync.RWMutex
 
@@ -113,16 +115,16 @@ func TestHealthCheckerLoadBalancerIntegration(t *testing.T) {
 	require.Len(t, status, 2)
 
 	// Send some requests to verify both backends are used
-	for i := 0; i < 10; i++ {
-		req := createTestRequest("test-user", "/api/v1/query", "query=up")
-		resp, err := service.Forward(ctx, req)
-		require.NoError(t, err)
+	for range 10 {
+		req := createTestRequest("test-user", "query=up")
+		resp, forwardErr := service.Forward(ctx, req)
+		require.NoError(t, forwardErr)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	}
 
 	// Both backends should have received requests
-	assert.Greater(t, backend1Calls, int32(0), "Backend 1 should have received requests")
-	assert.Greater(t, backend2Calls, int32(0), "Backend 2 should have received requests")
+	assert.Positive(t, backend1Calls, "Backend 1 should have received requests")
+	assert.Positive(t, backend2Calls, "Backend 2 should have received requests")
 
 	t.Logf("Initial requests - Backend 1: %d, Backend 2: %d", backend1Calls, backend2Calls)
 
@@ -135,8 +137,8 @@ func TestHealthCheckerLoadBalancerIntegration(t *testing.T) {
 
 	// Wait for health checker to detect unhealthy backend
 	require.Eventually(t, func() bool {
-		status := service.GetBackendsStatus()
-		for _, s := range status {
+		currentStatus := service.GetBackendsStatus()
+		for _, s := range currentStatus {
 			if s.Backend.URL == backend1.URL {
 				return !s.IsHealthy
 			}
@@ -149,16 +151,16 @@ func TestHealthCheckerLoadBalancerIntegration(t *testing.T) {
 	backend2Calls = 0
 
 	// Send more requests - all should go to backend 2 only
-	for i := 0; i < 10; i++ {
-		req := createTestRequest("test-user", "/api/v1/query", "query=up")
-		resp, err := service.Forward(ctx, req)
-		require.NoError(t, err)
+	for range 10 {
+		req := createTestRequest("test-user", "query=up")
+		resp, forwardErr := service.Forward(ctx, req)
+		require.NoError(t, forwardErr)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	}
 
 	// Only backend 2 should receive requests now
 	assert.Equal(t, int32(0), backend1Calls, "Backend 1 should not receive requests when unhealthy")
-	assert.Greater(t, backend2Calls, int32(0), "Backend 2 should receive all requests")
+	assert.Positive(t, backend2Calls, "Backend 2 should receive all requests")
 
 	t.Logf("After backend 1 failure - Backend 1: %d, Backend 2: %d", backend1Calls, backend2Calls)
 
@@ -171,8 +173,8 @@ func TestHealthCheckerLoadBalancerIntegration(t *testing.T) {
 
 	// Wait for health checker to mark backend 1 as healthy again
 	require.Eventually(t, func() bool {
-		status := service.GetBackendsStatus()
-		for _, s := range status {
+		recoveryStatus := service.GetBackendsStatus()
+		for _, s := range recoveryStatus {
 			if s.Backend.URL == backend1.URL {
 				return s.IsHealthy
 			}
@@ -185,24 +187,24 @@ func TestHealthCheckerLoadBalancerIntegration(t *testing.T) {
 	backend2Calls = 0
 
 	// Send more requests - should be distributed again
-	for i := 0; i < 20; i++ {
-		req := createTestRequest("test-user", "/api/v1/query", "query=up")
-		resp, err := service.Forward(ctx, req)
-		require.NoError(t, err)
+	for range 20 {
+		req := createTestRequest("test-user", "query=up")
+		resp, forwardErr := service.Forward(ctx, req)
+		require.NoError(t, forwardErr)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	}
 
 	// Both backends should receive requests again
-	assert.Greater(t, backend1Calls, int32(0), "Backend 1 should receive requests after recovery")
-	assert.Greater(t, backend2Calls, int32(0), "Backend 2 should continue receiving requests")
+	assert.Positive(t, backend1Calls, "Backend 1 should receive requests after recovery")
+	assert.Positive(t, backend2Calls, "Backend 2 should continue receiving requests")
 
 	t.Logf("After backend 1 recovery - Backend 1: %d, Backend 2: %d", backend1Calls, backend2Calls)
 
 	// Final verification - check backend status
-	status = service.GetBackendsStatus()
-	require.Len(t, status, 2)
+	finalStatus := service.GetBackendsStatus()
+	require.Len(t, finalStatus, 2)
 
-	for _, s := range status {
+	for _, s := range finalStatus {
 		assert.True(t, s.IsHealthy, "Both backends should be healthy at the end")
 	}
 }
@@ -249,7 +251,7 @@ func TestHealthCheckerMaintenanceMode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Initially should work
-	req := createTestRequest("test-user", "/api/v1/query", "query=up")
+	req := createTestRequest("test-user", "query=up")
 	resp, err := service.Forward(ctx, req)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -259,9 +261,9 @@ func TestHealthCheckerMaintenanceMode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Request should fail - no healthy backends
-	req = createTestRequest("test-user", "/api/v1/query", "query=up")
+	req = createTestRequest("test-user", "query=up")
 	_, err = service.Forward(ctx, req)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no available backend")
 
 	// Disable maintenance mode
@@ -269,7 +271,7 @@ func TestHealthCheckerMaintenanceMode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should work again
-	req = createTestRequest("test-user", "/api/v1/query", "query=up")
+	req = createTestRequest("test-user", "query=up")
 	resp, err = service.Forward(ctx, req)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -277,8 +279,10 @@ func TestHealthCheckerMaintenanceMode(t *testing.T) {
 
 // TestHealthCheckerWithWeightedLoadBalancer tests health checking integration
 // with weighted round robin to ensure weights are preserved during health transitions.
+//
+//nolint:gocognit // test cases
 func TestHealthCheckerWithWeightedLoadBalancer(t *testing.T) {
-	var backend1Healthy, backend2Healthy bool = true, true
+	backend1Healthy, backend2Healthy := true, true
 	var backend1Calls, backend2Calls int32
 	var mu sync.RWMutex
 
@@ -362,10 +366,10 @@ func TestHealthCheckerWithWeightedLoadBalancer(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send requests to establish baseline weighted distribution
-	for i := 0; i < 40; i++ {
-		req := createTestRequest("test-user", "/api/v1/query", "query=up")
-		resp, err := service.Forward(ctx, req)
-		require.NoError(t, err)
+	for range 40 {
+		req := createTestRequest("test-user", "query=up")
+		resp, forwardErr := service.Forward(ctx, req)
+		require.NoError(t, forwardErr)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	}
 
@@ -397,10 +401,10 @@ func TestHealthCheckerWithWeightedLoadBalancer(t *testing.T) {
 	backend2Calls = 0
 
 	// All requests should go to backend 2 now
-	for i := 0; i < 10; i++ {
-		req := createTestRequest("test-user", "/api/v1/query", "query=up")
-		resp, err := service.Forward(ctx, req)
-		require.NoError(t, err)
+	for range 10 {
+		req := createTestRequest("test-user", "query=up")
+		resp, forwardErr := service.Forward(ctx, req)
+		require.NoError(t, forwardErr)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	}
 
@@ -427,10 +431,10 @@ func TestHealthCheckerWithWeightedLoadBalancer(t *testing.T) {
 	backend1Calls = 0
 	backend2Calls = 0
 
-	for i := 0; i < 40; i++ {
-		req := createTestRequest("test-user", "/api/v1/query", "query=up")
-		resp, err := service.Forward(ctx, req)
-		require.NoError(t, err)
+	for range 40 {
+		req := createTestRequest("test-user", "query=up")
+		resp, forwardErr := service.Forward(ctx, req)
+		require.NoError(t, forwardErr)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	}
 

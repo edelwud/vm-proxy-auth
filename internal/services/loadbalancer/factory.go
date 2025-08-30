@@ -1,7 +1,9 @@
 package loadbalancer
 
 import (
+	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
@@ -24,7 +26,7 @@ func (f *Factory) CreateLoadBalancer(
 	backends []domain.Backend,
 ) (domain.LoadBalancer, error) {
 	if len(backends) == 0 {
-		return nil, fmt.Errorf("cannot create load balancer with empty backends list")
+		return nil, errors.New("cannot create load balancer with empty backends list")
 	}
 
 	f.logger.Debug("Creating load balancer",
@@ -64,10 +66,8 @@ func (f *Factory) GetSupportedStrategies() []domain.LoadBalancingStrategy {
 func (f *Factory) ValidateStrategy(strategy domain.LoadBalancingStrategy) error {
 	supportedStrategies := f.GetSupportedStrategies()
 
-	for _, supported := range supportedStrategies {
-		if strategy == supported {
-			return nil
-		}
+	if slices.Contains(supportedStrategies, strategy) {
+		return nil
 	}
 
 	return fmt.Errorf("unsupported load balancing strategy: %s. Supported strategies: %v",

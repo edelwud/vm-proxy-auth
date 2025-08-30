@@ -68,7 +68,7 @@ func TestFactory_CreateLoadBalancer_UnsupportedStrategy(t *testing.T) {
 	backends := createTestBackends()
 
 	lb, err := factory.CreateLoadBalancer("unsupported-strategy", backends)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, lb)
 	assert.Contains(t, err.Error(), "unsupported load balancing strategy")
 }
@@ -78,7 +78,7 @@ func TestFactory_CreateLoadBalancer_EmptyBackends(t *testing.T) {
 	factory := loadbalancer.NewFactory(logger)
 
 	lb, err := factory.CreateLoadBalancer(domain.LoadBalancingRoundRobin, []domain.Backend{})
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, lb)
 	assert.Contains(t, err.Error(), "cannot create load balancer with empty backends list")
 }
@@ -134,10 +134,10 @@ func TestFactory_ValidateStrategy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := factory.ValidateStrategy(tc.strategy)
 			if tc.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), "unsupported load balancing strategy")
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -197,7 +197,7 @@ func TestFactory_CreatedLoadBalancersWork(t *testing.T) {
 
 			// Test that the load balancer can select backends
 			backend, err := lb.NextBackend(context.Background())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.NotNil(t, backend)
 
 			// Verify backend is from our list
@@ -216,7 +216,7 @@ func TestFactory_CreatedLoadBalancersWork(t *testing.T) {
 
 			// Clean up
 			err = lb.Close()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		})
 	}
 }
@@ -240,11 +240,11 @@ func TestFactory_MultipleInstancesAreSeparate(t *testing.T) {
 
 	// But both should work independently
 	backend1, err := lb1.NextBackend(context.Background())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, backend1)
 
 	backend2, err := lb2.NextBackend(context.Background())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, backend2)
 }
 
@@ -253,8 +253,7 @@ func BenchmarkFactory_CreateLoadBalancer(b *testing.B) {
 	factory := loadbalancer.NewFactory(logger)
 	backends := createTestBackends()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		lb, err := factory.CreateLoadBalancer(domain.LoadBalancingRoundRobin, backends)
 		if err != nil {
 			b.Fatal(err)

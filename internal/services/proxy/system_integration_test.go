@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -20,14 +21,20 @@ import (
 
 // TestCompleteSystemIntegration tests the complete multiple upstream system
 // including load balancing, health checking, request queuing, and metrics.
+//
+//nolint:gocognit // test cases
 func TestCompleteSystemIntegration(t *testing.T) {
 	// Create three mock VictoriaMetrics backends
 	var backend1Calls, backend2Calls, backend3Calls int64
-	var backend1Healthy, backend2Healthy, backend3Healthy = true, true, true
+	backend1Healthy, backend2Healthy, backend3Healthy := true, true, true
+	var mu sync.RWMutex
 
 	backend1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
-			if backend1Healthy {
+			mu.RLock()
+			healthy := backend1Healthy
+			mu.RUnlock()
+			if healthy {
 				w.WriteHeader(http.StatusOK)
 			} else {
 				w.WriteHeader(http.StatusServiceUnavailable)
@@ -37,11 +44,11 @@ func TestCompleteSystemIntegration(t *testing.T) {
 
 		// Simulate VictoriaMetrics query response
 		atomic.AddInt64(&backend1Calls, 1)
-		response := map[string]interface{}{
+		response := map[string]any{
 			"status": "success",
-			"data": map[string]interface{}{
+			"data": map[string]any{
 				"resultType": "vector",
-				"result": []map[string]interface{}{
+				"result": []map[string]any{
 					{
 						"metric": map[string]string{
 							"__name__":      "up",
@@ -49,7 +56,7 @@ func TestCompleteSystemIntegration(t *testing.T) {
 							"instance":      "localhost:9090",
 							"vm_account_id": r.Header.Get("X-Prometheus-Tenant"),
 						},
-						"value": []interface{}{time.Now().Unix(), "1"},
+						"value": []any{time.Now().Unix(), "1"},
 					},
 				},
 			},
@@ -63,7 +70,10 @@ func TestCompleteSystemIntegration(t *testing.T) {
 
 	backend2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
-			if backend2Healthy {
+			mu.RLock()
+			healthy := backend2Healthy
+			mu.RUnlock()
+			if healthy {
 				w.WriteHeader(http.StatusOK)
 			} else {
 				w.WriteHeader(http.StatusServiceUnavailable)
@@ -72,11 +82,11 @@ func TestCompleteSystemIntegration(t *testing.T) {
 		}
 
 		atomic.AddInt64(&backend2Calls, 1)
-		response := map[string]interface{}{
+		response := map[string]any{
 			"status": "success",
-			"data": map[string]interface{}{
+			"data": map[string]any{
 				"resultType": "vector",
-				"result": []map[string]interface{}{
+				"result": []map[string]any{
 					{
 						"metric": map[string]string{
 							"__name__":      "up",
@@ -84,7 +94,7 @@ func TestCompleteSystemIntegration(t *testing.T) {
 							"instance":      "localhost:9091",
 							"vm_account_id": r.Header.Get("X-Prometheus-Tenant"),
 						},
-						"value": []interface{}{time.Now().Unix(), "1"},
+						"value": []any{time.Now().Unix(), "1"},
 					},
 				},
 			},
@@ -98,7 +108,10 @@ func TestCompleteSystemIntegration(t *testing.T) {
 
 	backend3 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
-			if backend3Healthy {
+			mu.RLock()
+			healthy := backend3Healthy
+			mu.RUnlock()
+			if healthy {
 				w.WriteHeader(http.StatusOK)
 			} else {
 				w.WriteHeader(http.StatusServiceUnavailable)
@@ -107,11 +120,11 @@ func TestCompleteSystemIntegration(t *testing.T) {
 		}
 
 		atomic.AddInt64(&backend3Calls, 1)
-		response := map[string]interface{}{
+		response := map[string]any{
 			"status": "success",
-			"data": map[string]interface{}{
+			"data": map[string]any{
 				"resultType": "vector",
-				"result": []map[string]interface{}{
+				"result": []map[string]any{
 					{
 						"metric": map[string]string{
 							"__name__":      "up",
@@ -119,7 +132,7 @@ func TestCompleteSystemIntegration(t *testing.T) {
 							"instance":      "localhost:9092",
 							"vm_account_id": r.Header.Get("X-Prometheus-Tenant"),
 						},
-						"value": []interface{}{time.Now().Unix(), "1"},
+						"value": []any{time.Now().Unix(), "1"},
 					},
 				},
 			},
@@ -174,22 +187,28 @@ func TestCompleteSystemIntegration(t *testing.T) {
 
 	// Send requests to establish weighted distribution
 	const phase1Requests = 60
-	for i := 0; i < phase1Requests; i++ {
-		req := createTestRequest("user1", "/api/v1/query", "query=up{job=\"prometheus\"}")
+	for range phase1Requests {
+		req := createTestRequest("user1", "query=up{job=\"prometheus\"}")
 		req.TargetTenant = "1000"
 
-		resp, err := service.Forward(ctx, req)
-		require.NoError(t, err)
+		resp, forwardErr := service.Forward(ctx, req)
+		require.NoError(t, forwardErr)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-		var response map[string]interface{}
+		var response map[string]any
 		err = json.Unmarshal(resp.Body, &response)
 		require.NoError(t, err)
 		assert.Equal(t, "success", response["status"])
 	}
 
 	// Verify weighted distribution (approximately 3:2:1 ratio)
-	calls1, calls2, calls3 := atomic.LoadInt64(&backend1Calls), atomic.LoadInt64(&backend2Calls), atomic.LoadInt64(&backend3Calls)
+	calls1, calls2, calls3 := atomic.LoadInt64(
+		&backend1Calls,
+	), atomic.LoadInt64(
+		&backend2Calls,
+	), atomic.LoadInt64(
+		&backend3Calls,
+	)
 	totalCalls := calls1 + calls2 + calls3
 	assert.Equal(t, int64(phase1Requests), totalCalls, "All requests should be processed")
 
@@ -208,7 +227,9 @@ func TestCompleteSystemIntegration(t *testing.T) {
 	// Phase 2: Test health check integration - make primary backend unhealthy
 	t.Log("Phase 2: Testing health check integration...")
 
+	mu.Lock()
 	backend1Healthy = false
+	mu.Unlock()
 
 	// Wait for health checker to detect and update load balancer
 	require.Eventually(t, func() bool {
@@ -227,20 +248,26 @@ func TestCompleteSystemIntegration(t *testing.T) {
 	atomic.StoreInt64(&backend3Calls, 0)
 
 	const phase2Requests = 30
-	for i := 0; i < phase2Requests; i++ {
-		req := createTestRequest("user2", "/api/v1/query", "query=cpu_usage")
+	for range phase2Requests {
+		req := createTestRequest("user2", "query=cpu_usage")
 		req.TargetTenant = "1001"
 
-		resp, err := service.Forward(ctx, req)
-		require.NoError(t, err)
+		resp, forwardErr := service.Forward(ctx, req)
+		require.NoError(t, forwardErr)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	}
 
 	// Verify failover - only backend 2 and 3 should receive requests
-	calls1, calls2, calls3 = atomic.LoadInt64(&backend1Calls), atomic.LoadInt64(&backend2Calls), atomic.LoadInt64(&backend3Calls)
+	calls1, calls2, calls3 = atomic.LoadInt64(
+		&backend1Calls,
+	), atomic.LoadInt64(
+		&backend2Calls,
+	), atomic.LoadInt64(
+		&backend3Calls,
+	)
 	assert.Equal(t, int64(0), calls1, "Unhealthy backend should not receive requests")
-	assert.Greater(t, calls2, int64(0), "Backend 2 should receive requests")
-	assert.Greater(t, calls3, int64(0), "Backend 3 should receive requests")
+	assert.Positive(t, calls2, "Backend 2 should receive requests")
+	assert.Positive(t, calls3, "Backend 3 should receive requests")
 
 	// Should maintain 2:1 ratio between backend 2 and 3
 	if calls2 > 0 && calls3 > 0 {
@@ -253,7 +280,9 @@ func TestCompleteSystemIntegration(t *testing.T) {
 	// Phase 3: Test recovery
 	t.Log("Phase 3: Testing backend recovery...")
 
+	mu.Lock()
 	backend1Healthy = true
+	mu.Unlock()
 
 	// Wait for recovery
 	require.Eventually(t, func() bool {
@@ -272,20 +301,26 @@ func TestCompleteSystemIntegration(t *testing.T) {
 	atomic.StoreInt64(&backend3Calls, 0)
 
 	const phase3Requests = 60
-	for i := 0; i < phase3Requests; i++ {
-		req := createTestRequest("user3", "/api/v1/query", "query=memory_usage")
+	for range phase3Requests {
+		req := createTestRequest("user3", "query=memory_usage")
 		req.TargetTenant = "1002"
 
-		resp, err := service.Forward(ctx, req)
-		require.NoError(t, err)
+		resp, forwardErr := service.Forward(ctx, req)
+		require.NoError(t, forwardErr)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	}
 
 	// Verify restored weighted distribution
-	calls1, calls2, calls3 = atomic.LoadInt64(&backend1Calls), atomic.LoadInt64(&backend2Calls), atomic.LoadInt64(&backend3Calls)
-	assert.Greater(t, calls1, int64(0), "Backend 1 should receive requests after recovery")
-	assert.Greater(t, calls2, int64(0), "Backend 2 should continue receiving requests")
-	assert.Greater(t, calls3, int64(0), "Backend 3 should continue receiving requests")
+	calls1, calls2, calls3 = atomic.LoadInt64(
+		&backend1Calls,
+	), atomic.LoadInt64(
+		&backend2Calls,
+	), atomic.LoadInt64(
+		&backend3Calls,
+	)
+	assert.Positive(t, calls1, "Backend 1 should receive requests after recovery")
+	assert.Positive(t, calls2, "Backend 2 should continue receiving requests")
+	assert.Positive(t, calls3, "Backend 3 should continue receiving requests")
 
 	t.Logf("Recovery distribution: Backend1=%d, Backend2=%d, Backend3=%d", calls1, calls2, calls3)
 
@@ -312,17 +347,23 @@ func TestCompleteSystemIntegration(t *testing.T) {
 	atomic.StoreInt64(&backend2Calls, 0)
 	atomic.StoreInt64(&backend3Calls, 0)
 
-	for i := 0; i < 20; i++ {
-		req := createTestRequest("user4", "/api/v1/query", "query=disk_usage")
-		resp, err := service.Forward(ctx, req)
-		require.NoError(t, err)
+	for range 20 {
+		req := createTestRequest("user4", "query=disk_usage")
+		resp, forwardErr := service.Forward(ctx, req)
+		require.NoError(t, forwardErr)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	}
 
-	calls1, calls2, calls3 = atomic.LoadInt64(&backend1Calls), atomic.LoadInt64(&backend2Calls), atomic.LoadInt64(&backend3Calls)
-	assert.Greater(t, calls1, int64(0), "Backend 1 should receive requests")
+	calls1, calls2, calls3 = atomic.LoadInt64(
+		&backend1Calls,
+	), atomic.LoadInt64(
+		&backend2Calls,
+	), atomic.LoadInt64(
+		&backend3Calls,
+	)
+	assert.Positive(t, calls1, "Backend 1 should receive requests")
 	assert.Equal(t, int64(0), calls2, "Backend 2 in maintenance should not receive requests")
-	assert.Greater(t, calls3, int64(0), "Backend 3 should receive requests")
+	assert.Positive(t, calls3, "Backend 3 should receive requests")
 
 	// Disable maintenance mode
 	err = service.SetMaintenanceMode(backend2.URL, false)
@@ -340,7 +381,7 @@ func TestCompleteSystemIntegration(t *testing.T) {
 		if s.IsHealthy {
 			healthyCount++
 		}
-		assert.True(t, s.Backend.Weight > 0, "All backends should have positive weights")
+		assert.Positive(t, s.Backend.Weight, "All backends should have positive weights")
 	}
 	assert.Equal(t, 3, healthyCount, "All backends should be healthy at end")
 
@@ -348,7 +389,7 @@ func TestCompleteSystemIntegration(t *testing.T) {
 	queueStats := service.GetQueueStats()
 	if queueStats != nil {
 		// Queue is available and configured, but requests may be processed directly
-		assert.True(t, queueStats.MaxSize > 0, "Queue should be configured with positive max size")
+		assert.Positive(t, queueStats.MaxSize, "Queue should be configured with positive max size")
 		assert.False(t, queueStats.IsClosed, "Queue should not be closed")
 		t.Logf("Queue stats: %+v", *queueStats)
 	}
@@ -358,7 +399,7 @@ func TestCompleteSystemIntegration(t *testing.T) {
 	if healthStats != nil {
 		assert.Len(t, healthStats, 3, "Should have health stats for all backends")
 		for url, stats := range healthStats {
-			assert.True(t, stats.TotalChecks > 0, "Backend %s should have health check history", url)
+			assert.Positive(t, stats.TotalChecks, "Backend %s should have health check history", url)
 			t.Logf("Health stats for %s: %+v", url, stats)
 		}
 	}

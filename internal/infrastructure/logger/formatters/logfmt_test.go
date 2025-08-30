@@ -143,7 +143,7 @@ func TestLogFmtFormatter_FormatValue(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		value    interface{}
+		value    any
 		expected string
 	}{
 		{

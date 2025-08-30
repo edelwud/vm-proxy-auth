@@ -335,7 +335,7 @@ func TestService_CanAccess_HealthEndpoints(t *testing.T) {
 			}
 
 			err := service.CanAccess(context.Background(), user, tt.path, "GET")
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		})
 	}
 }

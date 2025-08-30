@@ -168,9 +168,9 @@ func main() {
 
 	// Start enhanced service
 	ctx := context.Background()
-	if err := proxyService.Start(ctx); err != nil {
+	if startErr := proxyService.Start(ctx); startErr != nil {
 		appLogger.Error("Failed to start enhanced proxy service",
-			domain.Field{Key: "error", Value: err.Error()})
+			domain.Field{Key: "error", Value: startErr.Error()})
 		os.Exit(1)
 	}
 

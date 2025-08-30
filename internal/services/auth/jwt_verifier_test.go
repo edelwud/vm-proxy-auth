@@ -296,7 +296,7 @@ func TestJWTVerifier_TokenTiming(t *testing.T) {
 			if tt.expectError {
 				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -312,7 +312,7 @@ func TestJWTVerifier_CorrectClaimsExtraction(t *testing.T) {
 		"aud":    "test-audience",
 		"iss":    "test-issuer",
 		"groups": []string{"admin", "users"},
-		"roles":  []interface{}{"manager", "developer"},
+		"roles":  []any{"manager", "developer"},
 		"level":  5,
 		"active": true,
 		"exp":    time.Now().Add(time.Hour).Unix(),

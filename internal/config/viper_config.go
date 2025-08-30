@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -328,13 +329,7 @@ func (c *ViperConfig) ValidateMultipleUpstreams() error {
 	// Validate strategy
 	strategy := c.Upstream.Multiple.LoadBalancing.Strategy
 	validStrategies := []string{"round-robin", "weighted-round-robin", "least-connections"}
-	isValidStrategy := false
-	for _, valid := range validStrategies {
-		if strategy == valid {
-			isValidStrategy = true
-			break
-		}
-	}
+	isValidStrategy := slices.Contains(validStrategies, strategy)
 	if !isValidStrategy {
 		return fmt.Errorf("invalid load balancing strategy: %s. Valid strategies: %v", strategy, validStrategies)
 	}
@@ -375,8 +370,10 @@ func (c *ViperConfig) ToEnhancedServiceConfig() (*EnhancedServiceConfig, error) 
 	}
 
 	config := &EnhancedServiceConfig{
-		Backends:       make([]BackendConfig, len(c.Upstream.Multiple.Backends)),
-		LoadBalancing:  LoadBalancingConfig{Strategy: domain.LoadBalancingStrategy(c.Upstream.Multiple.LoadBalancing.Strategy)},
+		Backends: make([]BackendConfig, len(c.Upstream.Multiple.Backends)),
+		LoadBalancing: LoadBalancingConfig{
+			Strategy: domain.LoadBalancingStrategy(c.Upstream.Multiple.LoadBalancing.Strategy),
+		},
 		Timeout:        c.Upstream.Multiple.Timeout,
 		MaxRetries:     c.Upstream.Multiple.MaxRetries,
 		RetryBackoff:   c.Upstream.Multiple.RetryBackoff,

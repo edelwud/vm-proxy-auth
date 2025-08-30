@@ -2,6 +2,7 @@ package loadbalancer_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -60,13 +61,17 @@ func TestRoundRobinBalancer_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Start concurrent goroutines
-	for i := 0; i < numGoroutines; i++ {
+	errors := make(chan error, numGoroutines*requestsPerGoroutine)
+	for range numGoroutines {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < requestsPerGoroutine; j++ {
+			for range requestsPerGoroutine {
 				backend, err := balancer.NextBackend(ctx)
-				require.NoError(t, err)
+				if err != nil {
+					errors <- err
+					return
+				}
 				results <- backend.URL
 			}
 		}()
@@ -74,6 +79,15 @@ func TestRoundRobinBalancer_ConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 	close(results)
+	close(errors)
+
+	// Check for errors
+	select {
+	case err := <-errors:
+		require.NoError(t, err)
+	default:
+		// No errors
+	}
 
 	// Count distribution
 	counts := make(map[string]int)
@@ -118,7 +132,7 @@ func TestRoundRobinBalancer_SingleBackend(t *testing.T) {
 	ctx := context.Background()
 
 	// Should return the same backend multiple times
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		backend, err := balancer.NextBackend(ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "http://only-backend.com", backend.URL)
@@ -156,7 +170,7 @@ func TestRoundRobinBalancer_MixedHealthyUnhealthy(t *testing.T) {
 
 	// Should only return healthy backends
 	seenBackends := make(map[string]bool)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		backend, err := balancer.NextBackend(ctx)
 		require.NoError(t, err)
 		seenBackends[backend.URL] = true
@@ -206,7 +220,7 @@ func TestRoundRobinBalancer_ReportResult(t *testing.T) {
 	balancer.ReportResult(backend, nil, 200)
 
 	// Report failed result
-	balancer.ReportResult(backend, fmt.Errorf("connection failed"), 502)
+	balancer.ReportResult(backend, errors.New("connection failed"), 502)
 
 	// Should not cause any panics or errors
 	// (Round robin doesn't track results, but the interface should work)
@@ -228,9 +242,10 @@ func TestRoundRobinBalancer_BackendsStatus(t *testing.T) {
 	// Find backend1 status
 	var backend1Status, backend2Status *domain.BackendStatus
 	for _, s := range status {
-		if s.Backend.URL == "http://backend1.com" {
+		switch s.Backend.URL {
+		case "http://backend1.com":
 			backend1Status = s
-		} else if s.Backend.URL == "http://backend2.com" {
+		case "http://backend2.com":
 			backend2Status = s
 		}
 	}
@@ -275,11 +290,11 @@ func TestRoundRobinBalancer_Close(t *testing.T) {
 
 	// Should be able to close
 	err := balancer.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Should be able to close multiple times
 	err = balancer.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestRoundRobinBalancer_UpdateBackendStates(t *testing.T) {
@@ -296,7 +311,7 @@ func TestRoundRobinBalancer_UpdateBackendStates(t *testing.T) {
 
 	// Initially both backends should be available
 	seen := make(map[string]bool)
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		backend, err := balancer.NextBackend(ctx)
 		require.NoError(t, err)
 		seen[backend.URL] = true

@@ -121,7 +121,7 @@ func TestMemoryQueue_ContextCancellation(t *testing.T) {
 	req := createTestRequest("test-user")
 
 	// Fill queue to capacity
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		err := q.Enqueue(ctx, req)
 		require.NoError(t, err)
 	}
@@ -144,6 +144,7 @@ func TestMemoryQueue_ContextCancellation(t *testing.T) {
 	assert.Equal(t, context.DeadlineExceeded, err)
 }
 
+//nolint:gocognit // test cases
 func TestMemoryQueue_ConcurrentAccess(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	q := queue.NewMemoryQueue(50, 0, logger) // No timeout for simplicity
@@ -161,7 +162,7 @@ func TestMemoryQueue_ConcurrentAccess(t *testing.T) {
 	done := make(chan struct{})
 
 	// Start consumers first
-	for i := 0; i < numConsumers; i++ {
+	for i := range numConsumers {
 		consumerWg.Add(1)
 		go func(consumerID int) {
 			defer consumerWg.Done()
@@ -186,11 +187,11 @@ func TestMemoryQueue_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Start producers
-	for i := 0; i < numProducers; i++ {
+	for i := range numProducers {
 		producerWg.Add(1)
 		go func(producerID int) {
 			defer producerWg.Done()
-			for j := 0; j < itemsPerProducer; j++ {
+			for j := range itemsPerProducer {
 				req := createTestRequest(fmt.Sprintf("producer-%d-item-%d", producerID, j))
 				for {
 					err := q.Enqueue(ctx, req)
@@ -251,11 +252,11 @@ func TestMemoryQueue_Close(t *testing.T) {
 
 	// Close queue
 	err := q.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Should be able to close multiple times
 	err = q.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Operations should fail after close
 	err = q.Enqueue(ctx, req)
@@ -288,7 +289,7 @@ func TestMemoryQueue_Stats(t *testing.T) {
 	assert.True(t, stats.IsHealthy()) // Empty queue is healthy
 
 	// Add some items
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		req := createTestRequest(fmt.Sprintf("user-%d", i))
 		q.Enqueue(ctx, req)
 	}
@@ -296,8 +297,8 @@ func TestMemoryQueue_Stats(t *testing.T) {
 	stats = q.Stats()
 	assert.Equal(t, 3, stats.Size)
 	assert.Equal(t, int64(3), stats.EnqueuedTotal)
-	assert.Equal(t, 60.0, stats.UtilizationPercent()) // 3/5 * 100 = 60%
-	assert.True(t, stats.IsHealthy())                 // 60% is healthy
+	assert.InEpsilon(t, 60.0, stats.UtilizationPercent(), 0.01) // 3/5 * 100 = 60%
+	assert.True(t, stats.IsHealthy())                           // 60% is healthy
 
 	// Fill queue nearly to capacity
 	for i := 3; i < 5; i++ {
@@ -307,8 +308,8 @@ func TestMemoryQueue_Stats(t *testing.T) {
 
 	stats = q.Stats()
 	assert.Equal(t, 5, stats.Size)
-	assert.Equal(t, 100.0, stats.UtilizationPercent()) // 5/5 * 100 = 100%
-	assert.False(t, stats.IsHealthy())                 // 100% is unhealthy (>= 90%)
+	assert.InEpsilon(t, 100.0, stats.UtilizationPercent(), 0.01) // 5/5 * 100 = 100%
+	assert.False(t, stats.IsHealthy())                           // 100% is unhealthy (>= 90%)
 
 	// Try to add one more (should be dropped)
 	req := createTestRequest("overflow-user")
@@ -345,14 +346,14 @@ func TestMemoryQueue_HealthyUtilization(t *testing.T) {
 		q = queue.NewMemoryQueue(10, time.Second, logger)
 
 		// Add items
-		for i := 0; i < tc.items; i++ {
+		for i := range tc.items {
 			req := createTestRequest(fmt.Sprintf("user-%d", i))
 			q.Enqueue(ctx, req)
 		}
 
 		stats := q.Stats()
 		assert.Equal(t, tc.healthy, stats.IsHealthy(), "Items: %d", tc.items)
-		assert.Equal(t, tc.utilization, stats.UtilizationPercent(), "Items: %d", tc.items)
+		assert.InDelta(t, tc.utilization, stats.UtilizationPercent(), 1.0, "Items: %d", tc.items)
 	}
 }
 
@@ -390,8 +391,7 @@ func BenchmarkMemoryQueue_EnqueueOnly(b *testing.B) {
 	ctx := context.Background()
 	req := createTestRequest("bench-user")
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := q.Enqueue(ctx, req)
 		if err != nil {
 			b.Fatal(err)

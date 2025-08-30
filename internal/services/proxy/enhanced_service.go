@@ -2,10 +2,12 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -15,15 +17,25 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/services/queue"
 )
 
+// Default configuration constants.
+const (
+	defaultTimeoutSeconds = 30
+	defaultMaxRetries     = 3
+	defaultRetryBackoffMs = 100
+	// HTTP status code constants.
+	statusInternalServerError = 500
+	statusBadRequest          = 400
+)
+
 // EnhancedServiceConfig holds configuration for the enhanced proxy service.
 type EnhancedServiceConfig struct {
 	Backends       []BackendConfig      `yaml:"backends"`
 	LoadBalancing  LoadBalancingConfig  `yaml:"load_balancing"`
 	HealthCheck    health.CheckerConfig `yaml:"health_check"`
 	Queue          QueueConfig          `yaml:"queue"`
-	Timeout        time.Duration        `yaml:"timeout" default:"30s"`
-	MaxRetries     int                  `yaml:"max_retries" default:"3"`
-	RetryBackoff   time.Duration        `yaml:"retry_backoff" default:"100ms"`
+	Timeout        time.Duration        `yaml:"timeout"         default:"30s"`
+	MaxRetries     int                  `yaml:"max_retries"     default:"3"`
+	RetryBackoff   time.Duration        `yaml:"retry_backoff"   default:"100ms"`
 	EnableQueueing bool                 `yaml:"enable_queueing" default:"false"`
 }
 
@@ -41,7 +53,7 @@ type LoadBalancingConfig struct {
 // QueueConfig holds request queue configuration.
 type QueueConfig struct {
 	MaxSize int           `yaml:"max_size" default:"1000"`
-	Timeout time.Duration `yaml:"timeout" default:"5s"`
+	Timeout time.Duration `yaml:"timeout"  default:"5s"`
 }
 
 // EnhancedService provides enhanced proxy functionality with multiple upstream support.
@@ -65,18 +77,18 @@ func NewEnhancedService(
 ) (*EnhancedService, error) {
 	// Validate configuration
 	if len(config.Backends) == 0 {
-		return nil, fmt.Errorf("at least one backend must be configured")
+		return nil, errors.New("at least one backend must be configured")
 	}
 
 	// Set defaults
 	if config.Timeout == 0 {
-		config.Timeout = 30 * time.Second
+		config.Timeout = defaultTimeoutSeconds * time.Second
 	}
 	if config.MaxRetries == 0 {
-		config.MaxRetries = 3
+		config.MaxRetries = defaultMaxRetries
 	}
 	if config.RetryBackoff == 0 {
-		config.RetryBackoff = 100 * time.Millisecond
+		config.RetryBackoff = defaultRetryBackoffMs * time.Millisecond
 	}
 
 	// Convert backend configs to domain backends
@@ -143,7 +155,7 @@ func (es *EnhancedService) Start(ctx context.Context) error {
 	defer es.mu.Unlock()
 
 	if es.closed {
-		return fmt.Errorf("service is closed")
+		return errors.New("service is closed")
 	}
 
 	// Start health checker
@@ -156,26 +168,27 @@ func (es *EnhancedService) Start(ctx context.Context) error {
 }
 
 // Forward forwards a request to an upstream backend using load balancing.
-func (es *EnhancedService) Forward(ctx context.Context, req *domain.ProxyRequest) (*domain.ProxyResponse, error) {
+func (es *EnhancedService) Forward(
+	ctx context.Context,
+	req *domain.ProxyRequest,
+) (*domain.ProxyResponse, error) {
 	start := time.Now()
 
 	// Check if service is closed
 	es.mu.RLock()
 	if es.closed {
 		es.mu.RUnlock()
-		return nil, fmt.Errorf("service is closed")
+		return nil, errors.New("service is closed")
 	}
 	es.mu.RUnlock()
 
 	// Queue request if queueing is enabled and we're under heavy load
-	if es.requestQueue != nil {
-		// For now, we'll process directly, but queue is available for future enhancement
-		// In a full implementation, you might queue during backend failures or high load
-	}
+	// For now, we'll process directly, but queue is available for future enhancement
+	// In a full implementation, you might queue during backend failures or high load
 
 	// Try to forward request with retries
 	var lastErr error
-	for attempt := 0; attempt < es.config.MaxRetries; attempt++ {
+	for attempt := range es.config.MaxRetries {
 		if attempt > 0 {
 			// Linear backoff (not exponential to avoid excessive delays)
 			backoff := time.Duration(attempt) * es.config.RetryBackoff
@@ -221,8 +234,32 @@ func (es *EnhancedService) Forward(ctx context.Context, req *domain.ProxyRequest
 }
 
 // forwardToBackend forwards a request to a specific backend selected by the load balancer.
-func (es *EnhancedService) forwardToBackend(ctx context.Context, req *domain.ProxyRequest) (*domain.ProxyResponse, error) {
+func (es *EnhancedService) forwardToBackend(
+	ctx context.Context,
+	req *domain.ProxyRequest,
+) (*domain.ProxyResponse, error) {
 	// Select backend using load balancer
+	backend, err := es.selectBackend(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create HTTP request for backend
+	httpReq, start, err := es.createBackendRequest(ctx, req, backend)
+	if err != nil {
+		return nil, err
+	}
+
+	// Execute request and process response
+	return es.executeBackendRequest(ctx, req, backend, httpReq, start)
+}
+
+// Helper functions for forwardToBackend to reduce complexity.
+
+func (es *EnhancedService) selectBackend(
+	ctx context.Context,
+	req *domain.ProxyRequest,
+) (*domain.Backend, error) {
 	backend, err := es.loadBalancer.NextBackend(ctx)
 	if err != nil {
 		es.logger.Warn("Failed to select backend",
@@ -230,7 +267,14 @@ func (es *EnhancedService) forwardToBackend(ctx context.Context, req *domain.Pro
 			domain.Field{Key: "error", Value: err.Error()})
 		return nil, fmt.Errorf("no available backend: %w", err)
 	}
+	return backend, nil
+}
 
+func (es *EnhancedService) createBackendRequest(
+	ctx context.Context,
+	req *domain.ProxyRequest,
+	backend *domain.Backend,
+) (*http.Request, time.Time, error) {
 	start := time.Now()
 	es.logger.Debug("Forwarding request to backend",
 		domain.Field{Key: "backend_url", Value: backend.URL},
@@ -239,33 +283,53 @@ func (es *EnhancedService) forwardToBackend(ctx context.Context, req *domain.Pro
 		domain.Field{Key: "path", Value: req.OriginalRequest.URL.Path})
 
 	// Build target URL
-	targetURL, err := url.Parse(backend.URL)
+	targetURL, err := es.buildTargetURL(req, backend)
 	if err != nil {
 		es.loadBalancer.ReportResult(backend, err, 0)
+		return nil, start, err
+	}
+
+	// Create HTTP request
+	httpReq, err := http.NewRequestWithContext(
+		ctx,
+		req.OriginalRequest.Method,
+		targetURL.String(),
+		req.OriginalRequest.Body,
+	)
+	if err != nil {
+		es.loadBalancer.ReportResult(backend, err, 0)
+		return nil, start, fmt.Errorf("failed to create backend request: %w", err)
+	}
+
+	// Copy headers and add tenant info
+	es.prepareRequestHeaders(httpReq, req)
+
+	return httpReq, start, nil
+}
+
+func (es *EnhancedService) buildTargetURL(
+	req *domain.ProxyRequest,
+	backend *domain.Backend,
+) (*url.URL, error) {
+	targetURL, err := url.Parse(backend.URL)
+	if err != nil {
 		return nil, fmt.Errorf("invalid backend URL %s: %w", backend.URL, err)
 	}
 
-	// Create new request for backend
 	targetURL.Path = req.OriginalRequest.URL.Path
 	targetURL.RawQuery = req.OriginalRequest.URL.RawQuery
 
 	// Override query if we have a filtered version
-	if req.FilteredQuery != "" {
-		// For PromQL queries, replace the query parameter
-		if req.OriginalRequest.URL.Query().Get("query") != "" {
-			values := targetURL.Query()
-			values.Set("query", req.FilteredQuery)
-			targetURL.RawQuery = values.Encode()
-		}
+	if req.FilteredQuery != "" && req.OriginalRequest.URL.Query().Get("query") != "" {
+		values := targetURL.Query()
+		values.Set("query", req.FilteredQuery)
+		targetURL.RawQuery = values.Encode()
 	}
 
-	// Create HTTP request
-	httpReq, err := http.NewRequestWithContext(ctx, req.OriginalRequest.Method, targetURL.String(), req.OriginalRequest.Body)
-	if err != nil {
-		es.loadBalancer.ReportResult(backend, err, 0)
-		return nil, fmt.Errorf("failed to create backend request: %w", err)
-	}
+	return targetURL, nil
+}
 
+func (es *EnhancedService) prepareRequestHeaders(httpReq *http.Request, req *domain.ProxyRequest) {
 	// Copy headers
 	for name, values := range req.OriginalRequest.Header {
 		for _, value := range values {
@@ -277,26 +341,21 @@ func (es *EnhancedService) forwardToBackend(ctx context.Context, req *domain.Pro
 	if req.TargetTenant != "" {
 		httpReq.Header.Set("X-Prometheus-Tenant", req.TargetTenant)
 	}
+}
 
+func (es *EnhancedService) executeBackendRequest(
+	ctx context.Context,
+	req *domain.ProxyRequest,
+	backend *domain.Backend,
+	httpReq *http.Request,
+	start time.Time,
+) (*domain.ProxyResponse, error) {
 	// Execute request
 	resp, err := es.httpClient.Do(httpReq)
 	duration := time.Since(start)
 
 	if err != nil {
-		es.loadBalancer.ReportResult(backend, err, 0)
-
-		// Record metrics for failed request
-		es.metrics.RecordUpstreamBackend(
-			ctx,
-			backend.URL,
-			req.OriginalRequest.Method,
-			req.OriginalRequest.URL.Path,
-			"error",
-			duration,
-			[]string{req.TargetTenant},
-		)
-
-		return nil, fmt.Errorf("backend request failed: %w", err)
+		return nil, es.handleRequestError(ctx, req, backend, err, duration)
 	}
 	defer resp.Body.Close()
 
@@ -307,26 +366,57 @@ func (es *EnhancedService) forwardToBackend(ctx context.Context, req *domain.Pro
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
+	return es.processBackendResponse(ctx, req, backend, resp, body, duration)
+}
+
+func (es *EnhancedService) handleRequestError(
+	ctx context.Context,
+	req *domain.ProxyRequest,
+	backend *domain.Backend,
+	err error,
+	duration time.Duration,
+) error {
+	es.loadBalancer.ReportResult(backend, err, 0)
+
+	// Record metrics for failed request
+	es.metrics.RecordUpstreamBackend(
+		ctx,
+		backend.URL,
+		req.OriginalRequest.Method,
+		req.OriginalRequest.URL.Path,
+		"error",
+		duration,
+		[]string{req.TargetTenant},
+	)
+
+	return fmt.Errorf("backend request failed: %w", err)
+}
+
+func (es *EnhancedService) processBackendResponse(
+	ctx context.Context,
+	req *domain.ProxyRequest,
+	backend *domain.Backend,
+	resp *http.Response,
+	body []byte,
+	duration time.Duration,
+) (*domain.ProxyResponse, error) {
 	// Check for HTTP error status codes (4xx, 5xx)
 	var reportErr error
-	if resp.StatusCode >= 500 {
-		// 5xx errors should trigger retries
+	if resp.StatusCode >= statusInternalServerError {
 		reportErr = fmt.Errorf("upstream returned server error status: %d", resp.StatusCode)
-	} else if resp.StatusCode >= 400 {
-		// 4xx errors are client errors and should not trigger retries in load balancer
-		// but we still report them for monitoring
+	} else if resp.StatusCode >= statusBadRequest {
 		reportErr = fmt.Errorf("upstream returned client error status: %d", resp.StatusCode)
 	}
 
 	// Report result to load balancer (only 5xx errors for retry logic)
 	var lbErr error
-	if resp.StatusCode >= 500 {
+	if resp.StatusCode >= statusInternalServerError {
 		lbErr = reportErr
 	}
 	es.loadBalancer.ReportResult(backend, lbErr, resp.StatusCode)
 
 	// Record metrics
-	statusStr := fmt.Sprintf("%d", resp.StatusCode)
+	statusStr := strconv.Itoa(resp.StatusCode)
 	es.metrics.RecordUpstreamBackend(
 		ctx,
 		backend.URL,
@@ -338,7 +428,7 @@ func (es *EnhancedService) forwardToBackend(ctx context.Context, req *domain.Pro
 	)
 
 	// Return error for 5xx status codes to trigger retries
-	if resp.StatusCode >= 500 {
+	if resp.StatusCode >= statusInternalServerError {
 		return nil, reportErr
 	}
 
@@ -356,7 +446,10 @@ func (es *EnhancedService) forwardToBackend(ctx context.Context, req *domain.Pro
 }
 
 // onBackendStateChange handles backend state changes from the health checker.
-func (es *EnhancedService) onBackendStateChange(backendURL string, oldState, newState domain.BackendState) {
+func (es *EnhancedService) onBackendStateChange(
+	backendURL string,
+	oldState, newState domain.BackendState,
+) {
 	es.logger.Info("Backend state changed via health check",
 		domain.Field{Key: "backend_url", Value: backendURL},
 		domain.Field{Key: "old_state", Value: oldState.String()},
@@ -413,7 +506,7 @@ func (es *EnhancedService) GetHealthStats() map[string]health.BackendHealthStats
 }
 
 // GetQueueStats returns queue statistics if queueing is enabled.
-func (es *EnhancedService) GetQueueStats() *queue.QueueStats {
+func (es *EnhancedService) GetQueueStats() *queue.Stats {
 	if es.requestQueue != nil {
 		if mq, ok := es.requestQueue.(*queue.MemoryQueue); ok {
 			stats := mq.Stats()

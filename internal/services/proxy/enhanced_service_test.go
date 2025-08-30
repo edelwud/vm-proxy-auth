@@ -22,7 +22,8 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
-func createTestRequest(userID string, path string, query string) *domain.ProxyRequest {
+func createTestRequest(userID string, query string) *domain.ProxyRequest {
+	path := "/api/v1/query"
 	u, _ := url.Parse(fmt.Sprintf("http://localhost%s", path))
 	if query != "" {
 		u.RawQuery = query
@@ -84,7 +85,7 @@ func TestEnhancedService_BasicForwarding(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create test request
-	req := createTestRequest("test-user", "/api/v1/query", "query=up")
+	req := createTestRequest("test-user", "query=up")
 	req.FilteredQuery = "up"
 
 	// Forward request
@@ -101,11 +102,11 @@ func TestEnhancedService_LoadBalancing_RoundRobin(t *testing.T) {
 	var requestCounts [3]int32
 	var backends [3]*httptest.Server
 
-	for i := 0; i < 3; i++ {
-		backends[i] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	for i := range 3 {
+		backends[i] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			atomic.AddInt32(&requestCounts[i], 1)
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(fmt.Sprintf(`{"backend":%d}`, i)))
+			fmt.Fprintf(w, `{"backend":%d}`, i)
 		}))
 		defer backends[i].Close()
 	}
@@ -137,14 +138,14 @@ func TestEnhancedService_LoadBalancing_RoundRobin(t *testing.T) {
 
 	// Send multiple requests
 	const numRequests = 12
-	for i := 0; i < numRequests; i++ {
-		req := createTestRequest("test-user", "/api/v1/query", "query=up")
-		_, err := service.Forward(ctx, req)
-		require.NoError(t, err)
+	for range numRequests {
+		req := createTestRequest("test-user", "query=up")
+		_, forwardErr := service.Forward(ctx, req)
+		require.NoError(t, forwardErr)
 	}
 
 	// Verify load balancing distribution
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		count := atomic.LoadInt32(&requestCounts[i])
 		assert.Equal(t, int32(4), count, "Backend %d should receive 4 requests", i)
 	}
@@ -154,11 +155,11 @@ func TestEnhancedService_LoadBalancing_WeightedRoundRobin(t *testing.T) {
 	var requestCounts [2]int32
 	var backends [2]*httptest.Server
 
-	for i := 0; i < 2; i++ {
-		backends[i] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	for i := range 2 {
+		backends[i] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			atomic.AddInt32(&requestCounts[i], 1)
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(fmt.Sprintf(`{"backend":%d}`, i)))
+			fmt.Fprintf(w, `{"backend":%d}`, i)
 		}))
 		defer backends[i].Close()
 	}
@@ -189,10 +190,10 @@ func TestEnhancedService_LoadBalancing_WeightedRoundRobin(t *testing.T) {
 
 	// Send requests
 	const numRequests = 40
-	for i := 0; i < numRequests; i++ {
-		req := createTestRequest("test-user", "/api/v1/query", "query=up")
-		_, err := service.Forward(ctx, req)
-		require.NoError(t, err)
+	for range numRequests {
+		req := createTestRequest("test-user", "query=up")
+		_, forwardErr := service.Forward(ctx, req)
+		require.NoError(t, forwardErr)
 	}
 
 	// Verify weighted distribution (should be ~3:1 ratio)
@@ -207,7 +208,7 @@ func TestEnhancedService_LoadBalancing_WeightedRoundRobin(t *testing.T) {
 
 func TestEnhancedService_RetryOnFailure(t *testing.T) {
 	var attemptCount int32
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		count := atomic.AddInt32(&attemptCount, 1)
 		if count <= 2 {
 			// Fail first 2 attempts
@@ -245,7 +246,7 @@ func TestEnhancedService_RetryOnFailure(t *testing.T) {
 	err = service.Start(ctx)
 	require.NoError(t, err)
 
-	req := createTestRequest("test-user", "/api/v1/query", "query=up")
+	req := createTestRequest("test-user", "query=up")
 
 	start := time.Now()
 	response, err := service.Forward(ctx, req)
@@ -260,7 +261,7 @@ func TestEnhancedService_RetryOnFailure(t *testing.T) {
 }
 
 func TestEnhancedService_MaxRetriesExceeded(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Always fail
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -291,10 +292,10 @@ func TestEnhancedService_MaxRetriesExceeded(t *testing.T) {
 	err = service.Start(ctx)
 	require.NoError(t, err)
 
-	req := createTestRequest("test-user", "/api/v1/query", "query=up")
+	req := createTestRequest("test-user", "query=up")
 
 	_, err = service.Forward(ctx, req)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "request failed after 2 attempts")
 }
 
@@ -328,15 +329,15 @@ func TestEnhancedService_NoHealthyBackends(t *testing.T) {
 	// Wait for health check to mark backend as unhealthy
 	time.Sleep(100 * time.Millisecond)
 
-	req := createTestRequest("test-user", "/api/v1/query", "query=up")
+	req := createTestRequest("test-user", "query=up")
 
 	_, err = service.Forward(ctx, req)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no available backend")
 }
 
 func TestEnhancedService_MaintenanceMode(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"success"}`))
 	}))
@@ -369,11 +370,11 @@ func TestEnhancedService_MaintenanceMode(t *testing.T) {
 	err = service.SetMaintenanceMode(backend.URL, true)
 	require.NoError(t, err)
 
-	req := createTestRequest("test-user", "/api/v1/query", "query=up")
+	req := createTestRequest("test-user", "query=up")
 
 	// Should fail because backend is in maintenance
 	_, err = service.Forward(ctx, req)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no available backend")
 
 	// Disable maintenance mode
@@ -382,11 +383,11 @@ func TestEnhancedService_MaintenanceMode(t *testing.T) {
 
 	// Should work now
 	_, err = service.Forward(ctx, req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestEnhancedService_BackendsStatus(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer backend.Close()
@@ -420,7 +421,7 @@ func TestEnhancedService_BackendsStatus(t *testing.T) {
 
 func TestEnhancedService_ConcurrentRequests(t *testing.T) {
 	var requestCount int32
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt32(&requestCount, 1)
 		// Add small delay to simulate processing
 		time.Sleep(10 * time.Millisecond)
@@ -458,13 +459,13 @@ func TestEnhancedService_ConcurrentRequests(t *testing.T) {
 	var errors int32
 
 	start := time.Now()
-	for i := 0; i < numRequests; i++ {
+	for i := range numRequests {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			req := createTestRequest(fmt.Sprintf("user-%d", id), "/api/v1/query", "query=up")
-			_, err := service.Forward(ctx, req)
-			if err != nil {
+			req := createTestRequest(fmt.Sprintf("user-%d", id), "query=up")
+			_, forwardErr := service.Forward(ctx, req)
+			if forwardErr != nil {
 				atomic.AddInt32(&errors, 1)
 			}
 		}(i)
@@ -482,7 +483,7 @@ func TestEnhancedService_ConcurrentRequests(t *testing.T) {
 }
 
 func TestEnhancedService_ContextCancellation(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Add delay to allow context cancellation
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
@@ -515,11 +516,11 @@ func TestEnhancedService_ContextCancellation(t *testing.T) {
 	err = service.Start(context.Background()) // Use different context for startup
 	require.NoError(t, err)
 
-	req := createTestRequest("test-user", "/api/v1/query", "query=up")
+	req := createTestRequest("test-user", "query=up")
 
 	// Request should be cancelled
 	_, err = service.Forward(ctx, req)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "context deadline exceeded")
 }
 
@@ -532,16 +533,33 @@ type MockEnhancedMetricsService struct {
 }
 
 // Add all the required methods for domain.MetricsService.
-func (m *MockEnhancedMetricsService) RecordRequest(context.Context, string, string, string, time.Duration, *domain.User) {
+func (m *MockEnhancedMetricsService) RecordRequest(
+	context.Context,
+	string,
+	string,
+	string,
+	time.Duration,
+	*domain.User,
+) {
 }
+
 func (m *MockEnhancedMetricsService) RecordUpstream(context.Context, string, string, string, time.Duration, []string) {
 }
+
 func (m *MockEnhancedMetricsService) RecordQueryFilter(context.Context, string, int, bool, time.Duration) {
 }
 func (m *MockEnhancedMetricsService) RecordAuthAttempt(context.Context, string, string)        {}
 func (m *MockEnhancedMetricsService) RecordTenantAccess(context.Context, string, string, bool) {}
 
-func (m *MockEnhancedMetricsService) RecordUpstreamBackend(context.Context, string, string, string, string, time.Duration, []string) {
+func (m *MockEnhancedMetricsService) RecordUpstreamBackend(
+	context.Context,
+	string,
+	string,
+	string,
+	string,
+	time.Duration,
+	[]string,
+) {
 	m.mu.Lock()
 	m.upstreamBackendCallCount++
 	m.mu.Unlock()
@@ -550,18 +568,33 @@ func (m *MockEnhancedMetricsService) RecordUpstreamBackend(context.Context, stri
 func (m *MockEnhancedMetricsService) RecordHealthCheck(context.Context, string, bool, time.Duration) {
 }
 
-func (m *MockEnhancedMetricsService) RecordBackendStateChange(context.Context, string, domain.BackendState, domain.BackendState) {
+func (m *MockEnhancedMetricsService) RecordBackendStateChange(
+	context.Context,
+	string,
+	domain.BackendState,
+	domain.BackendState,
+) {
 	m.mu.Lock()
 	m.backendStateChangeCallCount++
 	m.mu.Unlock()
 }
 
-func (m *MockEnhancedMetricsService) RecordCircuitBreakerStateChange(context.Context, string, domain.CircuitBreakerState) {
+func (m *MockEnhancedMetricsService) RecordCircuitBreakerStateChange(
+	context.Context,
+	string,
+	domain.CircuitBreakerState,
+) {
 }
+
 func (m *MockEnhancedMetricsService) RecordQueueOperation(context.Context, string, time.Duration, int) {
 }
 
-func (m *MockEnhancedMetricsService) RecordLoadBalancerSelection(context.Context, domain.LoadBalancingStrategy, string, time.Duration) {
+func (m *MockEnhancedMetricsService) RecordLoadBalancerSelection(
+	context.Context,
+	domain.LoadBalancingStrategy,
+	string,
+	time.Duration,
+) {
 	m.mu.Lock()
 	m.loadBalancerSelectionCount++
 	m.mu.Unlock()

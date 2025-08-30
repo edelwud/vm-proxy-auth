@@ -87,8 +87,7 @@ func TestLocalStorage_Watch(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
 	defer storage.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Setup watcher
 	events, err := storage.Watch(ctx, "test:")
@@ -119,8 +118,7 @@ func TestLocalStorage_WatchWithDelete(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
 	defer storage.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Setup watcher
 	events, err := storage.Watch(ctx, "test:")
@@ -184,8 +182,7 @@ func TestLocalStorage_WatchKeyPrefixFiltering(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
 	defer storage.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Setup watcher for specific prefix
 	events, err := storage.Watch(ctx, "backend:")
@@ -205,9 +202,10 @@ func TestLocalStorage_WatchKeyPrefixFiltering(t *testing.T) {
 		case event := <-events:
 			receivedEvents = append(receivedEvents, event)
 		case <-timeout:
-			break
+			goto exitLoop
 		}
 	}
+exitLoop:
 
 	// Should only receive events for keys matching the prefix
 	require.Len(t, receivedEvents, 2)
@@ -224,35 +222,62 @@ func TestLocalStorage_ConcurrentAccess(t *testing.T) {
 	numGoroutines := 50
 
 	// Concurrent writes
-	for i := 0; i < numGoroutines; i++ {
+	writeErrors := make(chan error, numGoroutines)
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			key := fmt.Sprintf("concurrent-key-%d", i)
-			value := []byte(fmt.Sprintf("value-%d", i))
+			value := fmt.Appendf(nil, "value-%d", i)
 
 			err := storage.Set(ctx, key, value, time.Hour)
-			assert.NoError(t, err)
+			if err != nil {
+				writeErrors <- err
+			}
 		}(i)
 	}
 
 	wg.Wait()
+	close(writeErrors)
+
+	// Check write errors
+	select {
+	case err := <-writeErrors:
+		require.NoError(t, err)
+	default:
+		// No errors
+	}
 
 	// Concurrent reads
-	for i := 0; i < numGoroutines; i++ {
+	readErrors := make(chan error, numGoroutines)
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			key := fmt.Sprintf("concurrent-key-%d", i)
-			expected := []byte(fmt.Sprintf("value-%d", i))
+			expected := fmt.Appendf(nil, "value-%d", i)
 
 			value, err := storage.Get(ctx, key)
-			assert.NoError(t, err)
-			assert.Equal(t, expected, value)
+			if err != nil {
+				readErrors <- err
+				return
+			}
+			if !assert.Equal(t, expected, value) {
+				readErrors <- fmt.Errorf("value mismatch for key %s", key)
+			}
 		}(i)
 	}
 
 	wg.Wait()
+	close(readErrors)
+
+	// Check read errors
+	select {
+	case err := <-readErrors:
+		require.NoError(t, err)
+	default:
+		// No errors
+	}
 }
 
 func TestLocalStorage_GetMultiple(t *testing.T) {
@@ -320,8 +345,8 @@ func TestLocalStorage_SetMultiple(t *testing.T) {
 
 	// Verify all were set
 	for key, expectedValue := range items {
-		value, err := storage.Get(ctx, key)
-		require.NoError(t, err)
+		value, getErr := storage.Get(ctx, key)
+		require.NoError(t, getErr)
 		assert.Equal(t, expectedValue, value)
 	}
 }
@@ -332,7 +357,7 @@ func TestLocalStorage_Ping(t *testing.T) {
 
 	ctx := context.Background()
 	err := storage.Ping(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestLocalStorage_ContextCancellation(t *testing.T) {
@@ -344,10 +369,10 @@ func TestLocalStorage_ContextCancellation(t *testing.T) {
 
 	// Operations should still work (local storage doesn't depend on context for cancellation)
 	err := storage.Set(ctx, "test", []byte("value"), time.Hour)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	_, err = storage.Get(ctx, "test")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestLocalStorage_CleanupExpiredKeys(t *testing.T) {
@@ -370,10 +395,10 @@ func TestLocalStorage_CleanupExpiredKeys(t *testing.T) {
 
 	// Other keys should still exist
 	_, err = storage.Get(ctx, "long-ttl")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	_, err = storage.Get(ctx, "no-ttl")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestLocalStorage_Close(t *testing.T) {
@@ -381,11 +406,11 @@ func TestLocalStorage_Close(t *testing.T) {
 
 	// Should be able to close
 	err := storage.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Should be able to close multiple times
 	err = storage.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestLocalStorage_WatchAfterClose(t *testing.T) {
@@ -456,11 +481,11 @@ func BenchmarkLocalStorage_SetMultiple(b *testing.B) {
 	ctx := context.Background()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		items := make(map[string][]byte)
-		for j := 0; j < 10; j++ {
+		for j := range 10 {
 			key := fmt.Sprintf("batch-%d-%d", i, j)
-			items[key] = []byte(fmt.Sprintf("value-%d-%d", i, j))
+			items[key] = fmt.Appendf(nil, "value-%d-%d", i, j)
 		}
 		storage.SetMultiple(ctx, items, time.Hour)
 	}

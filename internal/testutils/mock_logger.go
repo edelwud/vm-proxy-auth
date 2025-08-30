@@ -16,7 +16,7 @@ type MockLogger struct {
 type LogEntry struct {
 	Level   string
 	Message string
-	Fields  map[string]interface{}
+	Fields  map[string]any
 }
 
 // NewMockLogger creates a new mock logger.
@@ -45,7 +45,7 @@ func (ml *MockLogger) Error(msg string, fields ...domain.Field) {
 }
 
 // With creates a new logger with additional fields.
-func (ml *MockLogger) With(fields ...domain.Field) domain.Logger {
+func (ml *MockLogger) With(_ ...domain.Field) domain.Logger {
 	newLogger := &MockLogger{}
 
 	// Copy existing entries
@@ -62,7 +62,7 @@ func (ml *MockLogger) log(level, message string, fields []domain.Field) {
 	ml.mu.Lock()
 	defer ml.mu.Unlock()
 
-	fieldMap := make(map[string]interface{})
+	fieldMap := make(map[string]any)
 	for _, field := range fields {
 		fieldMap[field.Key] = field.Value
 	}
@@ -98,7 +98,7 @@ func (ml *MockLogger) HasEntry(level, message string) bool {
 }
 
 // HasEntryWithField checks if an entry exists with the given level, message, and field.
-func (ml *MockLogger) HasEntryWithField(level, message, fieldKey string, fieldValue interface{}) bool {
+func (ml *MockLogger) HasEntryWithField(level, message, fieldKey string, fieldValue any) bool {
 	ml.mu.Lock()
 	defer ml.mu.Unlock()
 

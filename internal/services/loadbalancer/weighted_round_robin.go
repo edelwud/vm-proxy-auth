@@ -33,7 +33,13 @@ func NewWeightedRoundRobinBalancer(backends []domain.Backend, logger domain.Logg
 			weight = 1 // Default weight
 		}
 		weights[i] = weight
-		totalWeight += int32(weight)
+		if totalWeight > (1<<31-1)-int32(weight) { //nolint:gosec // Check for int32 overflow
+			logger.Error("Total weight too large for int32",
+				domain.Field{Key: "total_weight", Value: totalWeight},
+				domain.Field{Key: "adding_weight", Value: weight})
+			weight = 1 // Fallback to prevent overflow
+		}
+		totalWeight += int32(weight) //nolint:gosec // already checked for overflow
 	}
 
 	return &WeightedRoundRobinBalancer{
@@ -48,7 +54,7 @@ func NewWeightedRoundRobinBalancer(backends []domain.Backend, logger domain.Logg
 
 // NextBackend returns the next available backend according to weighted round-robin strategy.
 // Uses smooth weighted round-robin algorithm for better distribution.
-func (wrr *WeightedRoundRobinBalancer) NextBackend(ctx context.Context) (*domain.Backend, error) {
+func (wrr *WeightedRoundRobinBalancer) NextBackend(_ context.Context) (*domain.Backend, error) {
 	wrr.closeMu.RLock()
 	if wrr.closed {
 		wrr.closeMu.RUnlock()
@@ -102,13 +108,25 @@ func (wrr *WeightedRoundRobinBalancer) selectByWeight(healthyIndices []int) int 
 
 	// Calculate total weight of healthy backends
 	for _, idx := range healthyIndices {
-		totalHealthyWeight += int32(wrr.weights[idx])
+		weight := int32(wrr.weights[idx])          //nolint:gosec // overflow check
+		if totalHealthyWeight > (1<<31-1)-weight { // Check for overflow
+			wrr.logger.Error("Total healthy weight overflow prevented",
+				domain.Field{Key: "total_weight", Value: totalHealthyWeight})
+			weight = 1 // Fallback to prevent overflow
+		}
+		totalHealthyWeight += weight
 	}
 
 	// Find the backend with highest current weight after incrementing
 	for _, idx := range healthyIndices {
 		// Increase current weight by static weight
-		wrr.currentWeights[idx] += int32(wrr.weights[idx])
+		weight := int32(wrr.weights[idx])               //nolint:gosec // overflow check
+		if wrr.currentWeights[idx] > (1<<31-1)-weight { // Check for overflow
+			wrr.logger.Error("Current weight overflow prevented",
+				domain.Field{Key: "current_weight", Value: wrr.currentWeights[idx]})
+			weight = 1 // Fallback to prevent overflow
+		}
+		wrr.currentWeights[idx] += weight
 
 		if wrr.currentWeights[idx] > maxCurrentWeight {
 			maxCurrentWeight = wrr.currentWeights[idx]

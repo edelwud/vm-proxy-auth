@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/services/health"
@@ -47,7 +48,7 @@ func TestChecker_CheckHealth_Success(t *testing.T) {
 
 	ctx := context.Background()
 	err := checker.CheckHealth(ctx, &backends[0])
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify stats
 	stats := checker.GetStats()
@@ -56,12 +57,12 @@ func TestChecker_CheckHealth_Success(t *testing.T) {
 	assert.Equal(t, int64(0), backendStats.TotalFailures)
 	assert.Equal(t, 1, backendStats.ConsecutiveSuccesses)
 	assert.Equal(t, 0, backendStats.ConsecutiveFailures)
-	assert.Equal(t, 100.0, backendStats.SuccessRate)
+	assert.InEpsilon(t, 100.0, backendStats.SuccessRate, 0.01)
 }
 
 func TestChecker_CheckHealth_Failure(t *testing.T) {
 	// Create mock health endpoint that returns error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		w.Write([]byte(`{"status":"unhealthy"}`))
 	}))
@@ -83,7 +84,7 @@ func TestChecker_CheckHealth_Failure(t *testing.T) {
 
 	ctx := context.Background()
 	err := checker.CheckHealth(ctx, &backends[0])
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "health check returned status: 503")
 
 	// Verify stats
@@ -93,13 +94,13 @@ func TestChecker_CheckHealth_Failure(t *testing.T) {
 	assert.Equal(t, int64(1), backendStats.TotalFailures)
 	assert.Equal(t, 0, backendStats.ConsecutiveSuccesses)
 	assert.Equal(t, 1, backendStats.ConsecutiveFailures)
-	assert.Equal(t, 0.0, backendStats.SuccessRate)
+	assert.InDelta(t, 0.0, backendStats.SuccessRate, 0.01)
 }
 
 func TestChecker_StateTransitions(t *testing.T) {
 	// Create controllable mock server
 	var healthyResponse bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if healthyResponse {
 			w.WriteHeader(http.StatusOK)
 		} else {
@@ -137,7 +138,7 @@ func TestChecker_StateTransitions(t *testing.T) {
 
 	// First failure - should not change state (need 2 consecutive)
 	checker.CheckHealth(ctx, backend)
-	assert.Len(t, stateChanges, 0)
+	assert.Empty(t, stateChanges)
 
 	// Second failure - should transition to unhealthy
 	checker.CheckHealth(ctx, backend)
@@ -160,7 +161,7 @@ func TestChecker_StateTransitions(t *testing.T) {
 }
 
 func TestChecker_MaintenanceMode(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable) // Would normally be unhealthy
 	}))
 	defer server.Close()
@@ -187,7 +188,7 @@ func TestChecker_MaintenanceMode(t *testing.T) {
 
 	// Health check should not change maintenance state
 	checker.CheckHealth(ctx, &backends[0])
-	assert.Len(t, stateChanges, 0) // Should not change from maintenance
+	assert.Empty(t, stateChanges) // Should not change from maintenance
 }
 
 func TestChecker_ConcurrentChecks(t *testing.T) {
@@ -196,7 +197,7 @@ func TestChecker_ConcurrentChecks(t *testing.T) {
 	backends := make([]domain.Backend, 5)
 
 	for i := range 5 {
-		servers[i] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		servers[i] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			// Add small delay to simulate network latency
 			time.Sleep(10 * time.Millisecond)
 			w.WriteHeader(http.StatusOK)
@@ -246,12 +247,12 @@ func TestChecker_ConcurrentChecks(t *testing.T) {
 	for _, server := range servers {
 		backendStats := stats[server.URL]
 		assert.Equal(t, int64(1), backendStats.TotalChecks)
-		assert.Equal(t, 100.0, backendStats.SuccessRate)
+		assert.InEpsilon(t, 100.0, backendStats.SuccessRate, 0.01)
 	}
 }
 
 func TestChecker_StartStopMonitoring(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -271,16 +272,15 @@ func TestChecker_StartStopMonitoring(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	checker := health.NewChecker(config, backends, nil, logger)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Start monitoring
 	err := checker.StartMonitoring(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Should not be able to start twice
 	err = checker.StartMonitoring(ctx)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already running")
 
 	// Wait for a few checks to complete
@@ -288,11 +288,11 @@ func TestChecker_StartStopMonitoring(t *testing.T) {
 
 	// Stop monitoring
 	err = checker.Stop()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Should be able to stop multiple times
 	err = checker.Stop()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify checks were performed
 	stats := checker.GetStats()
@@ -301,7 +301,7 @@ func TestChecker_StartStopMonitoring(t *testing.T) {
 }
 
 func TestChecker_ContextCancellation(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Add delay to allow context cancellation
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
@@ -328,7 +328,7 @@ func TestChecker_ContextCancellation(t *testing.T) {
 
 	// Health check should be cancelled
 	err := checker.CheckHealth(ctx, &backends[0])
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "context deadline exceeded")
 }
 
@@ -351,7 +351,7 @@ func TestChecker_DefaultConfig(t *testing.T) {
 
 	ctx := context.Background()
 	err := checker.CheckHealth(ctx, &backends[0])
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestChecker_CustomHealthEndpoint(t *testing.T) {
@@ -375,7 +375,7 @@ func TestChecker_CustomHealthEndpoint(t *testing.T) {
 
 	ctx := context.Background()
 	err := checker.CheckHealth(ctx, &backends[0])
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 // Helper type for tracking state changes.
@@ -386,7 +386,7 @@ type stateChange struct {
 }
 
 func BenchmarkChecker_CheckHealth(b *testing.B) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()

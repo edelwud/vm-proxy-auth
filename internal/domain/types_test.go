@@ -400,7 +400,7 @@ func TestLoadBalancerInterface(t *testing.T) {
 	reportCalled := false
 	lb.reportResultFunc = func(b *domain.Backend, err error, statusCode int) {
 		assert.Equal(t, backend, b)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 200, statusCode)
 		reportCalled = true
 	}
@@ -425,7 +425,7 @@ func TestLoadBalancerInterface(t *testing.T) {
 	}
 
 	err = lb.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, closeCalled)
 }
 
@@ -474,7 +474,7 @@ func TestHealthCheckerInterface(t *testing.T) {
 
 	ctx := context.Background()
 	err := hc.CheckHealth(ctx, backend)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Test StartMonitoring
 	monitoringStarted := false
@@ -484,7 +484,7 @@ func TestHealthCheckerInterface(t *testing.T) {
 	}
 
 	err = hc.StartMonitoring(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, monitoringStarted)
 
 	// Test Stop
@@ -495,6 +495,6 @@ func TestHealthCheckerInterface(t *testing.T) {
 	}
 
 	err = hc.Stop()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, stopped)
 }

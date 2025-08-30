@@ -9,6 +9,11 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
+// State storage constants.
+const (
+	defaultWatchChannelBufferSize = 100 // Buffer size for watch channels
+)
+
 // LocalStorage provides in-memory state storage for single-instance deployments.
 type LocalStorage struct {
 	data        sync.Map
@@ -47,7 +52,7 @@ func NewLocalStorage(nodeID string) *LocalStorage {
 }
 
 // Get retrieves a value by key.
-func (ls *LocalStorage) Get(ctx context.Context, key string) ([]byte, error) {
+func (ls *LocalStorage) Get(_ context.Context, key string) ([]byte, error) {
 	if value, exists := ls.data.Load(key); exists {
 		if item, ok := value.(*storageItem); ok && !item.isExpired() {
 			// Create a copy to avoid data races
@@ -62,7 +67,7 @@ func (ls *LocalStorage) Get(ctx context.Context, key string) ([]byte, error) {
 }
 
 // Set stores a value with optional TTL.
-func (ls *LocalStorage) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+func (ls *LocalStorage) Set(_ context.Context, key string, value []byte, ttl time.Duration) error {
 	// Create a copy to avoid data races
 	valueCopy := make([]byte, len(value))
 	copy(valueCopy, value)
@@ -88,7 +93,7 @@ func (ls *LocalStorage) Set(ctx context.Context, key string, value []byte, ttl t
 }
 
 // Delete removes a key.
-func (ls *LocalStorage) Delete(ctx context.Context, key string) error {
+func (ls *LocalStorage) Delete(_ context.Context, key string) error {
 	ls.data.Delete(key)
 
 	// Notify watchers
@@ -117,7 +122,11 @@ func (ls *LocalStorage) GetMultiple(ctx context.Context, keys []string) (map[str
 }
 
 // SetMultiple stores multiple values efficiently.
-func (ls *LocalStorage) SetMultiple(ctx context.Context, items map[string][]byte, ttl time.Duration) error {
+func (ls *LocalStorage) SetMultiple(
+	ctx context.Context,
+	items map[string][]byte,
+	ttl time.Duration,
+) error {
 	for key, value := range items {
 		if err := ls.Set(ctx, key, value, ttl); err != nil {
 			return err
@@ -127,8 +136,11 @@ func (ls *LocalStorage) SetMultiple(ctx context.Context, items map[string][]byte
 }
 
 // Watch observes changes to keys matching the prefix.
-func (ls *LocalStorage) Watch(ctx context.Context, keyPrefix string) (<-chan domain.StateEvent, error) {
-	ch := make(chan domain.StateEvent, 100)
+func (ls *LocalStorage) Watch(
+	ctx context.Context,
+	keyPrefix string,
+) (<-chan domain.StateEvent, error) {
+	ch := make(chan domain.StateEvent, defaultWatchChannelBufferSize)
 
 	ls.watchMu.Lock()
 	ls.watches[keyPrefix] = append(ls.watches[keyPrefix], ch)
@@ -172,7 +184,7 @@ func (ls *LocalStorage) Close() error {
 	ls.watchMu.Unlock()
 
 	// Clear all data
-	ls.data.Range(func(key, value interface{}) bool {
+	ls.data.Range(func(key, _ any) bool {
 		ls.data.Delete(key)
 		return true
 	})
@@ -181,7 +193,7 @@ func (ls *LocalStorage) Close() error {
 }
 
 // Ping checks the health of the storage system.
-func (ls *LocalStorage) Ping(ctx context.Context) error {
+func (ls *LocalStorage) Ping(_ context.Context) error {
 	ls.closeMu.RLock()
 	defer ls.closeMu.RUnlock()
 
@@ -217,56 +229,45 @@ func (ls *LocalStorage) notifyWatchers(key string, event domain.StateEvent) {
 	}
 }
 
-// removeWatcher removes a specific channel from the watchers list.
-func (ls *LocalStorage) removeWatcher(keyPrefix string, ch chan domain.StateEvent) {
-	ls.watchMu.Lock()
-	defer ls.watchMu.Unlock()
-
-	if channels, exists := ls.watches[keyPrefix]; exists {
-		// Remove the specific channel
-		for i, existingCh := range channels {
-			if existingCh == ch {
-				// Remove channel from slice
-				ls.watches[keyPrefix] = append(channels[:i], channels[i+1:]...)
-				break
-			}
-		}
-
-		// If no more channels for this prefix, remove the prefix entry
-		if len(ls.watches[keyPrefix]) == 0 {
-			delete(ls.watches, keyPrefix)
-		}
-	}
-}
-
 // removeWatcherAndClose removes a watcher and closes its channel safely.
 func (ls *LocalStorage) removeWatcherAndClose(keyPrefix string, ch chan domain.StateEvent) {
 	ls.watchMu.Lock()
 	defer ls.watchMu.Unlock()
 
-	if channels, exists := ls.watches[keyPrefix]; exists {
-		// Remove the specific channel
-		for i, existingCh := range channels {
-			if existingCh == ch {
-				// Remove channel from slice
-				ls.watches[keyPrefix] = append(channels[:i], channels[i+1:]...)
+	channels, exists := ls.watches[keyPrefix]
+	if !exists {
+		return
+	}
 
-				// Check if channel is already closed
-				ls.closedChMu.Lock()
-				if !ls.closedChans[ch] {
-					ls.closedChans[ch] = true
-					ls.closedChMu.Unlock()
-					close(ch)
-				} else {
-					ls.closedChMu.Unlock()
-				}
-				break
-			}
-		}
+	ls.removeChannelFromWatchers(keyPrefix, ch, channels)
+	ls.closeChannelSafely(ch)
+}
 
-		// If no more channels for this prefix, remove the prefix entry
-		if len(ls.watches[keyPrefix]) == 0 {
-			delete(ls.watches, keyPrefix)
+func (ls *LocalStorage) removeChannelFromWatchers(
+	keyPrefix string,
+	targetCh chan domain.StateEvent,
+	channels []chan domain.StateEvent,
+) {
+	for i, existingCh := range channels {
+		if existingCh == targetCh {
+			// Remove channel from slice
+			ls.watches[keyPrefix] = append(channels[:i], channels[i+1:]...)
+			break
 		}
+	}
+
+	// If no more channels for this prefix, remove the prefix entry
+	if len(ls.watches[keyPrefix]) == 0 {
+		delete(ls.watches, keyPrefix)
+	}
+}
+
+func (ls *LocalStorage) closeChannelSafely(ch chan domain.StateEvent) {
+	ls.closedChMu.Lock()
+	defer ls.closedChMu.Unlock()
+
+	if !ls.closedChans[ch] {
+		ls.closedChans[ch] = true
+		close(ch)
 	}
 }

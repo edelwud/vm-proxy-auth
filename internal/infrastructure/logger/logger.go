@@ -1,6 +1,8 @@
 package logger
 
 import (
+	"maps"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
@@ -85,9 +87,7 @@ func (l *StructuredLogger) Error(msg string, fields ...domain.Field) {
 func (l *StructuredLogger) With(fields ...domain.Field) domain.Logger {
 	newFields := make(logrus.Fields)
 	// Copy existing fields
-	for k, v := range l.fields {
-		newFields[k] = v
-	}
+	maps.Copy(newFields, l.fields)
 	// Add new fields
 	for _, field := range fields {
 		newFields[field.Key] = field.Value
@@ -119,7 +119,7 @@ func Int(key string, value int) domain.Field {
 	return domain.Field{Key: key, Value: value}
 }
 
-func Duration(key string, value interface{}) domain.Field {
+func Duration(key string, value any) domain.Field {
 	return domain.Field{Key: key, Value: value}
 }
 

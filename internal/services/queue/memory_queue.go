@@ -8,6 +8,12 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
+// Queue utilization constants.
+const (
+	percentageMultiplier        = 100
+	healthyUtilizationThreshold = 90 // Queue is unhealthy if >90% full
+)
+
 // MemoryQueue implements a thread-safe in-memory request queue.
 type MemoryQueue struct {
 	queue         chan *domain.ProxyRequest
@@ -182,11 +188,11 @@ func (mq *MemoryQueue) Close() error {
 }
 
 // Stats returns queue statistics.
-func (mq *MemoryQueue) Stats() QueueStats {
+func (mq *MemoryQueue) Stats() Stats {
 	mq.mu.RLock()
 	defer mq.mu.RUnlock()
 
-	return QueueStats{
+	return Stats{
 		Size:          len(mq.queue),
 		MaxSize:       mq.maxSize,
 		EnqueuedTotal: mq.enqueuedCount,
@@ -196,8 +202,8 @@ func (mq *MemoryQueue) Stats() QueueStats {
 	}
 }
 
-// QueueStats represents queue statistics for monitoring.
-type QueueStats struct {
+// Stats represents queue statistics for monitoring.
+type Stats struct {
 	Size          int   `json:"size"`
 	MaxSize       int   `json:"max_size"`
 	EnqueuedTotal int64 `json:"enqueued_total"`
@@ -207,20 +213,20 @@ type QueueStats struct {
 }
 
 // IsHealthy returns true if the queue is operating normally.
-func (qs QueueStats) IsHealthy() bool {
+func (qs Stats) IsHealthy() bool {
 	if qs.IsClosed {
 		return false
 	}
 
 	// Consider queue unhealthy if it's consistently near capacity
-	utilizationPercent := float64(qs.Size) / float64(qs.MaxSize) * 100
-	return utilizationPercent < 90 // Less than 90% full
+	utilizationPercent := float64(qs.Size) / float64(qs.MaxSize) * percentageMultiplier
+	return utilizationPercent < healthyUtilizationThreshold
 }
 
 // UtilizationPercent returns the current queue utilization as a percentage.
-func (qs QueueStats) UtilizationPercent() float64 {
+func (qs Stats) UtilizationPercent() float64 {
 	if qs.MaxSize == 0 {
 		return 0
 	}
-	return float64(qs.Size) / float64(qs.MaxSize) * 100
+	return float64(qs.Size) / float64(qs.MaxSize) * percentageMultiplier
 }

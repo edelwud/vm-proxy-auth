@@ -47,8 +47,8 @@ func TestJWKSFetcher_ValidJWKS(t *testing.T) {
 
 func TestJWKSFetcher_KeyNotFound(t *testing.T) {
 	// Create mock JWKS with different key ID
-	jwks := map[string]interface{}{
-		"keys": []map[string]interface{}{
+	jwks := map[string]any{
+		"keys": []map[string]any{
 			{
 				"kty": "RSA",
 				"kid": "different-kid",
@@ -79,7 +79,7 @@ func TestJWKSFetcher_KeyNotFound(t *testing.T) {
 func TestJWKSFetcher_InvalidJWKSResponse(t *testing.T) {
 	tests := []struct {
 		name         string
-		responseBody interface{}
+		responseBody any
 		statusCode   int
 	}{
 		{
@@ -89,17 +89,17 @@ func TestJWKSFetcher_InvalidJWKSResponse(t *testing.T) {
 		},
 		{
 			name:         "missing keys field",
-			responseBody: map[string]interface{}{"not_keys": []interface{}{}},
+			responseBody: map[string]any{"not_keys": []any{}},
 			statusCode:   200,
 		},
 		{
 			name:         "HTTP error",
-			responseBody: map[string]interface{}{"error": "not found"},
+			responseBody: map[string]any{"error": "not found"},
 			statusCode:   404,
 		},
 		{
 			name:         "server error",
-			responseBody: map[string]interface{}{"error": "internal error"},
+			responseBody: map[string]any{"error": "internal error"},
 			statusCode:   500,
 		},
 	}
@@ -174,11 +174,11 @@ func TestJWKSFetcher_Caching(t *testing.T) {
 func TestJWKSFetcher_InvalidRSAKey(t *testing.T) {
 	tests := []struct {
 		name string
-		jwk  map[string]interface{}
+		jwk  map[string]any
 	}{
 		{
 			name: "missing modulus (n)",
-			jwk: map[string]interface{}{
+			jwk: map[string]any{
 				"kty": "RSA",
 				"kid": "test-kid",
 				"use": "sig",
@@ -188,7 +188,7 @@ func TestJWKSFetcher_InvalidRSAKey(t *testing.T) {
 		},
 		{
 			name: "missing exponent (e)",
-			jwk: map[string]interface{}{
+			jwk: map[string]any{
 				"kty": "RSA",
 				"kid": "test-kid",
 				"use": "sig",
@@ -198,7 +198,7 @@ func TestJWKSFetcher_InvalidRSAKey(t *testing.T) {
 		},
 		{
 			name: "invalid modulus encoding",
-			jwk: map[string]interface{}{
+			jwk: map[string]any{
 				"kty": "RSA",
 				"kid": "test-kid",
 				"use": "sig",
@@ -208,7 +208,7 @@ func TestJWKSFetcher_InvalidRSAKey(t *testing.T) {
 		},
 		{
 			name: "invalid exponent encoding",
-			jwk: map[string]interface{}{
+			jwk: map[string]any{
 				"kty": "RSA",
 				"kid": "test-kid",
 				"use": "sig",
@@ -220,8 +220,8 @@ func TestJWKSFetcher_InvalidRSAKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			jwks := map[string]interface{}{
-				"keys": []interface{}{tt.jwk},
+			jwks := map[string]any{
+				"keys": []any{tt.jwk},
 			}
 
 			// Create test server
@@ -263,8 +263,8 @@ func TestJWKSFetcher_MultipleKeys(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create JWKS with multiple keys
-	jwks := map[string]interface{}{
-		"keys": []interface{}{
+	jwks := map[string]any{
+		"keys": []any{
 			createJWK(t, &privateKey1.PublicKey, "key-1"),
 			createJWK(t, &privateKey2.PublicKey, "key-2"),
 		},
@@ -295,20 +295,20 @@ func TestJWKSFetcher_MultipleKeys(t *testing.T) {
 
 // Helper functions
 
-func createMockJWKS(t *testing.T, publicKey *rsa.PublicKey, kid string) map[string]interface{} {
-	return map[string]interface{}{
-		"keys": []interface{}{
+func createMockJWKS(t *testing.T, publicKey *rsa.PublicKey, kid string) map[string]any {
+	return map[string]any{
+		"keys": []any{
 			createJWK(t, publicKey, kid),
 		},
 	}
 }
 
-func createJWK(_ *testing.T, publicKey *rsa.PublicKey, kid string) map[string]interface{} {
+func createJWK(_ *testing.T, publicKey *rsa.PublicKey, kid string) map[string]any {
 	// Convert RSA public key to JWK format
 	nBytes := publicKey.N.Bytes()
 	eBytes := big.NewInt(int64(publicKey.E)).Bytes()
 
-	return map[string]interface{}{
+	return map[string]any{
 		"kty": "RSA",
 		"kid": kid,
 		"use": "sig",

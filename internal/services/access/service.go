@@ -2,6 +2,7 @@ package access
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
@@ -44,10 +45,8 @@ func (s *Service) CanAccess(_ context.Context, user *domain.User, path, method s
 func isWriteOperation(method, path string) bool {
 	// POST, PUT, PATCH, DELETE are write operations
 	writeHTTPMethods := []string{"POST", "PUT", "PATCH", "DELETE"}
-	for _, writeMethod := range writeHTTPMethods {
-		if method == writeMethod {
-			return true
-		}
+	if slices.Contains(writeHTTPMethods, method) {
+		return true
 	}
 
 	// Some paths are write operations even with GET/POST
@@ -87,10 +86,5 @@ func isRestrictedPath(path string) bool {
 
 // isAdmin checks if a user has admin privileges.
 func isAdmin(user *domain.User) bool {
-	for _, group := range user.Groups {
-		if group == "admin" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(user.Groups, "admin")
 }

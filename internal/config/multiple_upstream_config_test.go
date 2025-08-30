@@ -214,12 +214,12 @@ func TestViperConfig_ValidateMultipleUpstreams(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.config.ValidateMultipleUpstreams()
 			if tc.expectErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tc.errMsg != "" {
 					assert.Contains(t, err.Error(), tc.errMsg)
 				}
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -306,7 +306,7 @@ func TestViperConfig_ToEnhancedServiceConfig_NotEnabled(t *testing.T) {
 	}
 
 	serviceConfig, err := config.ToEnhancedServiceConfig()
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, serviceConfig)
 	assert.Contains(t, err.Error(), "multiple upstreams not enabled")
 }
@@ -328,7 +328,7 @@ func TestViperConfig_ToEnhancedServiceConfig_InvalidConfig(t *testing.T) {
 	}
 
 	serviceConfig, err := config.ToEnhancedServiceConfig()
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, serviceConfig)
 	assert.Contains(t, err.Error(), "invalid multiple upstream configuration")
 }

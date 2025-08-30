@@ -2,6 +2,7 @@ package loadbalancer_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -36,9 +37,9 @@ func TestLeastConnectionsBalancer_BasicDistribution(t *testing.T) {
 	}
 
 	// Each backend should get some requests
-	assert.Equal(t, 3, len(selectedBackends), "All backends should be selected")
+	assert.Len(t, selectedBackends, 3, "All backends should be selected")
 	for url, count := range selectedBackends {
-		assert.Greater(t, count, 0, "Backend %s should have received requests", url)
+		assert.Positive(t, count, "Backend %s should have received requests", url)
 	}
 }
 
@@ -131,13 +132,17 @@ func TestLeastConnectionsBalancer_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Start concurrent goroutines
+	errors := make(chan error, numGoroutines*requestsPerGoroutine)
 	for range numGoroutines {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for range requestsPerGoroutine {
 				backend, err := balancer.NextBackend(ctx)
-				require.NoError(t, err)
+				if err != nil {
+					errors <- err
+					return
+				}
 				results <- backend
 			}
 		}()
@@ -145,6 +150,15 @@ func TestLeastConnectionsBalancer_ConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 	close(results)
+	close(errors)
+
+	// Check for errors
+	select {
+	case err := <-errors:
+		require.NoError(t, err)
+	default:
+		// No errors
+	}
 
 	// Count distribution
 	counts := make(map[string]int)
@@ -158,8 +172,8 @@ func TestLeastConnectionsBalancer_ConcurrentAccess(t *testing.T) {
 	assert.Equal(t, numGoroutines*requestsPerGoroutine, totalRequests)
 
 	// Both backends should get requests (distribution may be uneven due to timing)
-	assert.Greater(t, counts["http://backend1.com"], 0)
-	assert.Greater(t, counts["http://backend2.com"], 0)
+	assert.Positive(t, counts["http://backend1.com"])
+	assert.Positive(t, counts["http://backend2.com"])
 
 	// Verify total connection count matches
 	totalConns := balancer.GetBackendConnections("http://backend1.com") +
@@ -213,7 +227,7 @@ func TestLeastConnectionsBalancer_MixedHealthyUnhealthy(t *testing.T) {
 
 	// Should only return healthy backends
 	seenBackends := make(map[string]bool)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		backend, err := balancer.NextBackend(ctx)
 		require.NoError(t, err)
 		seenBackends[backend.URL] = true
@@ -365,11 +379,11 @@ func TestLeastConnectionsBalancer_Close(t *testing.T) {
 
 	// Should be able to close
 	err := balancer.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Should be able to close multiple times
 	err = balancer.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Should not be able to get backends after close
 	backend, err = balancer.NextBackend(ctx)
@@ -390,7 +404,7 @@ func TestLeastConnectionsBalancer_ErrorReporting(t *testing.T) {
 	backend, _ := balancer.NextBackend(ctx)
 
 	// Report error - should still decrement connection count
-	balancer.ReportResult(backend, fmt.Errorf("connection failed"), 502)
+	balancer.ReportResult(backend, errors.New("connection failed"), 502)
 	assert.Equal(t, 0, balancer.GetBackendConnections(backend.URL))
 
 	// Report result for unknown backend - should not cause panic

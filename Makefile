@@ -12,6 +12,7 @@ GOCLEAN := $(GOCMD) clean
 GOTEST := $(GOCMD) test
 GOGET := $(GOCMD) get
 GOMOD := $(GOCMD) mod
+GOFMT := gofumpt
 
 # Build flags
 LDFLAGS := -ldflags "-X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME) -X main.gitCommit=$(GIT_COMMIT) -w -s"
@@ -87,7 +88,7 @@ deps:
 # Format code
 fmt:
 	@echo "Formatting code..."
-	$(GOCMD) fmt ./...
+	$(GOFMT) -l -w -d ./..
 
 # Run linter (requires golangci-lint)
 lint:

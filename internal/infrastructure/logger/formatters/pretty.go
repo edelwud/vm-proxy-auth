@@ -135,7 +135,7 @@ func (f *PrettyFormatter) formatFields(fields logrus.Fields) string {
 }
 
 // formatFieldValue formats a field value for display.
-func (f *PrettyFormatter) formatFieldValue(value interface{}) string {
+func (f *PrettyFormatter) formatFieldValue(value any) string {
 	if value == nil {
 		return f.colorize(ColorGray, "<nil>")
 	}

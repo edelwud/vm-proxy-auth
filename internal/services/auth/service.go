@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -194,10 +195,8 @@ func (s *Service) determineUserPermissions(
 // hasGroupMatch checks if user has any of the required groups.
 func (s *Service) hasGroupMatch(userGroups, requiredGroups []string) bool {
 	for _, userGroup := range userGroups {
-		for _, requiredGroup := range requiredGroups {
-			if userGroup == requiredGroup {
-				return true
-			}
+		if slices.Contains(requiredGroups, userGroup) {
+			return true
 		}
 	}
 
@@ -236,7 +235,7 @@ func (s *Service) removeDuplicateVMTenants(tenants []domain.VMTenant) []domain.V
 // CleanupCache removes expired entries from the cache.
 func (s *Service) CleanupCache() {
 	now := time.Now()
-	s.userCache.Range(func(key, value interface{}) bool {
+	s.userCache.Range(func(key, value any) bool {
 		cached, ok := value.(cachedUser)
 		if !ok {
 			s.userCache.Delete(key) // Remove invalid cache entry

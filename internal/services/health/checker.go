@@ -2,6 +2,7 @@ package health
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -15,21 +16,24 @@ const (
 	defaultHealthCheckTimeoutSeconds = 10
 	successfulResponseCode           = 200
 	maxSuccessfulResponseCode        = 300
+	stopTimeoutSeconds               = 5
+	percentageMultiplier             = 100
 )
 
 // CheckerConfig holds configuration for the health checker.
 type CheckerConfig struct {
-	CheckInterval      time.Duration `yaml:"check_interval" default:"30s"`
-	Timeout            time.Duration `yaml:"timeout" default:"10s"`
-	HealthyThreshold   int           `yaml:"healthy_threshold" default:"2"`
+	CheckInterval      time.Duration `yaml:"check_interval"      default:"30s"`
+	Timeout            time.Duration `yaml:"timeout"             default:"10s"`
+	HealthyThreshold   int           `yaml:"healthy_threshold"   default:"2"`
 	UnhealthyThreshold int           `yaml:"unhealthy_threshold" default:"3"`
-	HealthEndpoint     string        `yaml:"health_endpoint" default:"/health"`
+	HealthEndpoint     string        `yaml:"health_endpoint"     default:"/health"`
 }
 
 // Checker monitors backend health using HTTP health checks.
 type Checker struct {
 	config        CheckerConfig
 	backends      []domain.Backend
+	backendsMu    sync.RWMutex
 	backendStates map[string]*backendState
 	statesMu      sync.RWMutex
 	onStateChange func(backendURL string, oldState, newState domain.BackendState)
@@ -61,7 +65,7 @@ func NewChecker(
 	// Set defaults only when not specified (-1 or 0 means disabled)
 	// We'll check for disabled state in StartMonitoring
 	if config.Timeout == 0 {
-		config.Timeout = 10 * time.Second
+		config.Timeout = defaultHealthCheckTimeoutSeconds * time.Second
 	}
 	if config.HealthyThreshold == 0 {
 		config.HealthyThreshold = 2
@@ -73,8 +77,12 @@ func NewChecker(
 		config.HealthEndpoint = "/health"
 	}
 
+	// Create a copy of backends to avoid sharing slice with load balancer
+	backendsCopy := make([]domain.Backend, len(backends))
+	copy(backendsCopy, backends)
+
 	backendStates := make(map[string]*backendState)
-	for _, backend := range backends {
+	for _, backend := range backendsCopy {
 		backendStates[backend.URL] = &backendState{
 			lastCheckTime: time.Now(),
 		}
@@ -82,7 +90,7 @@ func NewChecker(
 
 	return &Checker{
 		config:        config,
-		backends:      backends,
+		backends:      backendsCopy,
 		backendStates: backendStates,
 		onStateChange: onStateChange,
 		httpClient: &http.Client{
@@ -165,13 +173,15 @@ func (hc *Checker) recordHealthCheck(backendURL string, isHealthy bool, duration
 	var newState domain.BackendState
 	var currentBackend *domain.Backend
 
-	// Find current backend
+	// Find current backend with read lock
+	hc.backendsMu.RLock()
 	for i, backend := range hc.backends {
 		if backend.URL == backendURL {
 			currentBackend = &hc.backends[i]
 			break
 		}
 	}
+	hc.backendsMu.RUnlock()
 
 	if currentBackend == nil {
 		hc.logger.Warn("Backend not found for health check",
@@ -199,13 +209,15 @@ func (hc *Checker) recordHealthCheck(backendURL string, isHealthy bool, duration
 
 	// Update backend state if changed
 	if newState != currentState {
-		// Find the index and update the backend
+		// Find the index and update the backend with write lock
+		hc.backendsMu.Lock()
 		for i, backend := range hc.backends {
 			if backend.URL == backendURL {
 				hc.backends[i].State = newState
 				break
 			}
 		}
+		hc.backendsMu.Unlock()
 
 		hc.logger.Info("Backend state changed",
 			domain.Field{Key: "backend_url", Value: backendURL},
@@ -229,16 +241,6 @@ func (hc *Checker) recordHealthCheck(backendURL string, isHealthy bool, duration
 		domain.Field{Key: "consecutive_failures", Value: state.consecutiveFailures})
 }
 
-// findBackendIndex finds the index of a backend by URL.
-func (hc *Checker) findBackendIndex(backendURL string) int {
-	for i, backend := range hc.backends {
-		if backend.URL == backendURL {
-			return i
-		}
-	}
-	return -1
-}
-
 // StartMonitoring begins continuous health monitoring.
 func (hc *Checker) StartMonitoring(ctx context.Context) error {
 	// Skip monitoring if check interval is 0 or negative (disabled)
@@ -250,7 +252,7 @@ func (hc *Checker) StartMonitoring(ctx context.Context) error {
 	hc.runningMu.Lock()
 	if hc.running {
 		hc.runningMu.Unlock()
-		return fmt.Errorf("health checker is already running")
+		return errors.New("health checker is already running")
 	}
 	hc.running = true
 	hc.runningMu.Unlock()
@@ -297,7 +299,13 @@ func (hc *Checker) monitoringLoop(ctx context.Context) {
 func (hc *Checker) performHealthChecks(ctx context.Context) {
 	var wg sync.WaitGroup
 
-	for _, backend := range hc.backends {
+	// Copy backends slice to avoid holding lock during health checks
+	hc.backendsMu.RLock()
+	backendsCopy := make([]domain.Backend, len(hc.backends))
+	copy(backendsCopy, hc.backends)
+	hc.backendsMu.RUnlock()
+
+	for _, backend := range backendsCopy {
 		if backend.State == domain.BackendMaintenance {
 			continue // Skip maintenance backends
 		}
@@ -336,7 +344,7 @@ func (hc *Checker) Stop() error {
 	select {
 	case <-hc.stoppedCh:
 		// Monitoring stopped
-	case <-time.After(5 * time.Second):
+	case <-time.After(stopTimeoutSeconds * time.Second):
 		hc.logger.Warn("Timeout waiting for health monitoring to stop")
 	}
 
@@ -348,6 +356,9 @@ func (hc *Checker) Stop() error {
 func (hc *Checker) GetStats() map[string]BackendHealthStats {
 	hc.statesMu.RLock()
 	defer hc.statesMu.RUnlock()
+
+	hc.backendsMu.RLock()
+	defer hc.backendsMu.RUnlock()
 
 	stats := make(map[string]BackendHealthStats)
 	for backendURL, state := range hc.backendStates {
@@ -382,7 +393,7 @@ func (hc *Checker) calculateSuccessRate(state *backendState) float64 {
 		return 0.0
 	}
 	successCount := state.totalChecks - state.totalFailures
-	return float64(successCount) / float64(state.totalChecks) * 100
+	return float64(successCount) / float64(state.totalChecks) * percentageMultiplier
 }
 
 // BackendHealthStats represents health statistics for a backend.

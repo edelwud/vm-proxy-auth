@@ -30,7 +30,7 @@ func NewRoundRobinBalancer(backends []domain.Backend, logger domain.Logger) *Rou
 }
 
 // NextBackend returns the next available backend according to round-robin strategy.
-func (rrb *RoundRobinBalancer) NextBackend(ctx context.Context) (*domain.Backend, error) {
+func (rrb *RoundRobinBalancer) NextBackend(_ context.Context) (*domain.Backend, error) {
 	rrb.closeMu.RLock()
 	if rrb.closed {
 		rrb.closeMu.RUnlock()
@@ -59,7 +59,13 @@ func (rrb *RoundRobinBalancer) NextBackend(ctx context.Context) (*domain.Backend
 	}
 
 	// Round-robin selection
-	index := atomic.AddInt32(&rrb.current, 1) % int32(len(healthyBackends))
+	healthyCount := len(healthyBackends)
+	if healthyCount > (1<<31 - 1) { // Check for int32 overflow
+		rrb.logger.Error("Too many backends for int32 counter",
+			domain.Field{Key: "backend_count", Value: healthyCount})
+		return nil, domain.ErrNoHealthyBackends
+	}
+	index := atomic.AddInt32(&rrb.current, 1) % int32(healthyCount)
 	backend := &healthyBackends[index]
 
 	rrb.logger.Debug("Selected backend using round-robin",

@@ -31,7 +31,7 @@ func TestWeightedRoundRobinBalancer_BasicDistribution(t *testing.T) {
 	counts := make(map[string]int)
 	numRequests := 60 // Multiple of total weight (3+2+1=6)
 
-	for i := 0; i < numRequests; i++ {
+	for range numRequests {
 		backend, err := balancer.NextBackend(ctx)
 		require.NoError(t, err)
 		counts[backend.URL]++
@@ -63,7 +63,7 @@ func TestWeightedRoundRobinBalancer_SmoothDistribution(t *testing.T) {
 
 	// Test smooth weighted round-robin (should not return all backend1 first)
 	results := make([]string, 12)
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		backend, err := balancer.NextBackend(ctx)
 		require.NoError(t, err)
 		results[i] = backend.URL
@@ -75,7 +75,7 @@ func TestWeightedRoundRobinBalancer_SmoothDistribution(t *testing.T) {
 	// Count consecutive backend1 selections
 	maxConsecutive := 0
 	currentConsecutive := 0
-	for i := 0; i < len(results); i++ {
+	for i := range results {
 		if results[i] == "http://backend1.com" {
 			currentConsecutive++
 			if currentConsecutive > maxConsecutive {
@@ -146,13 +146,17 @@ func TestWeightedRoundRobinBalancer_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Start concurrent goroutines
-	for i := 0; i < numGoroutines; i++ {
+	errors := make(chan error, numGoroutines*requestsPerGoroutine)
+	for range numGoroutines {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < requestsPerGoroutine; j++ {
+			for range requestsPerGoroutine {
 				backend, err := balancer.NextBackend(ctx)
-				require.NoError(t, err)
+				if err != nil {
+					errors <- err
+					return
+				}
 				results <- backend.URL
 			}
 		}()
@@ -160,6 +164,15 @@ func TestWeightedRoundRobinBalancer_ConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 	close(results)
+	close(errors)
+
+	// Check for errors
+	select {
+	case err := <-errors:
+		require.NoError(t, err)
+	default:
+		// No errors
+	}
 
 	// Count distribution
 	counts := make(map[string]int)
@@ -206,7 +219,7 @@ func TestWeightedRoundRobinBalancer_SingleBackend(t *testing.T) {
 	ctx := context.Background()
 
 	// Should return the same backend multiple times
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		backend, err := balancer.NextBackend(ctx)
 		require.NoError(t, err)
 		assert.Equal(t, "http://only-backend.com", backend.URL)
@@ -228,7 +241,7 @@ func TestWeightedRoundRobinBalancer_MixedHealthyUnhealthy(t *testing.T) {
 
 	// Should only return healthy backends with their relative weights
 	counts := make(map[string]int)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		backend, err := balancer.NextBackend(ctx)
 		require.NoError(t, err)
 		counts[backend.URL]++
@@ -238,8 +251,8 @@ func TestWeightedRoundRobinBalancer_MixedHealthyUnhealthy(t *testing.T) {
 	}
 
 	// Should have both healthy backends with 3:2 ratio
-	assert.Greater(t, counts["http://backend1.com"], 0)
-	assert.Greater(t, counts["http://backend3.com"], 0)
+	assert.Positive(t, counts["http://backend1.com"])
+	assert.Positive(t, counts["http://backend3.com"])
 	assert.Equal(t, 0, counts["http://backend2.com"])
 
 	// Ratio should be approximately 3:2
@@ -281,9 +294,10 @@ func TestWeightedRoundRobinBalancer_BackendsStatus(t *testing.T) {
 	// Find backend status entries
 	var backend1Status, backend2Status *domain.BackendStatus
 	for _, s := range status {
-		if s.Backend.URL == "http://backend1.com" {
+		switch s.Backend.URL {
+		case "http://backend1.com":
 			backend1Status = s
-		} else if s.Backend.URL == "http://backend2.com" {
+		case "http://backend2.com":
 			backend2Status = s
 		}
 	}
@@ -331,11 +345,11 @@ func TestWeightedRoundRobinBalancer_Close(t *testing.T) {
 
 	// Should be able to close
 	err := balancer.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Should be able to close multiple times
 	err = balancer.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Should not be able to get backends after close
 	ctx := context.Background()
