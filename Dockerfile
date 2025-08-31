@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.24-alpine@sha256:c694a4d291a13a9f9d94933395673494fc2cc9d4777b85df3a7e70b3492d3574 AS builder
+FROM golang:1.24.4-alpine@sha256:937665b6ce2e341f0e9952c899c464c4180a53d279d5cc657c44eebafdef6ae9 AS builder
 
 # Install build dependencies and create user in single layer
 RUN apk add --no-cache git=2.45.4-r0 ca-certificates=20240705-r0 tzdata=2025b-r0 && \
