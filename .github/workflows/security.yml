@@ -49,29 +49,12 @@ jobs:
         with:
           category: "/language:${{ matrix.language }}"
 
-  dependency-scan:
-    name: Dependency Vulnerability Scan
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Run OSV-Scanner
-        uses: google/osv-scanner-action@v2
-        with:
-          scan-args: .
-
-      - name: Run Govulncheck
-        uses: golang/govulncheck-action@v1
-        with:
-          go-version-input: ${{ env.GO_VERSION }}
+  scan-pr:
+    permissions:
+      actions: read
+      security-events: write
+      contents: read
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@v2.2.2"
 
   secrets-scan:
     name: Secrets Scan
@@ -194,4 +177,3 @@ jobs:
         if: always()
         with:
           sarif_file: results.sarif
-
