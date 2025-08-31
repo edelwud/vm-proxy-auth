@@ -1,5 +1,11 @@
 # Build stage
-FROM golang:1.24.4-alpine@sha256:937665b6ce2e341f0e9952c899c464c4180a53d279d5cc657c44eebafdef6ae9 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.24.4-alpine AS builder
+
+# Build platform arguments
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+ARG TARGETOS
+ARG TARGETARCH
 
 # Install build dependencies and create user in single layer
 RUN apk add --no-cache git ca-certificates tzdata && \
@@ -24,7 +30,7 @@ ARG GIT_COMMIT
 ARG TARGETARCH
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build \
     -ldflags="-s -w -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT}" \
     -a -installsuffix cgo \
     -o vm-proxy-auth ./cmd/gateway
