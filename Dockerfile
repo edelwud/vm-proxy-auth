@@ -2,7 +2,7 @@
 FROM golang:1.24.4-alpine@sha256:937665b6ce2e341f0e9952c899c464c4180a53d279d5cc657c44eebafdef6ae9 AS builder
 
 # Install build dependencies and create user in single layer
-RUN apk add --no-cache git=2.45.4-r0 ca-certificates=20240705-r0 tzdata=2025b-r0 && \
+RUN apk add --no-cache git ca-certificates tzdata && \
     adduser -D -g '' appuser
 
 # Set working directory
