@@ -31,7 +31,8 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 			Secret:    "test-secret",
 		},
 	}
-	authService := auth.NewService(authConfig, []config.TenantMap{}, logger, metricsService)
+	authService, err := auth.NewService(authConfig, []config.TenantMap{}, logger, metricsService)
+	require.NoError(t, err)
 
 	// Create other services
 	upstreamConfig := config.UpstreamSettings{

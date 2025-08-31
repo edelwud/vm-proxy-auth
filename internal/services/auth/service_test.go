@@ -38,7 +38,8 @@ func TestNewService_WithSecretAuth(t *testing.T) {
 		},
 	}
 
-	service := auth.NewService(cfg, tenantMaps, logger, metrics)
+	service, err := auth.NewService(cfg, tenantMaps, logger, metrics)
+	require.NoError(t, err)
 	require.NotNil(t, service)
 }
 
@@ -57,26 +58,28 @@ func TestNewService_WithJWKSAuth(t *testing.T) {
 
 	tenantMaps := []config.TenantMap{}
 
-	service := auth.NewService(cfg, tenantMaps, logger, metrics)
+	service, err := auth.NewService(cfg, tenantMaps, logger, metrics)
+	require.NoError(t, err)
 	require.NotNil(t, service)
 }
 
-func TestNewService_PanicsWithoutAuthConfig(t *testing.T) {
+func TestNewService_ErrorWithoutAuthConfig(t *testing.T) {
 	logger := &testutils.MockLogger{}
 	metrics := &MockMetricsService{}
 
 	cfg := config.AuthSettings{
 		JWT: config.JWTSettings{
 			Algorithm: "HS256",
-			// No Secret or JwksURL - should panic
+			// No Secret or JwksURL - should return error
 		},
 	}
 
 	tenantMaps := []config.TenantMap{}
 
-	assert.Panics(t, func() {
-		auth.NewService(cfg, tenantMaps, logger, metrics)
-	})
+	service, err := auth.NewService(cfg, tenantMaps, logger, metrics)
+	require.Error(t, err)
+	assert.Nil(t, service)
+	assert.Contains(t, err.Error(), "JWT authentication requires either jwt_secret or jwks_url")
 }
 
 func TestService_Authenticate_ValidToken(t *testing.T) {
@@ -154,7 +157,8 @@ func TestService_Authenticate_ValidToken(t *testing.T) {
 				},
 			}
 
-			service := auth.NewService(cfg, tt.tenantMappings, logger, metrics)
+			service, err := auth.NewService(cfg, tt.tenantMappings, logger, metrics)
+			require.NoError(t, err)
 
 			// Create test JWT token
 			token := jwt.NewWithClaims(jwt.SigningMethodHS256, tt.tokenClaims)
@@ -193,7 +197,8 @@ func TestService_Authenticate_InvalidToken(t *testing.T) {
 		},
 	}
 
-	service := auth.NewService(cfg, []config.TenantMap{}, logger, metrics)
+	service, err := auth.NewService(cfg, []config.TenantMap{}, logger, metrics)
+	require.NoError(t, err)
 
 	tests := []struct {
 		name  string
@@ -215,8 +220,8 @@ func TestService_Authenticate_InvalidToken(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			user, err := service.Authenticate(context.Background(), tt.token)
-			require.Error(t, err)
+			user, authErr := service.Authenticate(context.Background(), tt.token)
+			require.Error(t, authErr)
 			assert.Nil(t, user)
 		})
 	}
@@ -315,7 +320,8 @@ func TestService_TenantMapping_ComplexScenarios(t *testing.T) {
 				},
 			}
 
-			service := auth.NewService(cfg, tt.tenantMappings, logger, metrics)
+			service, err := auth.NewService(cfg, tt.tenantMappings, logger, metrics)
+			require.NoError(t, err)
 
 			// Create token with specified groups
 			tokenClaims := jwt.MapClaims{
@@ -353,7 +359,8 @@ func TestService_UserCaching(t *testing.T) {
 		},
 	}
 
-	service := auth.NewService(cfg, []config.TenantMap{}, logger, metrics)
+	service, err := auth.NewService(cfg, []config.TenantMap{}, logger, metrics)
+	require.NoError(t, err)
 
 	// Create test token
 	tokenClaims := jwt.MapClaims{

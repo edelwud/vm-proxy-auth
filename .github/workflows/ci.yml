@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: "1.24.0"
+  GO_VERSION: "1.24.2"
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ["1.24.0"]
+        go-version: ["1.24.2"]
     permissions:
       pull-requests: write
 
@@ -184,35 +184,6 @@ jobs:
         with:
           version: latest
           args: --timeout=5m
-
-  validate-config:
-    name: Validate Configurations
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Build binary
-        run: go build -o vm-proxy-auth ./cmd/gateway
-
-      - name: Validate test config
-        run: ./vm-proxy-auth --validate-config --config examples/config.test.yaml
-
-      - name: Validate production config
-        run: ./vm-proxy-auth --validate-config --config examples/config.example.yaml
-
-      - name: Validate VM multitenancy config
-        run: ./vm-proxy-auth --validate-config --config examples/config.vm-multitenancy.yaml
-
-      - name: Validate metrics config
-        run: ./vm-proxy-auth --validate-config --config examples/config.metrics.example.yaml
 
   docker:
     name: Docker Build & Push

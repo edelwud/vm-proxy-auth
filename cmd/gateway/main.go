@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/handlers"
@@ -92,7 +94,10 @@ func main() {
 
 	// Initialize all services using clean architecture
 	metricsService := metrics.NewService(appLogger)
-	authService := auth.NewService(cfg.Auth, cfg.TenantMapping, appLogger, metricsService)
+	authService, err := auth.NewService(cfg.Auth, cfg.TenantMapping, appLogger, metricsService)
+	if err != nil {
+		logrus.WithError(err).Fatal("Failed to initialize auth service")
+	}
 	tenantService := tenant.NewService(&cfg.Upstream, &cfg.TenantFilter, appLogger, metricsService)
 	accessService := access.NewService(appLogger)
 

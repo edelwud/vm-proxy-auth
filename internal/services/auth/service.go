@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -35,7 +36,7 @@ func NewService(
 	tenantMaps []config.TenantMap,
 	logger domain.Logger,
 	metrics domain.MetricsService,
-) domain.AuthService {
+) (domain.AuthService, error) {
 	// Initialize JWT verifier based on configuration
 	var verifier *JWTVerifier
 
@@ -48,7 +49,7 @@ func NewService(
 		verifier = NewJWKSVerifier(cfg.JWT.JwksURL, cfg.JWT.Algorithm, cfg.JWT.CacheTTL)
 	default:
 		// Error: must have either secret or JWKS URL
-		panic("JWT authentication requires either jwt_secret or jwks_url to be configured")
+		return nil, errors.New("JWT authentication requires either jwt_secret or jwks_url to be configured")
 	}
 
 	return &Service{
@@ -58,7 +59,7 @@ func NewService(
 		logger:     logger.With(domain.Field{Key: "component", Value: "auth"}),
 		metrics:    metrics,
 		cacheTTL:   cfg.JWT.CacheTTL,
-	}
+	}, nil
 }
 
 // Authenticate validates a token and returns user information.
