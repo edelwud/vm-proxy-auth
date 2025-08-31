@@ -224,4 +224,99 @@ var (
 		Message:    "No VM tenants available for filtering",
 		HTTPStatus: http.StatusBadRequest,
 	}
+
+	// Load balancer errors.
+	ErrNoHealthyBackends = &AppError{
+		Code:       ErrCodeUpstreamError,
+		Message:    "No healthy backends available",
+		HTTPStatus: http.StatusServiceUnavailable,
+	}
+
+	ErrNoAvailableBackends = &AppError{
+		Code:       ErrCodeUpstreamError,
+		Message:    "No backends available (including fallbacks)",
+		HTTPStatus: http.StatusServiceUnavailable,
+	}
+
+	ErrAllBackendsCircuitOpen = &AppError{
+		Code:       ErrCodeUpstreamError,
+		Message:    "All backend circuits are open",
+		HTTPStatus: http.StatusServiceUnavailable,
+	}
+
+	ErrBackendNotFound = &AppError{
+		Code:       ErrCodeUpstreamError,
+		Message:    "Backend not found",
+		HTTPStatus: http.StatusNotFound,
+	}
+
+	// State storage errors.
+	ErrKeyNotFound = &AppError{
+		Code:       ErrCodeNotFound,
+		Message:    "Key not found in storage",
+		HTTPStatus: http.StatusNotFound,
+	}
+
+	ErrStorageUnavailable = &AppError{
+		Code:       ErrCodeInternalError,
+		Message:    "State storage is unavailable",
+		HTTPStatus: http.StatusServiceUnavailable,
+	}
+
+	ErrStorageTimeout = &AppError{
+		Code:       ErrCodeInternalError,
+		Message:    "State storage operation timeout",
+		HTTPStatus: http.StatusRequestTimeout,
+	}
+
+	ErrNotLeader = &AppError{
+		Code:       ErrCodeInternalError,
+		Message:    "Not the leader node for this operation",
+		HTTPStatus: http.StatusServiceUnavailable,
+	}
+
+	// Request queue errors.
+	ErrQueueFull = &AppError{
+		Code:       ErrCodeRateLimited,
+		Message:    "Request queue is full",
+		HTTPStatus: http.StatusTooManyRequests,
+	}
+
+	ErrQueueEmpty = &AppError{
+		Code:       ErrCodeInternalError,
+		Message:    "Request queue is empty",
+		HTTPStatus: http.StatusNoContent,
+	}
+
+	ErrQueueTimeout = &AppError{
+		Code:       ErrCodeInternalError,
+		Message:    "Request timeout in queue",
+		HTTPStatus: http.StatusRequestTimeout,
+	}
+
+	ErrQueueClosed = &AppError{
+		Code:       ErrCodeInternalError,
+		Message:    "Request queue is closed",
+		HTTPStatus: http.StatusServiceUnavailable,
+	}
+
+	// Circuit breaker errors.
+	ErrCircuitOpen = &AppError{
+		Code:       ErrCodeUpstreamError,
+		Message:    "Circuit breaker is open",
+		HTTPStatus: http.StatusServiceUnavailable,
+	}
+
+	// Distributed lock errors.
+	ErrLockAlreadyHeld = &AppError{
+		Code:       ErrCodeRateLimited,
+		Message:    "Lock is already held by another node",
+		HTTPStatus: http.StatusConflict,
+	}
+
+	ErrNotLockOwner = &AppError{
+		Code:       ErrCodeForbidden,
+		Message:    "Not the owner of the lock",
+		HTTPStatus: http.StatusForbidden,
+	}
 )

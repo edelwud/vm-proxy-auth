@@ -60,8 +60,8 @@ func TestViperConfig_StructureConsistency(t *testing.T) {
 	assert.NotNil(t, viperConfig.Auth.JWT.Claims)
 	assert.NotNil(t, viperConfig.TenantFilter.Labels)
 
-	// Test that camelCase naming is used
-	assert.Greater(t, viperConfig.Server.Timeouts.ReadTimeout, 0*viperConfig.Server.Timeouts.ReadTimeout)
-	assert.Greater(t, viperConfig.Auth.JWT.TokenTTL, 0*viperConfig.Auth.JWT.TokenTTL)
-	assert.Greater(t, viperConfig.Auth.JWT.CacheTTL, 0*viperConfig.Auth.JWT.CacheTTL)
+	// Test that durations are positive
+	assert.Positive(t, viperConfig.Server.Timeouts.ReadTimeout)
+	assert.Positive(t, viperConfig.Auth.JWT.TokenTTL)
+	assert.Positive(t, viperConfig.Auth.JWT.CacheTTL)
 }

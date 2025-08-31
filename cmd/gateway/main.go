@@ -9,6 +9,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
@@ -16,6 +19,7 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
 	"github.com/edelwud/vm-proxy-auth/internal/services/access"
 	"github.com/edelwud/vm-proxy-auth/internal/services/auth"
+	"github.com/edelwud/vm-proxy-auth/internal/services/health"
 	"github.com/edelwud/vm-proxy-auth/internal/services/metrics"
 	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/services/tenant"
@@ -26,6 +30,18 @@ var (
 	version   = "dev"
 	buildTime = "unknown"
 	gitCommit = "unknown"
+)
+
+// Default configuration constants for single upstream backward compatibility.
+const (
+	defaultHealthCheckInterval      = 30 * time.Second
+	defaultHealthCheckTimeout       = 10 * time.Second
+	defaultHealthyThreshold         = 2
+	defaultUnhealthyThreshold       = 3
+	defaultQueueMaxSize             = 1000
+	defaultQueueTimeout             = 5 * time.Second
+	defaultRetryBackoffMilliseconds = 100
+	defaultRetryBackoffSeconds      = 5
 )
 
 //nolint:funlen
@@ -78,10 +94,99 @@ func main() {
 
 	// Initialize all services using clean architecture
 	metricsService := metrics.NewService(appLogger)
-	authService := auth.NewService(cfg.Auth, cfg.TenantMapping, appLogger, metricsService)
+	authService, err := auth.NewService(cfg.Auth, cfg.TenantMapping, appLogger, metricsService)
+	if err != nil {
+		logrus.WithError(err).Fatal("Failed to initialize auth service")
+	}
 	tenantService := tenant.NewService(&cfg.Upstream, &cfg.TenantFilter, appLogger, metricsService)
 	accessService := access.NewService(appLogger)
-	proxyService := proxy.NewService(cfg.Upstream.URL, cfg.Upstream.Timeout, appLogger, metricsService)
+
+	// Initialize enhanced proxy service (supports both single and multiple upstreams)
+	var configData *config.EnhancedServiceConfig
+
+	if cfg.IsMultipleUpstreamsEnabled() {
+		configData, err = cfg.ToEnhancedServiceConfig()
+		if err != nil {
+			appLogger.Error("Failed to create enhanced service configuration",
+				domain.Field{Key: "error", Value: err.Error()})
+			os.Exit(1)
+		}
+	} else {
+		// Create single backend configuration for backward compatibility
+		configData = &config.EnhancedServiceConfig{
+			Backends: []config.BackendConfig{
+				{URL: cfg.Upstream.URL, Weight: 1},
+			},
+			LoadBalancing: config.LoadBalancingConfig{
+				Strategy: "round-robin",
+			},
+			HealthCheck: config.HealthCheckConfig{
+				CheckInterval:      defaultHealthCheckInterval,
+				Timeout:            defaultHealthCheckTimeout,
+				HealthyThreshold:   defaultHealthyThreshold,
+				UnhealthyThreshold: defaultUnhealthyThreshold,
+				HealthEndpoint:     "/health",
+			},
+			Queue: config.QueueConfig{
+				MaxSize: defaultQueueMaxSize,
+				Timeout: defaultQueueTimeout,
+			},
+			Timeout:        cfg.Upstream.Timeout,
+			MaxRetries:     cfg.Upstream.Retry.MaxRetries,
+			RetryBackoff:   cfg.Upstream.Retry.RetryDelay,
+			EnableQueueing: false, // Disabled by default for single upstream
+		}
+	}
+
+	// Convert config.EnhancedServiceConfig to proxy.EnhancedServiceConfig
+	enhancedConfig := proxy.EnhancedServiceConfig{
+		Backends:      make([]proxy.BackendConfig, len(configData.Backends)),
+		LoadBalancing: proxy.LoadBalancingConfig{Strategy: configData.LoadBalancing.Strategy},
+		HealthCheck: health.CheckerConfig{
+			CheckInterval:      configData.HealthCheck.CheckInterval,
+			Timeout:            configData.HealthCheck.Timeout,
+			HealthyThreshold:   configData.HealthCheck.HealthyThreshold,
+			UnhealthyThreshold: configData.HealthCheck.UnhealthyThreshold,
+			HealthEndpoint:     configData.HealthCheck.HealthEndpoint,
+		},
+		Queue:          proxy.QueueConfig{MaxSize: configData.Queue.MaxSize, Timeout: configData.Queue.Timeout},
+		Timeout:        configData.Timeout,
+		MaxRetries:     configData.MaxRetries,
+		RetryBackoff:   configData.RetryBackoff,
+		EnableQueueing: configData.EnableQueueing,
+	}
+
+	// Convert backends
+	for i, backend := range configData.Backends {
+		enhancedConfig.Backends[i] = proxy.BackendConfig{
+			URL:    backend.URL,
+			Weight: backend.Weight,
+		}
+	}
+
+	proxyService, err := proxy.NewEnhancedService(enhancedConfig, appLogger, metricsService)
+	if err != nil {
+		appLogger.Error("Failed to create enhanced proxy service",
+			domain.Field{Key: "error", Value: err.Error()})
+		os.Exit(1)
+	}
+
+	// Start enhanced service
+	ctx := context.Background()
+	if startErr := proxyService.Start(ctx); startErr != nil {
+		appLogger.Error("Failed to start enhanced proxy service",
+			domain.Field{Key: "error", Value: startErr.Error()})
+		os.Exit(1)
+	}
+
+	if cfg.IsMultipleUpstreamsEnabled() {
+		appLogger.Info("Enhanced proxy service started with multiple upstreams",
+			domain.Field{Key: "backends", Value: len(enhancedConfig.Backends)},
+			domain.Field{Key: "strategy", Value: string(enhancedConfig.LoadBalancing.Strategy)})
+	} else {
+		appLogger.Info("Enhanced proxy service started with single upstream",
+			domain.Field{Key: "upstream_url", Value: cfg.Upstream.URL})
+	}
 
 	// Initialize main gateway handler
 	gatewayHandler := handlers.NewGatewayHandler(

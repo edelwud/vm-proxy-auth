@@ -146,7 +146,7 @@ func (s *Service) DetermineTargetTenant(
 			if s.CanAccessTenant(ctx, user, tenantHeader) {
 				s.logger.Debug("Using tenant from header",
 					domain.Field{Key: "header", Value: headerName},
-					domain.Field{Key: "tenant", Value: tenantHeader},
+					domain.Field{Key: "tenant_length", Value: len(tenantHeader)},
 				)
 
 				return tenantHeader, nil

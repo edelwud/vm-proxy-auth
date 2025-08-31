@@ -2,8 +2,10 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -34,7 +36,7 @@ func NewService(
 	tenantMaps []config.TenantMap,
 	logger domain.Logger,
 	metrics domain.MetricsService,
-) domain.AuthService {
+) (domain.AuthService, error) {
 	// Initialize JWT verifier based on configuration
 	var verifier *JWTVerifier
 
@@ -47,7 +49,7 @@ func NewService(
 		verifier = NewJWKSVerifier(cfg.JWT.JwksURL, cfg.JWT.Algorithm, cfg.JWT.CacheTTL)
 	default:
 		// Error: must have either secret or JWKS URL
-		panic("JWT authentication requires either jwt_secret or jwks_url to be configured")
+		return nil, errors.New("JWT authentication requires either jwt_secret or jwks_url to be configured")
 	}
 
 	return &Service{
@@ -57,7 +59,7 @@ func NewService(
 		logger:     logger.With(domain.Field{Key: "component", Value: "auth"}),
 		metrics:    metrics,
 		cacheTTL:   cfg.JWT.CacheTTL,
-	}
+	}, nil
 }
 
 // Authenticate validates a token and returns user information.
@@ -194,10 +196,8 @@ func (s *Service) determineUserPermissions(
 // hasGroupMatch checks if user has any of the required groups.
 func (s *Service) hasGroupMatch(userGroups, requiredGroups []string) bool {
 	for _, userGroup := range userGroups {
-		for _, requiredGroup := range requiredGroups {
-			if userGroup == requiredGroup {
-				return true
-			}
+		if slices.Contains(requiredGroups, userGroup) {
+			return true
 		}
 	}
 
@@ -236,7 +236,7 @@ func (s *Service) removeDuplicateVMTenants(tenants []domain.VMTenant) []domain.V
 // CleanupCache removes expired entries from the cache.
 func (s *Service) CleanupCache() {
 	now := time.Now()
-	s.userCache.Range(func(key, value interface{}) bool {
+	s.userCache.Range(func(key, value any) bool {
 		cached, ok := value.(cachedUser)
 		if !ok {
 			s.userCache.Delete(key) // Remove invalid cache entry

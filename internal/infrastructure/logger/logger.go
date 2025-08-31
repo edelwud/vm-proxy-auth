@@ -1,6 +1,10 @@
 package logger
 
 import (
+	"maps"
+	"regexp"
+	"strings"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
@@ -85,9 +89,7 @@ func (l *StructuredLogger) Error(msg string, fields ...domain.Field) {
 func (l *StructuredLogger) With(fields ...domain.Field) domain.Logger {
 	newFields := make(logrus.Fields)
 	// Copy existing fields
-	for k, v := range l.fields {
-		newFields[k] = v
-	}
+	maps.Copy(newFields, l.fields)
 	// Add new fields
 	for _, field := range fields {
 		newFields[field.Key] = field.Value
@@ -102,12 +104,48 @@ func (l *StructuredLogger) With(fields ...domain.Field) domain.Logger {
 func (l *StructuredLogger) logWithFields(level logrus.Level, msg string, fields ...domain.Field) {
 	entry := l.logger.WithFields(l.fields)
 
-	// Add fields from parameters
+	// Add fields from parameters with sanitization
 	for _, field := range fields {
-		entry = entry.WithField(field.Key, field.Value)
+		entry = entry.WithField(field.Key, sanitizeLogValue(field.Value))
 	}
 
 	entry.Log(level, msg)
+}
+
+// sanitizeLogValue removes sensitive information from log values.
+func sanitizeLogValue(value interface{}) interface{} {
+	if str, ok := value.(string); ok {
+		return sanitizeString(str)
+	}
+	return value
+}
+
+// sensitivePatterns contains regex patterns for sensitive data.
+//
+//nolint:gochecknoglobals // Regex patterns are immutable and safe as globals
+var sensitivePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)bearer\s+[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+`), // JWT tokens
+	regexp.MustCompile(`(?i)authorization:\s*bearer\s+[^\s]+`),                           // Auth headers
+	regexp.MustCompile(`(?i)(password|passwd|pwd|secret|token|key)=[^\s&]+`),             // URL params
+	regexp.MustCompile(`(?i)(api[_-]?key|access[_-]?token|secret[_-]?key):\s*[^\s,}]+`),  // JSON/YAML values
+}
+
+// sanitizeString removes sensitive information from strings.
+func sanitizeString(s string) string {
+	result := s
+	for _, pattern := range sensitivePatterns {
+		result = pattern.ReplaceAllStringFunc(result, func(match string) string {
+			// Keep the field name but mask the value
+			if idx := strings.Index(match, "="); idx != -1 {
+				return match[:idx+1] + "[REDACTED]"
+			}
+			if idx := strings.Index(match, ":"); idx != -1 {
+				return match[:idx+1] + " [REDACTED]"
+			}
+			return "[REDACTED]"
+		})
+	}
+	return result
 }
 
 // String field helpers for common patterns.
@@ -119,7 +157,7 @@ func Int(key string, value int) domain.Field {
 	return domain.Field{Key: key, Value: value}
 }
 
-func Duration(key string, value interface{}) domain.Field {
+func Duration(key string, value any) domain.Field {
 	return domain.Field{Key: key, Value: value}
 }
 

@@ -274,7 +274,7 @@ func (h *GatewayHandler) writeError(w http.ResponseWriter, err *domain.AppError)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(err.HTTPStatus)
 
-	response := map[string]interface{}{
+	response := map[string]any{
 		"status": "error",
 		"error":  err.Message,
 		"code":   err.Code,

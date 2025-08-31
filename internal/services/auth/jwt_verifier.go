@@ -69,7 +69,7 @@ func (v *JWTVerifier) VerifyToken(tokenString string) (*Claims, error) {
 }
 
 // keyFunc returns the key for verifying the JWT token signature.
-func (v *JWTVerifier) keyFunc(token *jwt.Token) (interface{}, error) {
+func (v *JWTVerifier) keyFunc(token *jwt.Token) (any, error) {
 	switch v.algorithm {
 	case "RS256":
 		return v.handleRSAKey(token)
@@ -81,7 +81,7 @@ func (v *JWTVerifier) keyFunc(token *jwt.Token) (interface{}, error) {
 }
 
 // handleRSAKey handles RSA key verification for RS256 algorithm.
-func (v *JWTVerifier) handleRSAKey(token *jwt.Token) (interface{}, error) {
+func (v *JWTVerifier) handleRSAKey(token *jwt.Token) (any, error) {
 	if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 		return nil, fmt.Errorf("%w: %v", domain.ErrUnexpectedSigningMethod, token.Header["alg"])
 	}
@@ -96,7 +96,7 @@ func (v *JWTVerifier) handleRSAKey(token *jwt.Token) (interface{}, error) {
 }
 
 // handleHMACKey handles HMAC key verification for HS256 algorithm.
-func (v *JWTVerifier) handleHMACKey(token *jwt.Token) (interface{}, error) {
+func (v *JWTVerifier) handleHMACKey(token *jwt.Token) (any, error) {
 	if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 		return nil, fmt.Errorf("%w: %v", domain.ErrUnexpectedSigningMethod, token.Header["alg"])
 	}
@@ -104,7 +104,7 @@ func (v *JWTVerifier) handleHMACKey(token *jwt.Token) (interface{}, error) {
 }
 
 // getKeyFromJWKS fetches the public key from JWKS endpoint.
-func (v *JWTVerifier) getKeyFromJWKS(token *jwt.Token) (interface{}, error) {
+func (v *JWTVerifier) getKeyFromJWKS(token *jwt.Token) (any, error) {
 	if v.jwksFetcher == nil {
 		return nil, domain.ErrNoPublicKeyConfigured
 	}

@@ -53,7 +53,7 @@ func (f *LogFmtFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 }
 
 // appendKeyValue appends a key=value pair to the buffer.
-func (f *LogFmtFormatter) appendKeyValue(b *bytes.Buffer, key string, value interface{}) {
+func (f *LogFmtFormatter) appendKeyValue(b *bytes.Buffer, key string, value any) {
 	if b.Len() > 0 {
 		b.WriteByte(' ')
 	}
@@ -66,7 +66,7 @@ func (f *LogFmtFormatter) appendKeyValue(b *bytes.Buffer, key string, value inte
 }
 
 // formatValue formats a value for logfmt output, quoting if necessary.
-func (f *LogFmtFormatter) formatValue(value interface{}) string {
+func (f *LogFmtFormatter) formatValue(value any) string {
 	if value == nil {
 		return "<nil>"
 	}

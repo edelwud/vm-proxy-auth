@@ -12,10 +12,12 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/handlers"
 	"github.com/edelwud/vm-proxy-auth/internal/services/access"
 	"github.com/edelwud/vm-proxy-auth/internal/services/auth"
+	"github.com/edelwud/vm-proxy-auth/internal/services/health"
 	"github.com/edelwud/vm-proxy-auth/internal/services/metrics"
 	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/services/tenant"
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
@@ -29,7 +31,8 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 			Secret:    "test-secret",
 		},
 	}
-	authService := auth.NewService(authConfig, []config.TenantMap{}, logger, metricsService)
+	authService, err := auth.NewService(authConfig, []config.TenantMap{}, logger, metricsService)
+	require.NoError(t, err)
 
 	// Create other services
 	upstreamConfig := config.UpstreamSettings{
@@ -47,7 +50,38 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 
 	tenantService := tenant.NewService(&upstreamConfig, &tenantConfig, logger, metricsService)
 	accessService := access.NewService(logger)
-	proxyService := proxy.NewService("http://localhost:8428", 30*time.Second, logger, metricsService)
+
+	// Create enhanced proxy service for single upstream
+	enhancedConfig := proxy.EnhancedServiceConfig{
+		Backends: []proxy.BackendConfig{
+			{URL: "http://localhost:8428", Weight: 1},
+		},
+		LoadBalancing: proxy.LoadBalancingConfig{Strategy: "round-robin"},
+		HealthCheck: health.CheckerConfig{
+			CheckInterval:      30 * time.Second,
+			Timeout:            10 * time.Second,
+			HealthyThreshold:   2,
+			UnhealthyThreshold: 3,
+			HealthEndpoint:     "/health",
+		},
+		Queue: proxy.QueueConfig{
+			MaxSize: 1000,
+			Timeout: 5 * time.Second,
+		},
+		Timeout:        30 * time.Second,
+		MaxRetries:     3,
+		RetryBackoff:   100 * time.Millisecond,
+		EnableQueueing: false,
+	}
+
+	proxyService, err := proxy.NewEnhancedService(enhancedConfig, logger, metricsService)
+	require.NoError(t, err)
+
+	// Start the service
+	ctx := context.Background()
+	err = proxyService.Start(ctx)
+	require.NoError(t, err)
+	defer proxyService.Close()
 
 	// Create gateway handler
 	handler := handlers.NewGatewayHandler(

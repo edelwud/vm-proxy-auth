@@ -26,7 +26,7 @@ auth:
   jwt:
     jwksUrl: "https://auth.example.com/.well-known/jwks.json"
 `
-	require.NoError(t, os.WriteFile(configPath, []byte(content), 0644))
+	require.NoError(t, os.WriteFile(configPath, []byte(content), 0o644))
 
 	viperConfig, err := config.LoadViperConfig(configPath)
 	require.NoError(t, err)
@@ -154,7 +154,7 @@ logging:
   level: "debug"
   format: "text"
 `
-	require.NoError(t, os.WriteFile(configPath, []byte(content), 0644))
+	require.NoError(t, os.WriteFile(configPath, []byte(content), 0o644))
 
 	viperConfig, err := config.LoadViperConfig(configPath)
 	require.NoError(t, err)
@@ -318,7 +318,7 @@ logging:
 		t.Run(tt.name, func(t *testing.T) {
 			tempDir := t.TempDir()
 			configPath := filepath.Join(tempDir, "test.yaml")
-			require.NoError(t, os.WriteFile(configPath, []byte(tt.config), 0644))
+			require.NoError(t, os.WriteFile(configPath, []byte(tt.config), 0o644))
 
 			_, err := config.LoadViperConfig(configPath)
 			require.Error(t, err)

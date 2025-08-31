@@ -134,7 +134,7 @@ func TestORQueryBuilder_BuildSecureQuery(t *testing.T) {
 			result, err := builder.BuildSecureQuery(tt.query, tt.tenants, upstreamCfg, tenantCfg)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				return
 			}
 

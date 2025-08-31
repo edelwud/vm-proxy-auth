@@ -1,0 +1,132 @@
+# VictoriaMetrics OAuth Gateway Configuration
+# Multiple Upstream URLs Support Example
+
+server:
+  address: ":8080"
+  timeouts:
+    readTimeout: 30s
+    writeTimeout: 30s
+    idleTimeout: 120s
+
+# Legacy single upstream configuration (for backward compatibility)
+# When multiple upstreams are enabled, this is ignored
+upstream:
+  url: "http://victoria-metrics:8428"
+  timeout: 30s
+  retry:
+    maxRetries: 3
+    retryDelay: 100ms
+    
+  # NEW: Multiple upstream configuration
+  multiple:
+    enabled: true
+    
+    # Backend configuration - list of VictoriaMetrics instances
+    backends:
+      - url: "http://vm-primary:8428"
+        weight: 3    # Higher weight = more requests
+      - url: "http://vm-secondary:8428"
+        weight: 2
+      - url: "http://vm-tertiary:8428"
+        weight: 1    # Lower weight = fewer requests
+        
+    # Load balancing strategy
+    loadBalancing:
+      strategy: "weighted-round-robin"  # Options: round-robin, weighted-round-robin, least-connections
+      
+    # Health checking configuration
+    healthCheck:
+      checkInterval: 30s      # How often to check backend health
+      timeout: 10s            # Health check timeout
+      healthyThreshold: 2     # Consecutive successes to mark healthy
+      unhealthyThreshold: 3   # Consecutive failures to mark unhealthy
+      healthEndpoint: "/health" # Health check endpoint path
+      
+    # Request queuing (optional, for handling traffic bursts)
+    queue:
+      enabled: true
+      maxSize: 1000           # Maximum queue size
+      timeout: 5s             # Queue operation timeout
+      
+    # Request handling configuration
+    timeout: 30s              # Request timeout per backend
+    maxRetries: 3             # Maximum retries per request
+    retryBackoff: 100ms       # Backoff between retries
+
+# Authentication configuration
+auth:
+  jwt:
+    # Option 1: JWKS (JSON Web Key Set) - recommended for production
+    # jwks:
+    #   url: "https://your-auth-provider.com/.well-known/jwks.json"
+    #   cacheTTL: 1h
+    
+    # Option 2: Shared secret (for development/testing)  
+    algorithm: "HS256"
+    secret: "your-jwt-secret-key-for-demo-purposes-change-in-production"
+    
+    # JWT validation settings
+    issuer: "your-auth-provider"
+    audience: "vm-proxy-auth"
+    leeway: 30s
+
+# Tenant mapping configuration
+tenantMapping:
+  - jwtClaim: "team_id"
+    staticMapping:
+      team-alpha: "1000"
+      team-beta: "1001"
+      team-gamma: "1002"
+
+# Advanced tenant filtering
+tenantFilter:
+  strategy: "orConditions"  # orConditions for multiple tenant access
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: true
+
+# Metrics and monitoring
+metrics:
+  enabled: true
+  path: "/metrics"
+  
+  # Multiple upstream metrics include:
+  # - vm_proxy_auth_upstream_backend_requests_total (per-backend counters)
+  # - vm_proxy_auth_health_check_total (health check results)  
+  # - vm_proxy_auth_load_balancer_selections_total (LB strategy usage)
+  # - vm_proxy_auth_backend_state_changes_total (state transitions)
+  # - vm_proxy_auth_queue_operations_total (queue operations)
+
+# Logging configuration
+logging:
+  level: "info"  # debug, info, warn, error
+  format: "json" # json or text
+  
+  # For multiple upstreams, structured logs include:
+  # - backend_url: which backend handled the request
+  # - load_balancer_strategy: which strategy was used
+  # - health_check_result: results of health checks
+  # - queue_operations: queue enqueue/dequeue events
+
+# Example deployment scenarios:
+
+# 1. High Availability Setup (3 VictoriaMetrics instances)
+# - Use weighted-round-robin with equal weights for even distribution
+# - Enable health checking with aggressive thresholds
+# - Enable request queuing for burst handling
+
+# 2. Primary/Secondary Setup (1 primary + 1 backup)
+# - Use weighted-round-robin with primary having higher weight (e.g., 10:1)
+# - Health checking will automatically fail over to secondary
+# - Queue can buffer requests during failover
+
+# 3. Multi-Zone Deployment (regional distribution) 
+# - Use least-connections for optimal resource utilization
+# - Configure health checks with appropriate timeouts for cross-zone latency
+# - Queue helps handle network partition scenarios
+
+# 4. Performance Testing Setup
+# - Use round-robin for even distribution during load testing
+# - Disable health checking (set checkInterval to 0) for consistent routing
+# - Large queue size to handle burst traffic patterns
