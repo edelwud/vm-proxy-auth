@@ -42,7 +42,7 @@ upstream:
       unhealthyThreshold: 3   # Consecutive failures to mark unhealthy
       healthEndpoint: "/health" # Health check endpoint path
       
-    # Request queuing (optional, for handling traffic bursts)
+    # Request queuing (enabled by default for resilience)
     queue:
       enabled: true
       maxSize: 1000           # Maximum queue size

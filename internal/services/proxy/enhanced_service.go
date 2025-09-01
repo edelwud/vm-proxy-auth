@@ -22,6 +22,7 @@ const (
 	defaultTimeoutSeconds = 30
 	defaultMaxRetries     = 3
 	defaultRetryBackoffMs = 100
+	queueCheckInterval    = 100 * time.Millisecond
 	// HTTP status code constants.
 	statusInternalServerError = 500
 	statusBadRequest          = 400
@@ -168,12 +169,7 @@ func (es *EnhancedService) Start(ctx context.Context) error {
 }
 
 // Forward forwards a request to an upstream backend using load balancing.
-func (es *EnhancedService) Forward(
-	ctx context.Context,
-	req *domain.ProxyRequest,
-) (*domain.ProxyResponse, error) {
-	start := time.Now()
-
+func (es *EnhancedService) Forward(ctx context.Context, req *domain.ProxyRequest) (*domain.ProxyResponse, error) {
 	// Check if service is closed
 	es.mu.RLock()
 	if es.closed {
@@ -182,15 +178,183 @@ func (es *EnhancedService) Forward(
 	}
 	es.mu.RUnlock()
 
-	// Queue request if queueing is enabled and we're under heavy load
-	// For now, we'll process directly, but queue is available for future enhancement
-	// In a full implementation, you might queue during backend failures or high load
+	// Use queue processing if queueing is enabled
+	if es.config.EnableQueueing && es.requestQueue != nil {
+		return es.forwardWithQueue(ctx, req)
+	}
 
-	// Try to forward request with retries
+	// Direct processing without queue (backward compatibility)
+	return es.forwardToBackendDirect(ctx, req)
+}
+
+// forwardWithQueue handles request processing using the queue for resilience.
+func (es *EnhancedService) forwardWithQueue(
+	ctx context.Context,
+	req *domain.ProxyRequest,
+) (*domain.ProxyResponse, error) {
+	// Check if any backends are available
+	backends := es.loadBalancer.BackendsStatus()
+	availableBackends := 0
+	for _, backend := range backends {
+		if backend.Backend.State == domain.BackendHealthy {
+			availableBackends++
+		}
+	}
+
+	// If no healthy backends are available, queue the request
+	if availableBackends == 0 {
+		es.logger.Info("No healthy backends available, queueing request",
+			domain.Field{Key: "user_id", Value: req.User.ID},
+			domain.Field{Key: "queue_size", Value: es.requestQueue.Size()})
+
+		enqueueStart := time.Now()
+		if err := es.requestQueue.Enqueue(ctx, req); err != nil {
+			es.metrics.RecordQueueOperation(ctx, "enqueue_failed", time.Since(enqueueStart), es.requestQueue.Size())
+			return nil, fmt.Errorf("failed to queue request: %w", err)
+		}
+		es.metrics.RecordQueueOperation(ctx, "enqueue_success", time.Since(enqueueStart), es.requestQueue.Size())
+
+		// Process the queue to handle this and any pending requests
+		return es.processQueuedRequest(ctx, req)
+	}
+
+	// If backends are available, try direct processing first
+	response, err := es.forwardToBackendDirect(ctx, req)
+	if err == nil {
+		return response, nil
+	}
+
+	// If direct processing fails and queue has space, queue the request for retry
+	if es.requestQueue.Size() < es.config.Queue.MaxSize {
+		es.logger.Debug("Direct processing failed, queueing for retry",
+			domain.Field{Key: "user_id", Value: req.User.ID},
+			domain.Field{Key: "error", Value: err.Error()})
+
+		enqueueStart := time.Now()
+		if queueErr := es.requestQueue.Enqueue(ctx, req); queueErr != nil {
+			es.metrics.RecordQueueOperation(ctx, "enqueue_failed", time.Since(enqueueStart), es.requestQueue.Size())
+			return nil, fmt.Errorf("direct processing failed and queue full: %w", err)
+		}
+		es.metrics.RecordQueueOperation(ctx, "enqueue_retry", time.Since(enqueueStart), es.requestQueue.Size())
+
+		return es.processQueuedRequest(ctx, req)
+	}
+
+	// Queue is full, return the original error
+	return nil, err
+}
+
+// processQueuedRequest processes a request from the queue with backend availability checking.
+func (es *EnhancedService) processQueuedRequest(
+	ctx context.Context,
+	originalReq *domain.ProxyRequest,
+) (*domain.ProxyResponse, error) {
+	maxWaitTime := es.config.Queue.Timeout
+	startTime := time.Now()
+
+	for time.Since(startTime) < maxWaitTime {
+		if es.hasHealthyBackends() {
+			return es.processFromQueue(ctx, originalReq, startTime, maxWaitTime)
+		}
+
+		// Wait before checking again
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(queueCheckInterval):
+			// Continue checking
+		}
+	}
+
+	return nil, fmt.Errorf("request timed out in queue after %v", maxWaitTime)
+}
+
+// hasHealthyBackends checks if any backends are currently healthy.
+func (es *EnhancedService) hasHealthyBackends() bool {
+	backends := es.loadBalancer.BackendsStatus()
+	for _, backend := range backends {
+		if backend.Backend.State == domain.BackendHealthy {
+			return true
+		}
+	}
+	return false
+}
+
+// processFromQueue attempts to dequeue and process a request when backends are available.
+func (es *EnhancedService) processFromQueue(
+	ctx context.Context,
+	originalReq *domain.ProxyRequest,
+	startTime time.Time,
+	maxWaitTime time.Duration,
+) (*domain.ProxyResponse, error) {
+	dequeueStart := time.Now()
+	queuedReq, err := es.requestQueue.Dequeue(ctx)
+	if err != nil {
+		return es.handleDequeueError(ctx, originalReq, err, dequeueStart)
+	}
+
+	es.metrics.RecordQueueOperation(ctx, "dequeue_success", time.Since(dequeueStart), es.requestQueue.Size())
+
+	// Process the dequeued request
+	response, err := es.forwardToBackendDirect(ctx, queuedReq)
+	if err == nil {
+		es.metrics.RecordQueueOperation(ctx, "process_success", time.Since(dequeueStart), es.requestQueue.Size())
+		return response, nil
+	}
+
+	// If processing failed, re-queue if there's space and time
+	es.handleProcessingFailure(ctx, queuedReq, startTime, maxWaitTime)
+	return nil, err
+}
+
+// handleDequeueError handles errors from queue dequeue operations.
+func (es *EnhancedService) handleDequeueError(
+	ctx context.Context,
+	originalReq *domain.ProxyRequest,
+	err error,
+	dequeueStart time.Time,
+) (*domain.ProxyResponse, error) {
+	if errors.Is(err, domain.ErrQueueEmpty) {
+		es.metrics.RecordQueueOperation(ctx, "dequeue_empty", time.Since(dequeueStart), es.requestQueue.Size())
+		return es.forwardToBackendDirect(ctx, originalReq)
+	}
+
+	es.metrics.RecordQueueOperation(ctx, "dequeue_failed", time.Since(dequeueStart), es.requestQueue.Size())
+	return nil, fmt.Errorf("failed to dequeue request: %w", err)
+}
+
+// handleProcessingFailure handles re-queueing after processing failures.
+func (es *EnhancedService) handleProcessingFailure(
+	ctx context.Context,
+	queuedReq *domain.ProxyRequest,
+	startTime time.Time,
+	maxWaitTime time.Duration,
+) {
+	if es.requestQueue.Size() >= es.config.Queue.MaxSize || time.Since(startTime) >= maxWaitTime {
+		return // Cannot re-queue
+	}
+
+	requeueStart := time.Now()
+	if requeueErr := es.requestQueue.Enqueue(ctx, queuedReq); requeueErr != nil {
+		es.metrics.RecordQueueOperation(ctx, "requeue_failed", time.Since(requeueStart), es.requestQueue.Size())
+		es.logger.Warn("Failed to re-queue request after processing failure",
+			domain.Field{Key: "user_id", Value: queuedReq.User.ID},
+			domain.Field{Key: "error", Value: requeueErr.Error()})
+	} else {
+		es.metrics.RecordQueueOperation(ctx, "requeue_success", time.Since(requeueStart), es.requestQueue.Size())
+	}
+}
+
+// forwardToBackendDirect performs direct backend forwarding without queue processing.
+func (es *EnhancedService) forwardToBackendDirect(
+	ctx context.Context,
+	req *domain.ProxyRequest,
+) (*domain.ProxyResponse, error) {
+	start := time.Now()
+
 	var lastErr error
 	for attempt := range es.config.MaxRetries {
 		if attempt > 0 {
-			// Linear backoff (not exponential to avoid excessive delays)
 			backoff := time.Duration(attempt) * es.config.RetryBackoff
 			select {
 			case <-ctx.Done():
@@ -206,13 +370,9 @@ func (es *EnhancedService) Forward(
 
 		response, err := es.forwardToBackend(ctx, req)
 		if err == nil {
-			// Record successful request metrics
-			es.metrics.RecordLoadBalancerSelection(
-				ctx,
-				es.config.LoadBalancing.Strategy,
-				"", // backend URL will be recorded in forwardToBackend
-				time.Since(start),
-			)
+			es.logger.Debug("Request processed successfully",
+				domain.Field{Key: "user_id", Value: req.User.ID},
+				domain.Field{Key: "total_duration", Value: time.Since(start)})
 			return response, nil
 		}
 
@@ -223,7 +383,6 @@ func (es *EnhancedService) Forward(
 			domain.Field{Key: "error", Value: err.Error()})
 	}
 
-	// All attempts failed
 	es.logger.Error("All request attempts failed",
 		domain.Field{Key: "user_id", Value: req.User.ID},
 		domain.Field{Key: "attempts", Value: es.config.MaxRetries},
@@ -238,6 +397,8 @@ func (es *EnhancedService) forwardToBackend(
 	ctx context.Context,
 	req *domain.ProxyRequest,
 ) (*domain.ProxyResponse, error) {
+	start := time.Now()
+
 	// Select backend using load balancer
 	backend, err := es.selectBackend(ctx, req)
 	if err != nil {
@@ -245,13 +406,23 @@ func (es *EnhancedService) forwardToBackend(
 	}
 
 	// Create HTTP request for backend
-	httpReq, start, err := es.createBackendRequest(ctx, req, backend)
+	httpReq, reqStart, err := es.createBackendRequest(ctx, req, backend)
 	if err != nil {
 		return nil, err
 	}
 
 	// Execute request and process response
-	return es.executeBackendRequest(ctx, req, backend, httpReq, start)
+	response, err := es.executeBackendRequest(ctx, req, backend, httpReq, reqStart)
+	if err == nil {
+		// Record successful load balancer selection
+		es.metrics.RecordLoadBalancerSelection(
+			ctx,
+			es.config.LoadBalancing.Strategy,
+			backend.URL,
+			time.Since(start),
+		)
+	}
+	return response, err
 }
 
 // Helper functions for forwardToBackend to reduce complexity.

@@ -219,8 +219,25 @@ func setViperDefaults(v *viper.Viper) {
 	// Upstream defaults
 	v.SetDefault("upstream.timeout", "30s")
 	const defaultMaxRetries = 3
+	const defaultHealthyThreshold = 2
+	const defaultUnhealthyThreshold = 3
+	const defaultQueueMaxSize = 1000
 	v.SetDefault("upstream.retry.maxRetries", defaultMaxRetries)
 	v.SetDefault("upstream.retry.retryDelay", "1s")
+
+	// Multiple upstreams defaults
+	v.SetDefault("upstream.multiple.enabled", false)
+	v.SetDefault("upstream.multiple.loadBalancing.strategy", "round-robin")
+	v.SetDefault("upstream.multiple.healthCheck.checkInterval", "30s")
+	v.SetDefault("upstream.multiple.healthCheck.timeout", "10s")
+	v.SetDefault("upstream.multiple.healthCheck.healthyThreshold", defaultHealthyThreshold)
+	v.SetDefault("upstream.multiple.healthCheck.unhealthyThreshold", defaultUnhealthyThreshold)
+	v.SetDefault("upstream.multiple.healthCheck.healthEndpoint", "/health")
+	v.SetDefault("upstream.multiple.queue.enabled", true)
+	v.SetDefault("upstream.multiple.queue.maxSize", defaultQueueMaxSize)
+	v.SetDefault("upstream.multiple.queue.timeout", "5s")
+	v.SetDefault("upstream.multiple.maxRetries", defaultMaxRetries)
+	v.SetDefault("upstream.multiple.retryBackoff", "100ms")
 
 	// Auth defaults
 	v.SetDefault("auth.jwt.algorithm", "RS256")
