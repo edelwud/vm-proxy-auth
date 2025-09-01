@@ -543,7 +543,11 @@ func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
 }
 
 // createRaftStorageWithAddress creates a Raft storage with custom bind address.
-func createRaftStorageWithAddress(raftConfig config.RaftSettings, bindAddress string, logger domain.Logger) (domain.StateStorage, error) {
+func createRaftStorageWithAddress(
+	raftConfig config.RaftSettings,
+	bindAddress string,
+	logger domain.Logger,
+) (domain.StateStorage, error) {
 	// Create custom RaftStorageConfig
 	storageConfig := statestorage.RaftStorageConfig{
 		NodeID:             raftConfig.NodeID,

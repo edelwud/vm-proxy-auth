@@ -592,7 +592,7 @@ func (s *Service) RecordServiceDiscoveryLastUpdate(_ context.Context, source str
 	s.metrics.serviceDiscoveryLastUpdateGauge.WithLabelValues(source).SetToCurrentTime()
 }
 
-// Create functions for Raft metrics
+// Create functions for Raft metrics.
 func createRaftStateGauge() *prometheus.GaugeVec {
 	return prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -653,7 +653,7 @@ func createRaftLeaderChangesCounter() *prometheus.CounterVec {
 	)
 }
 
-// Create functions for service discovery metrics
+// Create functions for service discovery metrics.
 func createServiceDiscoveryEventsCounter() *prometheus.CounterVec {
 	return prometheus.NewCounterVec(
 		prometheus.CounterOpts{

@@ -20,11 +20,11 @@ import (
 )
 
 const (
-	raftMaxConnections    = 3
-	raftApplyTimeout      = 10 * time.Second
-	raftApplyTimeoutBulk  = 30 * time.Second
-	raftWatchChannelSize  = 100
-	raftMinPeerParts      = 2
+	raftMaxConnections   = 3
+	raftApplyTimeout     = 10 * time.Second
+	raftApplyTimeoutBulk = 30 * time.Second
+	raftWatchChannelSize = 100
+	raftMinPeerParts     = 2
 )
 
 // RaftStorageConfig holds Raft storage configuration.
@@ -62,7 +62,7 @@ type RaftStorage struct {
 
 // NewRaftStorage creates a new Raft-based state storage.
 func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logger) (*RaftStorage, error) {
-	if err := os.MkdirAll(config.DataDir, 0750); err != nil {
+	if err := os.MkdirAll(config.DataDir, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create data directory: %w", err)
 	}
 
@@ -105,9 +105,9 @@ func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logge
 
 	snapStore, err := raft.NewFileSnapshotStore(config.DataDir, config.SnapshotRetention, os.Stderr)
 	if err != nil {
-		transport.Close()
-		logStore.Close()
-		stableStore.Close()
+		_ = transport.Close()
+		_ = logStore.Close()
+		_ = stableStore.Close()
 		return nil, fmt.Errorf("failed to create snapshot store: %w", err)
 	}
 
@@ -241,7 +241,7 @@ func (rs *RaftStorage) Set(_ context.Context, key string, value []byte, ttl time
 	if rs.raft.State() != raft.Leader {
 		leader := string(rs.raft.Leader())
 		if leader == "" {
-			return fmt.Errorf("no leader available for write operation")
+			return errors.New("no leader available for write operation")
 		}
 		return fmt.Errorf("not leader, current leader: %s", leader)
 	}
@@ -282,7 +282,7 @@ func (rs *RaftStorage) Delete(_ context.Context, key string) error {
 	if rs.raft.State() != raft.Leader {
 		leader := string(rs.raft.Leader())
 		if leader == "" {
-			return fmt.Errorf("no leader available for delete operation")
+			return errors.New("no leader available for delete operation")
 		}
 		return fmt.Errorf("not leader, current leader: %s", leader)
 	}

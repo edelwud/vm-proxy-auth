@@ -13,11 +13,13 @@ import (
 )
 
 const (
-	defaultConnectionTimeout     = 5 * time.Second
-	defaultUpdateInterval        = 30 * time.Second
-	defaultTTL                   = 2 * time.Minute
-	defaultWatchChannelSize      = 100
-	dragonflyMinKeyParts         = 2
+	defaultConnectionTimeout = 5 * time.Second
+	defaultUpdateInterval    = 30 * time.Second
+	defaultTTL               = 2 * time.Minute
+	defaultWatchChannelSize  = 100
+	dragonflyMinKeyParts     = 2
+	dragonflyOpDelete        = "hdel"
+	dragonflyOpSet           = "hset"
 )
 
 // DragonflyDiscoveryConfig holds Dragonfly service discovery configuration.
@@ -44,7 +46,11 @@ type DragonflyDiscovery struct {
 }
 
 // NewDragonflyDiscovery creates a new Dragonfly service discovery client.
-func NewDragonflyDiscovery(config DragonflyDiscoveryConfig, nodeID string, logger domain.Logger) (*DragonflyDiscovery, error) {
+func NewDragonflyDiscovery(
+	config DragonflyDiscoveryConfig,
+	nodeID string,
+	logger domain.Logger,
+) (*DragonflyDiscovery, error) {
 	client := redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:    []string{config.Address},
 		Password: config.Password,
@@ -178,8 +184,18 @@ func (dd *DragonflyDiscovery) isDataStale(lastSeen time.Time, id, dataType strin
 // Watch monitors changes in service topology using Dragonfly keyspace notifications.
 func (dd *DragonflyDiscovery) Watch(ctx context.Context) (<-chan domain.ServiceDiscoveryEvent, error) {
 	// Subscribe to keyspace notifications for our registry keys
-	peerPattern := fmt.Sprintf("__keyspace@%d__:%s%s", dd.config.Database, dd.config.KeyPrefix, dd.config.PeerRegistryKey)
-	backendPattern := fmt.Sprintf("__keyspace@%d__:%s%s", dd.config.Database, dd.config.KeyPrefix, dd.config.BackendRegistryKey)
+	peerPattern := fmt.Sprintf(
+		"__keyspace@%d__:%s%s",
+		dd.config.Database,
+		dd.config.KeyPrefix,
+		dd.config.PeerRegistryKey,
+	)
+	backendPattern := fmt.Sprintf(
+		"__keyspace@%d__:%s%s",
+		dd.config.Database,
+		dd.config.KeyPrefix,
+		dd.config.BackendRegistryKey,
+	)
 
 	pubsub := dd.client.PSubscribe(ctx, peerPattern, backendPattern)
 
@@ -234,7 +250,7 @@ func (dd *DragonflyDiscovery) handleKeyspaceNotification(ctx context.Context, ms
 	}
 
 	// For hash operations (hset, hdel), we need to get the updated data
-	if operation == "hset" || operation == "hdel" {
+	if operation == dragonflyOpSet || operation == dragonflyOpDelete {
 		if isPeerChange {
 			dd.handlePeerChange(ctx, operation)
 		} else if isBackendChange {
@@ -254,9 +270,9 @@ func (dd *DragonflyDiscovery) handlePeerChange(ctx context.Context, operation st
 
 	var eventType domain.ServiceDiscoveryEventType
 	switch operation {
-	case "hdel":
+	case dragonflyOpDelete:
 		eventType = domain.ServiceDiscoveryNodeLeft
-	case "hset":
+	case dragonflyOpSet:
 		eventType = domain.ServiceDiscoveryNodeJoined
 	default:
 		eventType = domain.ServiceDiscoveryNodeUpdated
@@ -291,9 +307,9 @@ func (dd *DragonflyDiscovery) handleBackendChange(ctx context.Context, operation
 
 	var eventType domain.ServiceDiscoveryEventType
 	switch operation {
-	case "hdel":
+	case dragonflyOpDelete:
 		eventType = domain.ServiceDiscoveryBackendRemoved
-	case "hset":
+	case dragonflyOpSet:
 		eventType = domain.ServiceDiscoveryBackendAdded
 	default:
 		eventType = domain.ServiceDiscoveryBackendUpdated
