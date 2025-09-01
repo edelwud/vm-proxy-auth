@@ -62,7 +62,7 @@ type RaftStorage struct {
 
 // NewRaftStorage creates a new Raft-based state storage.
 func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logger) (*RaftStorage, error) {
-	if err := os.MkdirAll(config.DataDir, 0755); err != nil {
+	if err := os.MkdirAll(config.DataDir, 0750); err != nil {
 		return nil, fmt.Errorf("failed to create data directory: %w", err)
 	}
 
@@ -92,14 +92,14 @@ func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logge
 	// Create BoltDB stores
 	logStore, err := raftboltdb.NewBoltStore(filepath.Join(config.DataDir, "raft-log.db"))
 	if err != nil {
-		transport.Close()
+		_ = transport.Close()
 		return nil, fmt.Errorf("failed to create log store: %w", err)
 	}
 
 	stableStore, err := raftboltdb.NewBoltStore(filepath.Join(config.DataDir, "raft-stable.db"))
 	if err != nil {
-		transport.Close()
-		logStore.Close()
+		_ = transport.Close()
+		_ = logStore.Close()
 		return nil, fmt.Errorf("failed to create stable store: %w", err)
 	}
 
