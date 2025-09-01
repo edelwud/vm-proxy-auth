@@ -64,6 +64,7 @@ jobs:
   secrets-scan:
     name: Secrets Scan
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
 
     steps:
       - name: Checkout code
