@@ -269,6 +269,12 @@ var (
 		HTTPStatus: http.StatusRequestTimeout,
 	}
 
+	ErrStorageClosed = &AppError{
+		Code:       ErrCodeInternalError,
+		Message:    "State storage is closed",
+		HTTPStatus: http.StatusServiceUnavailable,
+	}
+
 	ErrNotLeader = &AppError{
 		Code:       ErrCodeInternalError,
 		Message:    "Not the leader node for this operation",

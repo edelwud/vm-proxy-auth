@@ -1,0 +1,169 @@
+# VictoriaMetrics OAuth Gateway Configuration  
+# Dragonfly Service Discovery Example
+
+server:
+  address: ":8080"
+  timeouts:
+    readTimeout: 30s
+    writeTimeout: 30s
+    idleTimeout: 120s
+
+# Multiple upstream with dynamic backend discovery
+upstream:
+  multiple:
+    enabled: true
+    
+    # Initial backend configuration (will be supplemented by service discovery)
+    backends:
+      - url: "http://vm-primary:8428"
+        weight: 3
+        
+    # Load balancing strategy
+    loadBalancing:
+      strategy: "weighted-round-robin"
+      
+    # Health checking configuration
+    healthCheck:
+      checkInterval: 30s
+      timeout: 10s
+      healthyThreshold: 2
+      unhealthyThreshold: 3
+      healthEndpoint: "/health"
+      
+    # Request queuing for high availability
+    queue:
+      enabled: true
+      maxSize: 1000
+      timeout: 5s
+      
+    # Request handling
+    timeout: 30s
+    maxRetries: 3
+    retryBackoff: 100ms
+
+# Local state storage for single instance
+stateStorage:
+  type: "local"
+
+# Service discovery using Dragonfly database
+serviceDiscovery:
+  type: "dragonfly"
+  dragonfly:
+    address: "dragonfly.monitoring.svc.cluster.local:6379"
+    password: ""  # Set if Dragonfly requires authentication
+    database: 0   # Dragonfly database number
+    keyPrefix: "vm-proxy-auth:"
+    
+    # Registry configuration
+    peerRegistryKey: "peers"
+    backendRegistryKey: "backends"
+    
+    # Discovery settings
+    updateInterval: 30s  # How often to refresh discovery
+    ttl: 2m             # How long entries are valid
+    
+    # Custom metadata for this instance
+    metadata:
+      datacenter: "us-west-2"
+      environment: "production"
+      cluster_name: "main"
+
+# Authentication configuration
+auth:
+  jwt:
+    # JWKS for production (recommended)
+    jwks:
+      url: "https://your-auth-provider.com/.well-known/jwks.json"
+      cacheTTL: 1h
+    
+    # JWT validation settings
+    algorithm: "RS256"
+    issuer: "your-auth-provider"
+    audience: "vm-proxy-auth"
+    leeway: 30s
+
+# Tenant mapping configuration
+tenantMapping:
+  - jwtClaim: "team_id"
+    staticMapping:
+      team-alpha: "1000"
+      team-beta: "1001"
+      team-gamma: "1002"
+
+# Advanced tenant filtering
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: true
+
+# Metrics and monitoring
+metrics:
+  enabled: true
+  path: "/metrics"
+  
+  # Service discovery adds these metrics:
+  # - vm_proxy_auth_service_discovery_peers_discovered_total{source}
+  # - vm_proxy_auth_service_discovery_backends_discovered_total{source}
+  # - vm_proxy_auth_service_discovery_events_total{type, source}
+  # - vm_proxy_auth_service_discovery_errors_total{operation, source}
+  # - vm_proxy_auth_service_discovery_last_update_timestamp{source}
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "json"
+  
+  # Service discovery structured logs include:
+  # - discovery_source: dragonfly/kubernetes/static
+  # - discovery_operation: register/unregister/discover/watch
+  # - peer_count: number of discovered peers
+  # - backend_count: number of discovered backends
+  # - registry_stats: current registry state
+
+# Production deployment notes:
+#
+# 1. Dragonfly Service Discovery Benefits:
+#    - Redis-compatible API with high performance
+#    - Built-in keyspace notifications for real-time events
+#    - Automatic data expiration (TTL) for stale entry cleanup
+#    - Multi-tenant support with database separation
+#    - Kubernetes Operator available for easy deployment
+#
+# 2. Backend Auto-Discovery:
+#    - Services register themselves in Dragonfly registry
+#    - Load balancer automatically includes/excludes backends
+#    - Health status is shared across all proxy instances  
+#    - Weight and metadata can be updated dynamically
+#
+# 3. Peer Discovery for Coordination:
+#    - Proxy instances discover each other for coordination
+#    - Shared health checking prevents duplicate health checks
+#    - Distributed circuit breaker state across instances
+#    - Leader election for maintenance operations
+#
+# 4. Service Registration Example:
+#    # Register a new VictoriaMetrics backend
+#    HSET vm-proxy-auth:backends vm-new-1 '{
+#      "url": "http://vm-new-1:8428",
+#      "weight": 2,
+#      "healthy": true,
+#      "last_seen": "2025-01-15T10:30:00Z",
+#      "metadata": {
+#        "datacenter": "us-east-1",
+#        "version": "v1.95.1"
+#      }
+#    }'
+#
+# 5. Kubernetes Integration:
+#    - Use Dragonfly Operator for managed Dragonfly deployment
+#    - Configure service monitors for automatic backend discovery
+#    - Use init containers for service registration
+#    - Implement graceful shutdown hooks for deregistration
+#
+# 6. Monitoring Service Discovery:
+#    - Track discovery event frequency and types
+#    - Monitor registry size and stale entry cleanup
+#    - Alert on service discovery failures or inconsistencies
+#    - Dashboard showing current topology and health status

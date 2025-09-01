@@ -1,8 +1,8 @@
 package statestorage
 
 import (
-	"errors"
 	"fmt"
+	"time"
 
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
@@ -50,8 +50,32 @@ func NewStateStorage(
 		return NewRedisStorage(storageConfigRedis, nodeID, logger)
 
 	case "raft":
-		// Future: Implement Raft storage
-		return nil, errors.New("raft state storage not yet implemented")
+		raftConfig, ok := storageConfig.(config.RaftSettings)
+		if !ok {
+			return nil, fmt.Errorf("invalid Raft configuration type: %T", storageConfig)
+		}
+
+		// Convert config.RaftSettings to RaftStorageConfig with defaults
+		storageConfigRaft := RaftStorageConfig{
+			NodeID:             raftConfig.NodeID,
+			BindAddress:        "127.0.0.1:9000", // Default bind address
+			DataDir:            raftConfig.DataDir,
+			Peers:              raftConfig.Peers,
+			HeartbeatTimeout:   1 * time.Second,
+			ElectionTimeout:    1 * time.Second,
+			LeaderLeaseTimeout: 500 * time.Millisecond,
+			CommitTimeout:      50 * time.Millisecond,
+			SnapshotRetention:  3,
+			SnapshotThreshold:  1024,
+			TrailingLogs:       1024,
+		}
+
+		logger.Info("Creating Raft state storage",
+			domain.Field{Key: "node_id", Value: raftConfig.NodeID},
+			domain.Field{Key: "data_dir", Value: raftConfig.DataDir},
+			domain.Field{Key: "peers_count", Value: len(raftConfig.Peers)})
+
+		return NewRaftStorage(storageConfigRaft, nodeID, logger)
 
 	default:
 		return nil, fmt.Errorf("unsupported state storage type: %s", storageType)

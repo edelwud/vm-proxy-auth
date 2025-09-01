@@ -34,6 +34,18 @@ type metricsSet struct {
 	queueOperationsDuration        *prometheus.HistogramVec
 	loadBalancerSelectionsTotal    *prometheus.CounterVec
 	loadBalancerSelectionDuration  *prometheus.HistogramVec
+	// Raft and service discovery metrics
+	raftStateGauge                  *prometheus.GaugeVec
+	raftTermCounter                 *prometheus.CounterVec
+	raftCommitIndexGauge            *prometheus.GaugeVec
+	raftLastAppliedGauge            *prometheus.GaugeVec
+	raftPeerCountGauge              *prometheus.GaugeVec
+	raftLeaderChangesTotal          *prometheus.CounterVec
+	serviceDiscoveryEventsTotal     *prometheus.CounterVec
+	serviceDiscoveryPeersGauge      *prometheus.GaugeVec
+	serviceDiscoveryBackendsGauge   *prometheus.GaugeVec
+	serviceDiscoveryErrorsTotal     *prometheus.CounterVec
+	serviceDiscoveryLastUpdateGauge *prometheus.GaugeVec
 }
 
 // newMetricsSet creates a new set of metrics with proper initialization.
@@ -57,6 +69,18 @@ func newMetricsSet() *metricsSet {
 		queueOperationsDuration:        createQueueOperationsDurationHistogram(),
 		loadBalancerSelectionsTotal:    createLoadBalancerSelectionsCounter(),
 		loadBalancerSelectionDuration:  createLoadBalancerSelectionDurationHistogram(),
+		// Raft and service discovery metrics
+		raftStateGauge:                  createRaftStateGauge(),
+		raftTermCounter:                 createRaftTermCounter(),
+		raftCommitIndexGauge:            createRaftCommitIndexGauge(),
+		raftLastAppliedGauge:            createRaftLastAppliedGauge(),
+		raftPeerCountGauge:              createRaftPeerCountGauge(),
+		raftLeaderChangesTotal:          createRaftLeaderChangesCounter(),
+		serviceDiscoveryEventsTotal:     createServiceDiscoveryEventsCounter(),
+		serviceDiscoveryPeersGauge:      createServiceDiscoveryPeersGauge(),
+		serviceDiscoveryBackendsGauge:   createServiceDiscoveryBackendsGauge(),
+		serviceDiscoveryErrorsTotal:     createServiceDiscoveryErrorsCounter(),
+		serviceDiscoveryLastUpdateGauge: createServiceDiscoveryLastUpdateGauge(),
 	}
 }
 
@@ -508,5 +532,174 @@ func (s *Service) RecordLoadBalancerSelection(
 		domain.Field{Key: "strategy", Value: string(strategy)},
 		domain.Field{Key: "backend_url", Value: backendURL},
 		domain.Field{Key: "duration", Value: duration},
+	)
+}
+
+// RecordRaftState records current Raft state.
+func (s *Service) RecordRaftState(_ context.Context, nodeID string, state string) {
+	stateValue := 0.0
+	switch state {
+	case "Leader":
+		stateValue = 1.0
+	case "Follower":
+		stateValue = 2.0
+	case "Candidate":
+		stateValue = 3.0
+	}
+
+	s.metrics.raftStateGauge.WithLabelValues(nodeID, state).Set(stateValue)
+}
+
+// RecordRaftTerm records Raft term changes.
+func (s *Service) RecordRaftTerm(_ context.Context, nodeID string, term uint64) {
+	s.metrics.raftTermCounter.WithLabelValues(nodeID).Add(float64(term))
+}
+
+// RecordRaftIndexes records Raft commit and applied indexes.
+func (s *Service) RecordRaftIndexes(_ context.Context, nodeID string, commitIndex, lastApplied uint64) {
+	s.metrics.raftCommitIndexGauge.WithLabelValues(nodeID).Set(float64(commitIndex))
+	s.metrics.raftLastAppliedGauge.WithLabelValues(nodeID).Set(float64(lastApplied))
+}
+
+// RecordRaftPeerCount records the number of Raft peers.
+func (s *Service) RecordRaftPeerCount(_ context.Context, nodeID string, peerCount int) {
+	s.metrics.raftPeerCountGauge.WithLabelValues(nodeID).Set(float64(peerCount))
+}
+
+// RecordRaftLeaderChange records Raft leader changes.
+func (s *Service) RecordRaftLeaderChange(_ context.Context, oldLeader, newLeader string) {
+	s.metrics.raftLeaderChangesTotal.WithLabelValues(oldLeader, newLeader).Inc()
+}
+
+// RecordServiceDiscoveryEvent records service discovery events.
+func (s *Service) RecordServiceDiscoveryEvent(_ context.Context, eventType, source string) {
+	s.metrics.serviceDiscoveryEventsTotal.WithLabelValues(eventType, source).Inc()
+}
+
+// RecordServiceDiscoveryCounts records discovered peer and backend counts.
+func (s *Service) RecordServiceDiscoveryCounts(_ context.Context, source string, peerCount, backendCount int) {
+	s.metrics.serviceDiscoveryPeersGauge.WithLabelValues(source).Set(float64(peerCount))
+	s.metrics.serviceDiscoveryBackendsGauge.WithLabelValues(source).Set(float64(backendCount))
+}
+
+// RecordServiceDiscoveryError records service discovery errors.
+func (s *Service) RecordServiceDiscoveryError(_ context.Context, operation, source string) {
+	s.metrics.serviceDiscoveryErrorsTotal.WithLabelValues(operation, source).Inc()
+}
+
+// RecordServiceDiscoveryLastUpdate records last successful update timestamp.
+func (s *Service) RecordServiceDiscoveryLastUpdate(_ context.Context, source string) {
+	s.metrics.serviceDiscoveryLastUpdateGauge.WithLabelValues(source).SetToCurrentTime()
+}
+
+// Create functions for Raft metrics
+func createRaftStateGauge() *prometheus.GaugeVec {
+	return prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vm_proxy_auth_raft_state",
+			Help: "Current Raft state (0=Unknown, 1=Leader, 2=Follower, 3=Candidate)",
+		},
+		[]string{"node_id", "state"},
+	)
+}
+
+func createRaftTermCounter() *prometheus.CounterVec {
+	return prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vm_proxy_auth_raft_term_total",
+			Help: "Total number of Raft terms",
+		},
+		[]string{"node_id"},
+	)
+}
+
+func createRaftCommitIndexGauge() *prometheus.GaugeVec {
+	return prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vm_proxy_auth_raft_commit_index",
+			Help: "Current Raft commit index",
+		},
+		[]string{"node_id"},
+	)
+}
+
+func createRaftLastAppliedGauge() *prometheus.GaugeVec {
+	return prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vm_proxy_auth_raft_last_applied_index",
+			Help: "Current Raft last applied index",
+		},
+		[]string{"node_id"},
+	)
+}
+
+func createRaftPeerCountGauge() *prometheus.GaugeVec {
+	return prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vm_proxy_auth_raft_peer_count",
+			Help: "Number of Raft cluster peers",
+		},
+		[]string{"node_id"},
+	)
+}
+
+func createRaftLeaderChangesCounter() *prometheus.CounterVec {
+	return prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vm_proxy_auth_raft_leader_changes_total",
+			Help: "Total number of Raft leader changes",
+		},
+		[]string{"old_leader", "new_leader"},
+	)
+}
+
+// Create functions for service discovery metrics
+func createServiceDiscoveryEventsCounter() *prometheus.CounterVec {
+	return prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vm_proxy_auth_service_discovery_events_total",
+			Help: "Total number of service discovery events",
+		},
+		[]string{"type", "source"},
+	)
+}
+
+func createServiceDiscoveryPeersGauge() *prometheus.GaugeVec {
+	return prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vm_proxy_auth_service_discovery_peers_count",
+			Help: "Number of discovered peers",
+		},
+		[]string{"source"},
+	)
+}
+
+func createServiceDiscoveryBackendsGauge() *prometheus.GaugeVec {
+	return prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vm_proxy_auth_service_discovery_backends_count",
+			Help: "Number of discovered backends",
+		},
+		[]string{"source"},
+	)
+}
+
+func createServiceDiscoveryErrorsCounter() *prometheus.CounterVec {
+	return prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "vm_proxy_auth_service_discovery_errors_total",
+			Help: "Total number of service discovery errors",
+		},
+		[]string{"operation", "source"},
+	)
+}
+
+func createServiceDiscoveryLastUpdateGauge() *prometheus.GaugeVec {
+	return prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "vm_proxy_auth_service_discovery_last_update_timestamp",
+			Help: "Timestamp of last successful service discovery update",
+		},
+		[]string{"source"},
 	)
 }

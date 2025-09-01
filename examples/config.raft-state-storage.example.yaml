@@ -1,0 +1,166 @@
+# VictoriaMetrics OAuth Gateway Configuration
+# Raft State Storage Example
+
+server:
+  address: ":8080"
+  timeouts:
+    readTimeout: 30s
+    writeTimeout: 30s
+    idleTimeout: 120s
+
+# Multiple upstream configuration with Raft state storage
+upstream:
+  multiple:
+    enabled: true
+    
+    # Backend configuration - distributed across multiple instances
+    backends:
+      - url: "http://vm-cluster-1:8428"
+        weight: 3
+      - url: "http://vm-cluster-2:8428" 
+        weight: 2
+      - url: "http://vm-cluster-3:8428"
+        weight: 1
+        
+    # Load balancing strategy
+    loadBalancing:
+      strategy: "least-connections"
+      
+    # Health checking configuration
+    healthCheck:
+      checkInterval: 30s
+      timeout: 10s
+      healthyThreshold: 2
+      unhealthyThreshold: 3
+      healthEndpoint: "/health"
+      
+    # Request queuing for high availability
+    queue:
+      enabled: true
+      maxSize: 1000
+      timeout: 5s
+      
+    # Request handling
+    timeout: 30s
+    maxRetries: 3
+    retryBackoff: 100ms
+
+# Distributed state storage using Raft consensus
+stateStorage:
+  type: "raft"
+  raft:
+    nodeId: "${RAFT_NODE_ID:-node-1}"
+    dataDir: "${RAFT_DATA_DIR:-./data/raft}"
+    peers:
+      - "node-1:raft-node-1:9000"
+      - "node-2:raft-node-2:9000"
+      - "node-3:raft-node-3:9000"
+
+# Service discovery configuration (optional)
+serviceDiscovery:
+  type: "dragonfly"
+  dragonfly:
+    address: "dragonfly:6379"
+    password: ""
+    database: 0
+    keyPrefix: "vm-proxy-auth:"
+    peerRegistryKey: "peers"
+    backendRegistryKey: "backends"
+    updateInterval: 30s
+    ttl: 2m
+
+# Authentication configuration
+auth:
+  jwt:
+    # JWKS for production (recommended)
+    jwks:
+      url: "https://your-auth-provider.com/.well-known/jwks.json"
+      cacheTTL: 1h
+    
+    # JWT validation settings
+    algorithm: "RS256"
+    issuer: "your-auth-provider"
+    audience: "vm-proxy-auth"
+    leeway: 30s
+
+# Tenant mapping configuration
+tenantMapping:
+  - jwtClaim: "team_id"
+    staticMapping:
+      team-alpha: "1000"
+      team-beta: "1001"
+      team-gamma: "1002"
+
+# Advanced tenant filtering
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: true
+
+# Metrics and monitoring
+metrics:
+  enabled: true
+  path: "/metrics"
+  
+  # Raft state storage adds these metrics:
+  # - vm_proxy_auth_raft_state{state} (Leader/Follower/Candidate)
+  # - vm_proxy_auth_raft_term_total
+  # - vm_proxy_auth_raft_commit_index
+  # - vm_proxy_auth_raft_last_applied_index
+  # - vm_proxy_auth_raft_peer_count
+  # - vm_proxy_auth_raft_leader_changes_total
+  # - vm_proxy_auth_service_discovery_events_total{type, source}
+  # - vm_proxy_auth_service_discovery_peers_count{source}
+  # - vm_proxy_auth_service_discovery_backends_count{source}
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "json"
+  
+  # Raft and service discovery structured logs include:
+  # - raft_operation: leadership changes, log replication, snapshots
+  # - cluster_state: current Raft state and leader information
+  # - service_discovery: peer and backend discovery events
+  # - peer_count: number of discovered Raft peers
+  # - backend_count: number of discovered backend services
+  # - consensus_events: Raft consensus algorithm events
+
+# Production deployment notes:
+#
+# 1. Raft Cluster Best Practices:
+#    - Use odd number of nodes (3, 5, 7) for proper consensus
+#    - Ensure network connectivity between all Raft nodes
+#    - Use persistent storage for Raft data directories
+#    - Monitor leader election frequency and log replication lag
+#
+# 2. Service Discovery Benefits:
+#    - Automatic peer discovery eliminates manual peer configuration
+#    - Dynamic backend registration enables auto-scaling
+#    - Health-aware service registry prevents routing to failed backends
+#    - Event-driven updates provide real-time topology changes
+#
+# 3. Raft vs Redis Comparison:
+#    - Raft: No external dependencies, strong consistency, automatic failover
+#    - Redis: External dependency, eventual consistency, requires Redis HA setup
+#    - Choose Raft for self-contained deployments, Redis for existing infrastructure
+#
+# 4. Performance Considerations:
+#    - Raft write latency depends on cluster size and network latency
+#    - Read operations are served locally from all nodes
+#    - Snapshot frequency affects memory usage and recovery time
+#    - Monitor Raft commit lag and leadership stability
+#
+# 5. Monitoring and Alerting:
+#    - Alert on leadership changes frequency
+#    - Monitor Raft log replication lag
+#    - Track service discovery event rates
+#    - Alert on persistent minority partitions
+#
+# 6. Security:
+#    - Enable TLS for Raft inter-node communication in production
+#    - Secure Raft data directories with appropriate file permissions
+#    - Use network policies to restrict Raft port access
+#    - Regular backup of Raft data for disaster recovery

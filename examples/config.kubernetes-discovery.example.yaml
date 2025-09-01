@@ -1,0 +1,177 @@
+# VictoriaMetrics OAuth Gateway Configuration
+# Kubernetes Native Service Discovery Example
+
+server:
+  address: ":8080"
+  timeouts:
+    readTimeout: 30s
+    writeTimeout: 30s
+    idleTimeout: 120s
+
+# Multiple upstream with Kubernetes service discovery
+upstream:
+  multiple:
+    enabled: true
+    
+    # Static backend configuration (will be supplemented by K8s discovery)
+    backends: []  # Backends will be discovered automatically
+        
+    # Load balancing strategy
+    loadBalancing:
+      strategy: "round-robin"
+      
+    # Health checking configuration
+    healthCheck:
+      checkInterval: 30s
+      timeout: 10s
+      healthyThreshold: 2
+      unhealthyThreshold: 3
+      healthEndpoint: "/health"
+      
+    # Request queuing for high availability
+    queue:
+      enabled: true
+      maxSize: 1000
+      timeout: 5s
+      
+    # Request handling
+    timeout: 30s
+    maxRetries: 3
+    retryBackoff: 100ms
+
+# Raft state storage with Kubernetes peer discovery
+stateStorage:
+  type: "raft"
+  raft:
+    nodeId: "${POD_NAME}"  # Use pod name as node ID
+    dataDir: "/data/raft"
+    peers: []  # Peers will be discovered via Kubernetes API
+
+# Kubernetes native service discovery
+serviceDiscovery:
+  type: "kubernetes"
+  kubernetes:
+    namespace: "monitoring"  # Kubernetes namespace to watch
+    serviceName: "vm-proxy-auth"  # Service name for this application
+    
+    # Label selectors for discovery
+    peerLabelSelector: "app=vm-proxy-auth,component=raft-cluster"
+    backendLabelSelector: "app=victoriametrics"
+    
+    # Port configuration
+    raftPortName: "raft"  # Named port for Raft communication
+    httpPortName: "http"  # Named port for HTTP traffic
+    
+    # Discovery settings
+    updateInterval: 30s
+    
+    # Custom metadata for service registration
+    metadata:
+      datacenter: "kubernetes"
+      environment: "production"
+      cluster_role: "proxy"
+
+# Authentication configuration
+auth:
+  jwt:
+    # JWKS for production (recommended)
+    jwks:
+      url: "https://your-auth-provider.com/.well-known/jwks.json"
+      cacheTTL: 1h
+    
+    # JWT validation settings
+    algorithm: "RS256"
+    issuer: "your-auth-provider"
+    audience: "vm-proxy-auth"
+    leeway: 30s
+
+# Tenant mapping configuration
+tenantMapping:
+  - jwtClaim: "team_id"
+    staticMapping:
+      team-alpha: "1000"
+      team-beta: "1001"
+      team-gamma: "1002"
+
+# Advanced tenant filtering
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: true
+
+# Metrics and monitoring
+metrics:
+  enabled: true
+  path: "/metrics"
+  
+  # Kubernetes service discovery metrics:
+  # - vm_proxy_auth_k8s_pods_discovered_total{namespace}
+  # - vm_proxy_auth_k8s_services_discovered_total{namespace}
+  # - vm_proxy_auth_k8s_endpoints_ready_total{service_name}
+  # - vm_proxy_auth_k8s_api_requests_total{operation, result}
+  # - vm_proxy_auth_k8s_watch_events_total{resource_type, event_type}
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "json"
+  
+  # Kubernetes service discovery logs include:
+  # - k8s_operation: pod/service/endpoint discovery operations
+  # - namespace: Kubernetes namespace being watched
+  # - label_selector: selector used for resource discovery
+  # - pod_name, service_name: specific resource names
+  # - discovery_result: success/failure of discovery operations
+
+# Production deployment notes:
+#
+# 1. Kubernetes Service Discovery Benefits:
+#    - Native integration with Kubernetes cluster
+#    - Automatic peer discovery via pod labels
+#    - Service-based backend discovery with health awareness
+#    - No external dependencies beyond Kubernetes API
+#    - Real-time updates via Kubernetes watch API
+#
+# 2. RBAC Requirements:
+#    - ServiceAccount with permissions to list/watch pods, services, endpoints
+#    - ClusterRole allowing read access to discovery resources
+#    - Optional: pod update permissions for self-registration annotations
+#
+# 3. StatefulSet Deployment:
+#    - Use StatefulSet for stable network identities
+#    - PersistentVolumes for Raft data persistence
+#    - Headless service for peer-to-peer communication
+#    - LoadBalancer service for external traffic
+#
+# 4. Auto-Scaling Integration:
+#    - HorizontalPodAutoscaler can scale proxy instances
+#    - Raft cluster automatically adapts to membership changes
+#    - Backend discovery works with auto-scaled VictoriaMetrics
+#    - Service mesh integration (Istio/Linkerd) supported
+#
+# 5. Environment Variables:
+#    - POD_NAME: Kubernetes pod name (used as node ID)
+#    - POD_NAMESPACE: Kubernetes namespace
+#    - POD_IP: Pod IP address for Raft binding
+#    - KUBECONFIG: Leave empty to use in-cluster config
+#
+# 6. Labels and Annotations:
+#    - Use consistent labels for service discovery
+#    - Annotations for additional metadata
+#    - Pod readiness affects discovery health status
+#    - Service annotations can specify backend weights:
+#      vm-proxy-auth/weight: "5"
+#
+# 7. Network Policies:
+#    - Allow ingress on HTTP port (8080) from load balancer
+#    - Allow ingress on Raft port (9000) from peer pods
+#    - Allow egress to VictoriaMetrics services
+#    - Allow egress to Kubernetes API server
+#
+# 8. Troubleshooting:
+#    - Check RBAC permissions if discovery fails
+#    - Verify label selectors match actual resources
+#    - Monitor Kubernetes API rate limiting
+#    - Check network connectivity for Raft cluster formation
