@@ -111,8 +111,8 @@ func (dd *DragonflyDiscovery) discoverPeersFromKey(ctx context.Context, key stri
 	var peers []domain.PeerInfo
 	for nodeID, data := range result {
 		var peerInfo domain.PeerInfo
-		if err := json.Unmarshal([]byte(data), &peerInfo); err != nil {
-			dd.logUnmarshalError("peer", nodeID, err)
+		if unmarshalErr := json.Unmarshal([]byte(data), &peerInfo); unmarshalErr != nil {
+			dd.logUnmarshalError("peer", nodeID, unmarshalErr)
 			continue
 		}
 
@@ -139,8 +139,8 @@ func (dd *DragonflyDiscovery) discoverBackendsFromKey(ctx context.Context, key s
 	var backends []domain.BackendInfo
 	for backendID, data := range result {
 		var backendInfo domain.BackendInfo
-		if err := json.Unmarshal([]byte(data), &backendInfo); err != nil {
-			dd.logUnmarshalError("backend", backendID, err)
+		if unmarshalErr := json.Unmarshal([]byte(data), &backendInfo); unmarshalErr != nil {
+			dd.logUnmarshalError("backend", backendID, unmarshalErr)
 			continue
 		}
 
@@ -484,7 +484,7 @@ func (dd *DragonflyDiscovery) cleanupStalePeers(ctx context.Context) error {
 	var staleNodes []string
 	for nodeID, data := range result {
 		var peerInfo domain.PeerInfo
-		if err := json.Unmarshal([]byte(data), &peerInfo); err != nil {
+		if unmarshalErr := json.Unmarshal([]byte(data), &peerInfo); unmarshalErr != nil {
 			staleNodes = append(staleNodes, nodeID)
 			continue
 		}
@@ -495,9 +495,9 @@ func (dd *DragonflyDiscovery) cleanupStalePeers(ctx context.Context) error {
 	}
 
 	if len(staleNodes) > 0 {
-		_, err := dd.client.HDel(ctx, key, staleNodes...).Result()
-		if err != nil {
-			return err
+		_, delErr := dd.client.HDel(ctx, key, staleNodes...).Result()
+		if delErr != nil {
+			return delErr
 		}
 
 		dd.logger.Info("Cleaned up stale peer entries",
@@ -520,7 +520,7 @@ func (dd *DragonflyDiscovery) cleanupStaleBackends(ctx context.Context) error {
 	var staleBackends []string
 	for backendID, data := range result {
 		var backendInfo domain.BackendInfo
-		if err := json.Unmarshal([]byte(data), &backendInfo); err != nil {
+		if unmarshalErr := json.Unmarshal([]byte(data), &backendInfo); unmarshalErr != nil {
 			staleBackends = append(staleBackends, backendID)
 			continue
 		}
@@ -531,9 +531,9 @@ func (dd *DragonflyDiscovery) cleanupStaleBackends(ctx context.Context) error {
 	}
 
 	if len(staleBackends) > 0 {
-		_, err := dd.client.HDel(ctx, key, staleBackends...).Result()
-		if err != nil {
-			return err
+		_, delErr := dd.client.HDel(ctx, key, staleBackends...).Result()
+		if delErr != nil {
+			return delErr
 		}
 
 		dd.logger.Info("Cleaned up stale backend entries",

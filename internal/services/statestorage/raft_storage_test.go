@@ -147,7 +147,7 @@ func TestRaftStorage_MultiNode(t *testing.T) {
 	tempDirs := make([]string, 3)
 
 	// Setup nodes
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		tempDirs[i] = t.TempDir()
 		logger := testutils.NewMockLogger()
 
@@ -359,7 +359,7 @@ func TestRaftStorage_Watch_MultipleWatchers(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check events1 and events3 receive prefix1: events
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		var events <-chan domain.StateEvent
 		var name string
 		if i == 0 {
@@ -442,7 +442,7 @@ func TestRaftStorage_ConcurrentOperations(t *testing.T) {
 		errCh := make(chan error, numOperations)
 
 		// Concurrent writes
-		for i := 0; i < numOperations; i++ {
+		for i := range numOperations {
 			go func(i int) {
 				key := fmt.Sprintf("concurrent-key-%d", i)
 				value := []byte(fmt.Sprintf("value-%d", i))
@@ -451,13 +451,13 @@ func TestRaftStorage_ConcurrentOperations(t *testing.T) {
 		}
 
 		// Check all writes succeeded
-		for i := 0; i < numOperations; i++ {
+		for i := range numOperations {
 			err := <-errCh
 			require.NoError(t, err, "Write %d should succeed", i)
 		}
 
 		// Verify all values
-		for i := 0; i < numOperations; i++ {
+		for i := range numOperations {
 			key := fmt.Sprintf("concurrent-key-%d", i)
 			expected := []byte(fmt.Sprintf("value-%d", i))
 
