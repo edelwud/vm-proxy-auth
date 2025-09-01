@@ -53,6 +53,23 @@ upstream:
     maxRetries: 3             # Maximum retries per request
     retryBackoff: 100ms       # Backoff between retries
 
+# State storage configuration (for multi-instance deployments)
+stateStorage:
+  type: "local"  # Options: local, redis, raft
+  
+  # For distributed deployments, use Redis:
+  # type: "redis"
+  # redis:
+  #   address: "redis:6379"
+  #   password: ""
+  #   database: 0
+  #   keyPrefix: "vm-proxy-auth:"
+  #   connectTimeout: 5s
+  #   readTimeout: 3s
+  #   writeTimeout: 3s
+  #   poolSize: 10
+  #   minIdleConns: 5
+
 # Authentication configuration
 auth:
   jwt:

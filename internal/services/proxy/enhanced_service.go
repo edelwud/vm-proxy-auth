@@ -75,6 +75,7 @@ func NewEnhancedService(
 	config EnhancedServiceConfig,
 	logger domain.Logger,
 	metrics domain.MetricsService,
+	stateStorage domain.StateStorage,
 ) (*EnhancedService, error) {
 	// Validate configuration
 	if len(config.Backends) == 0 {
@@ -128,6 +129,7 @@ func NewEnhancedService(
 		config.HealthCheck,
 		backends,
 		service.onBackendStateChange,
+		stateStorage,
 		logger,
 	)
 	service.healthChecker = healthChecker

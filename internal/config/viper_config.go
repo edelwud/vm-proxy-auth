@@ -17,12 +17,22 @@ const (
 	defaultRetryBackoffMilliseconds = 100
 	defaultQueueMaxSize             = 1000
 	defaultQueueTimeoutSeconds      = 5
+	defaultRedisDatabase            = 0
+	defaultRedisKeyPrefix           = "vm-proxy-auth:"
+	defaultRedisConnectTimeout      = 5
+	defaultRedisTimeout             = 3
+	defaultRedisPoolSize            = 10
+	defaultRedisMinIdleConns        = 5
+	defaultRedisMaxRetries          = 3
+	defaultRedisMinRetryBackoff     = 100
+	defaultRedisMaxRetryBackoff     = 1000
 )
 
 // ViperConfig represents the new configuration structure with camelCase naming.
 type ViperConfig struct {
 	Server        ServerSettings       `mapstructure:"server"`
 	Upstream      UpstreamSettings     `mapstructure:"upstream"`
+	StateStorage  StateStorageSettings `mapstructure:"stateStorage"`
 	Auth          AuthSettings         `mapstructure:"auth"`
 	TenantMapping []TenantMap          `mapstructure:"tenantMapping"`
 	TenantFilter  TenantFilterSettings `mapstructure:"tenantFilter"`
@@ -93,6 +103,36 @@ type QueueSettings struct {
 	Enabled bool          `mapstructure:"enabled"`
 	MaxSize int           `mapstructure:"maxSize"`
 	Timeout time.Duration `mapstructure:"timeout"`
+}
+
+// StateStorageSettings configures distributed state storage.
+type StateStorageSettings struct {
+	Type  string        `mapstructure:"type"` // local, redis, raft
+	Redis RedisSettings `mapstructure:"redis"`
+	Raft  RaftSettings  `mapstructure:"raft"`
+}
+
+// RedisSettings configures Redis state storage.
+type RedisSettings struct {
+	Address         string        `mapstructure:"address"`
+	Password        string        `mapstructure:"password"`
+	Database        int           `mapstructure:"database"`
+	KeyPrefix       string        `mapstructure:"keyPrefix"`
+	ConnectTimeout  time.Duration `mapstructure:"connectTimeout"`
+	ReadTimeout     time.Duration `mapstructure:"readTimeout"`
+	WriteTimeout    time.Duration `mapstructure:"writeTimeout"`
+	PoolSize        int           `mapstructure:"poolSize"`
+	MinIdleConns    int           `mapstructure:"minIdleConns"`
+	MaxRetries      int           `mapstructure:"maxRetries"`
+	MinRetryBackoff time.Duration `mapstructure:"minRetryBackoff"`
+	MaxRetryBackoff time.Duration `mapstructure:"maxRetryBackoff"`
+}
+
+// RaftSettings configures Raft consensus state storage.
+type RaftSettings struct {
+	NodeID  string   `mapstructure:"nodeId"`
+	Peers   []string `mapstructure:"peers"`
+	DataDir string   `mapstructure:"dataDir"`
 }
 
 type AuthSettings struct {
@@ -239,6 +279,19 @@ func setViperDefaults(v *viper.Viper) {
 	v.SetDefault("upstream.multiple.maxRetries", defaultMaxRetries)
 	v.SetDefault("upstream.multiple.retryBackoff", "100ms")
 
+	// StateStorage defaults
+	v.SetDefault("stateStorage.type", "local")
+	v.SetDefault("stateStorage.redis.database", defaultRedisDatabase)
+	v.SetDefault("stateStorage.redis.keyPrefix", defaultRedisKeyPrefix)
+	v.SetDefault("stateStorage.redis.connectTimeout", fmt.Sprintf("%ds", defaultRedisConnectTimeout))
+	v.SetDefault("stateStorage.redis.readTimeout", fmt.Sprintf("%ds", defaultRedisTimeout))
+	v.SetDefault("stateStorage.redis.writeTimeout", fmt.Sprintf("%ds", defaultRedisTimeout))
+	v.SetDefault("stateStorage.redis.poolSize", defaultRedisPoolSize)
+	v.SetDefault("stateStorage.redis.minIdleConns", defaultRedisMinIdleConns)
+	v.SetDefault("stateStorage.redis.maxRetries", defaultRedisMaxRetries)
+	v.SetDefault("stateStorage.redis.minRetryBackoff", fmt.Sprintf("%dms", defaultRedisMinRetryBackoff))
+	v.SetDefault("stateStorage.redis.maxRetryBackoff", fmt.Sprintf("%dms", defaultRedisMaxRetryBackoff))
+
 	// Auth defaults
 	v.SetDefault("auth.jwt.algorithm", "RS256")
 	v.SetDefault("auth.jwt.validation.validateAudience", false)
@@ -376,6 +429,84 @@ func (c *ViperConfig) ValidateMultipleUpstreams() error {
 	return nil
 }
 
+// State storage type constants.
+const (
+	StateStorageTypeRedis = "redis"
+	StateStorageTypeRaft  = "raft"
+)
+
+// ValidateStateStorage validates the state storage configuration.
+func (c *ViperConfig) ValidateStateStorage() error {
+	stateType := c.StateStorage.Type
+	validTypes := []string{"local", "redis", "raft"}
+
+	if !slices.Contains(validTypes, stateType) {
+		return fmt.Errorf("invalid state storage type: %s. Valid types: %v", stateType, validTypes)
+	}
+
+	// Validate Redis configuration if Redis is selected
+	if stateType == StateStorageTypeRedis {
+		return c.validateRedisConfig()
+	}
+
+	// Validate Raft configuration if Raft is selected
+	if stateType == StateStorageTypeRaft {
+		raft := c.StateStorage.Raft
+		if raft.NodeID == "" {
+			return errors.New("raft node ID is required when using Raft state storage")
+		}
+
+		if len(raft.Peers) == 0 {
+			return errors.New("raft peers list cannot be empty when using Raft state storage")
+		}
+
+		if raft.DataDir == "" {
+			return errors.New("raft data directory is required when using Raft state storage")
+		}
+	}
+
+	return nil
+}
+
+// validateRedisConfig validates Redis-specific configuration.
+func (c *ViperConfig) validateRedisConfig() error {
+	redis := c.StateStorage.Redis
+	if redis.Address == "" {
+		return errors.New("redis address is required when using Redis state storage")
+	}
+
+	if redis.Database < 0 {
+		return fmt.Errorf("redis database must be non-negative, got %d", redis.Database)
+	}
+
+	if redis.PoolSize <= 0 {
+		return fmt.Errorf("redis pool size must be positive, got %d", redis.PoolSize)
+	}
+
+	if redis.MinIdleConns < 0 {
+		return fmt.Errorf("redis min idle connections cannot be negative, got %d", redis.MinIdleConns)
+	}
+
+	if redis.MinIdleConns > redis.PoolSize {
+		return fmt.Errorf("redis min idle connections (%d) cannot exceed pool size (%d)",
+			redis.MinIdleConns, redis.PoolSize)
+	}
+
+	if redis.ConnectTimeout <= 0 {
+		return fmt.Errorf("redis connect timeout must be positive, got %v", redis.ConnectTimeout)
+	}
+
+	if redis.ReadTimeout <= 0 {
+		return fmt.Errorf("redis read timeout must be positive, got %v", redis.ReadTimeout)
+	}
+
+	if redis.WriteTimeout <= 0 {
+		return fmt.Errorf("redis write timeout must be positive, got %v", redis.WriteTimeout)
+	}
+
+	return nil
+}
+
 // ToEnhancedServiceConfig converts the multiple upstream settings to EnhancedServiceConfig.
 func (c *ViperConfig) ToEnhancedServiceConfig() (*EnhancedServiceConfig, error) {
 	if !c.IsMultipleUpstreamsEnabled() {
@@ -444,6 +575,62 @@ func (c *ViperConfig) ToEnhancedServiceConfig() (*EnhancedServiceConfig, error) 
 	}
 
 	return config, nil
+}
+
+// ToStateStorageConfig converts the state storage settings to RedisStorageConfig.
+func (c *ViperConfig) ToStateStorageConfig() (interface{}, string, error) {
+	if err := c.ValidateStateStorage(); err != nil {
+		return nil, "", fmt.Errorf("state storage validation failed: %w", err)
+	}
+
+	storageType := c.StateStorage.Type
+
+	switch storageType {
+	case "local":
+		// Local storage doesn't need additional configuration
+		return nil, "local", nil
+
+	case "redis":
+		redis := c.StateStorage.Redis
+
+		// Apply defaults if not set
+		if redis.KeyPrefix == "" {
+			redis.KeyPrefix = defaultRedisKeyPrefix
+		}
+		if redis.ConnectTimeout == 0 {
+			redis.ConnectTimeout = defaultRedisConnectTimeout * time.Second
+		}
+		if redis.ReadTimeout == 0 {
+			redis.ReadTimeout = defaultRedisTimeout * time.Second
+		}
+		if redis.WriteTimeout == 0 {
+			redis.WriteTimeout = defaultRedisTimeout * time.Second
+		}
+		if redis.PoolSize == 0 {
+			redis.PoolSize = defaultRedisPoolSize
+		}
+		if redis.MinIdleConns == 0 {
+			redis.MinIdleConns = defaultRedisMinIdleConns
+		}
+		if redis.MaxRetries == 0 {
+			redis.MaxRetries = defaultRedisMaxRetries
+		}
+		if redis.MinRetryBackoff == 0 {
+			redis.MinRetryBackoff = defaultRedisMinRetryBackoff * time.Millisecond
+		}
+		if redis.MaxRetryBackoff == 0 {
+			redis.MaxRetryBackoff = defaultRedisMaxRetryBackoff * time.Millisecond
+		}
+
+		return redis, "redis", nil
+
+	case "raft":
+		// Raft storage configuration (for future implementation)
+		return c.StateStorage.Raft, "raft", nil
+
+	default:
+		return nil, "", fmt.Errorf("unsupported state storage type: %s", storageType)
+	}
 }
 
 // EnhancedServiceConfig represents the enhanced service configuration.

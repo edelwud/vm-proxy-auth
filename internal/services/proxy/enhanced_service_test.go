@@ -76,7 +76,8 @@ func TestEnhancedService_BasicForwarding(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockEnhancedMetricsService{}
 
-	service, err := proxy.NewEnhancedService(config, logger, metrics)
+	stateStorage := testutils.NewMockStateStorage()
+	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	defer service.Close()
 
@@ -128,7 +129,8 @@ func TestEnhancedService_LoadBalancing_RoundRobin(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockEnhancedMetricsService{}
 
-	service, err := proxy.NewEnhancedService(config, logger, metrics)
+	stateStorage := testutils.NewMockStateStorage()
+	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	defer service.Close()
 
@@ -180,7 +182,8 @@ func TestEnhancedService_LoadBalancing_WeightedRoundRobin(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockEnhancedMetricsService{}
 
-	service, err := proxy.NewEnhancedService(config, logger, metrics)
+	stateStorage := testutils.NewMockStateStorage()
+	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	defer service.Close()
 
@@ -238,7 +241,8 @@ func TestEnhancedService_RetryOnFailure(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockEnhancedMetricsService{}
 
-	service, err := proxy.NewEnhancedService(config, logger, metrics)
+	stateStorage := testutils.NewMockStateStorage()
+	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	defer service.Close()
 
@@ -284,7 +288,8 @@ func TestEnhancedService_MaxRetriesExceeded(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockEnhancedMetricsService{}
 
-	service, err := proxy.NewEnhancedService(config, logger, metrics)
+	stateStorage := testutils.NewMockStateStorage()
+	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	defer service.Close()
 
@@ -318,7 +323,8 @@ func TestEnhancedService_NoHealthyBackends(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockEnhancedMetricsService{}
 
-	service, err := proxy.NewEnhancedService(config, logger, metrics)
+	stateStorage := testutils.NewMockStateStorage()
+	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	defer service.Close()
 
@@ -358,7 +364,8 @@ func TestEnhancedService_MaintenanceMode(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockEnhancedMetricsService{}
 
-	service, err := proxy.NewEnhancedService(config, logger, metrics)
+	stateStorage := testutils.NewMockStateStorage()
+	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	defer service.Close()
 
@@ -407,7 +414,8 @@ func TestEnhancedService_BackendsStatus(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockEnhancedMetricsService{}
 
-	service, err := proxy.NewEnhancedService(config, logger, metrics)
+	stateStorage := testutils.NewMockStateStorage()
+	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	defer service.Close()
 
@@ -445,7 +453,8 @@ func TestEnhancedService_ConcurrentRequests(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockEnhancedMetricsService{}
 
-	service, err := proxy.NewEnhancedService(config, logger, metrics)
+	stateStorage := testutils.NewMockStateStorage()
+	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	defer service.Close()
 
@@ -505,7 +514,8 @@ func TestEnhancedService_ContextCancellation(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockEnhancedMetricsService{}
 
-	service, err := proxy.NewEnhancedService(config, logger, metrics)
+	stateStorage := testutils.NewMockStateStorage()
+	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	defer service.Close()
 

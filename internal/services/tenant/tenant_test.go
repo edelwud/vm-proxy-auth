@@ -178,3 +178,198 @@ func (m *MockMetricsService) RecordLoadBalancerSelection(
 ) {
 }
 func (m *MockMetricsService) Handler() http.Handler { return nil }
+
+func TestService_CanAccessTenant(t *testing.T) {
+	logger := &testutils.MockLogger{}
+	metrics := &MockMetricsService{}
+
+	upstreamCfg := &config.UpstreamSettings{
+		URL: "https://test.example.com",
+	}
+
+	tenantCfg := &config.TenantFilterSettings{
+		Strategy: "or_conditions",
+		Labels: config.TenantFilterLabels{
+			AccountLabel: "vm_account_id",
+			ProjectLabel: "vm_project_id",
+			UseProjectID: true,
+		},
+	}
+
+	service := tenant.NewService(upstreamCfg, tenantCfg, logger, metrics)
+
+	t.Run("access_allowed_by_account_id", func(t *testing.T) {
+		user := &domain.User{
+			ID: "test-user",
+			VMTenants: []domain.VMTenant{
+				{AccountID: "1000", ProjectID: "10"},
+				{AccountID: "2000", ProjectID: "20"},
+			},
+		}
+
+		// Should allow access by AccountID
+		canAccess := service.CanAccessTenant(context.Background(), user, "1000")
+		assert.True(t, canAccess)
+
+		canAccess = service.CanAccessTenant(context.Background(), user, "2000")
+		assert.True(t, canAccess)
+	})
+
+	t.Run("access_allowed_by_tenant_string", func(t *testing.T) {
+		user := &domain.User{
+			ID: "test-user",
+			VMTenants: []domain.VMTenant{
+				{AccountID: "1000", ProjectID: "10"},
+			},
+		}
+
+		// Should allow access by full tenant string (AccountID:ProjectID)
+		canAccess := service.CanAccessTenant(context.Background(), user, "1000:10")
+		assert.True(t, canAccess)
+	})
+
+	t.Run("access_denied_no_match", func(t *testing.T) {
+		user := &domain.User{
+			ID: "test-user",
+			VMTenants: []domain.VMTenant{
+				{AccountID: "1000", ProjectID: "10"},
+			},
+		}
+
+		// Should deny access to non-matching tenant
+		canAccess := service.CanAccessTenant(context.Background(), user, "9999")
+		assert.False(t, canAccess)
+
+		canAccess = service.CanAccessTenant(context.Background(), user, "1000:99")
+		assert.False(t, canAccess)
+	})
+
+	t.Run("access_denied_no_vm_tenants", func(t *testing.T) {
+		user := &domain.User{
+			ID:        "test-user",
+			VMTenants: []domain.VMTenant{}, // Empty VM tenants
+		}
+
+		// Should deny access when user has no VM tenants
+		canAccess := service.CanAccessTenant(context.Background(), user, "1000")
+		assert.False(t, canAccess)
+	})
+}
+
+func TestService_DetermineTargetTenant(t *testing.T) {
+	logger := &testutils.MockLogger{}
+	metrics := &MockMetricsService{}
+
+	upstreamCfg := &config.UpstreamSettings{
+		URL: "https://test.example.com",
+	}
+
+	tenantCfg := &config.TenantFilterSettings{
+		Strategy: "or_conditions",
+		Labels: config.TenantFilterLabels{
+			AccountLabel: "vm_account_id",
+			ProjectLabel: "vm_project_id",
+			UseProjectID: true,
+		},
+	}
+
+	service := tenant.NewService(upstreamCfg, tenantCfg, logger, metrics)
+
+	t.Run("use_tenant_from_header_x_prometheus_tenant", func(t *testing.T) {
+		user := &domain.User{
+			ID: "test-user",
+			VMTenants: []domain.VMTenant{
+				{AccountID: "1000", ProjectID: "10"},
+				{AccountID: "2000", ProjectID: "20"},
+			},
+		}
+
+		req := &http.Request{
+			Header: http.Header{
+				"X-Prometheus-Tenant": []string{"1000"},
+			},
+		}
+
+		tenant, err := service.DetermineTargetTenant(context.Background(), user, req)
+		require.NoError(t, err)
+		assert.Equal(t, "1000", tenant)
+	})
+
+	t.Run("use_tenant_from_header_x_tenant_id", func(t *testing.T) {
+		user := &domain.User{
+			ID: "test-user",
+			VMTenants: []domain.VMTenant{
+				{AccountID: "1000", ProjectID: "10"},
+			},
+		}
+
+		req := &http.Request{
+			Header: http.Header{
+				"X-Tenant-ID": []string{"1000:10"},
+			},
+		}
+
+		tenant, err := service.DetermineTargetTenant(context.Background(), user, req)
+		require.NoError(t, err)
+		assert.Equal(t, "1000:10", tenant)
+	})
+
+	t.Run("forbidden_tenant_in_header", func(t *testing.T) {
+		user := &domain.User{
+			ID: "test-user",
+			VMTenants: []domain.VMTenant{
+				{AccountID: "1000", ProjectID: "10"},
+			},
+		}
+
+		req := &http.Request{
+			Header: http.Header{
+				"X-Prometheus-Tenant": []string{"9999"}, // Tenant user cannot access
+			},
+		}
+
+		tenant, err := service.DetermineTargetTenant(context.Background(), user, req)
+		require.Error(t, err)
+		assert.Empty(t, tenant)
+
+		var appErr *domain.AppError
+		require.ErrorAs(t, err, &appErr)
+		assert.Equal(t, domain.ErrCodeForbidden, appErr.Code)
+		assert.Equal(t, http.StatusForbidden, appErr.HTTPStatus)
+		assert.Contains(t, appErr.Message, "User cannot access tenant: 9999")
+	})
+
+	t.Run("use_first_vm_tenant_default", func(t *testing.T) {
+		user := &domain.User{
+			ID: "test-user",
+			VMTenants: []domain.VMTenant{
+				{AccountID: "1000", ProjectID: "10"},
+				{AccountID: "2000", ProjectID: "20"},
+			},
+		}
+
+		req := &http.Request{
+			Header: http.Header{}, // No tenant headers
+		}
+
+		tenant, err := service.DetermineTargetTenant(context.Background(), user, req)
+		require.NoError(t, err)
+		assert.Equal(t, "1000:10", tenant) // Should use first VM tenant
+	})
+
+	t.Run("error_no_vm_tenants", func(t *testing.T) {
+		user := &domain.User{
+			ID:        "test-user",
+			VMTenants: []domain.VMTenant{}, // No VM tenants
+		}
+
+		req := &http.Request{
+			Header: http.Header{},
+		}
+
+		tenant, err := service.DetermineTargetTenant(context.Background(), user, req)
+		require.Error(t, err)
+		assert.Empty(t, tenant)
+		assert.Equal(t, domain.ErrNoVMTenants, err)
+	})
+}

@@ -1,0 +1,180 @@
+# Docker Compose configuration for Redis State Storage deployment
+# Usage: docker-compose -f docker-compose.redis.yml up -d
+
+version: '3.8'
+
+services:
+  # Primary gateway instance
+  prometheus-oauth-gateway-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./examples/config.redis-state-storage.example.yaml:/root/config.yaml:ro
+    environment:
+      - SERVER_ADDRESS=0.0.0.0:8080
+      - LOG_LEVEL=info
+    command: ["--config", "/root/config.yaml"]
+    networks:
+      - monitoring
+    depends_on:
+      - redis
+      - victoriametrics
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Secondary gateway instance (demonstrates distributed state)
+  prometheus-oauth-gateway-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./examples/config.redis-state-storage.example.yaml:/root/config.yaml:ro
+    environment:
+      - SERVER_ADDRESS=0.0.0.0:8080
+      - LOG_LEVEL=info
+    command: ["--config", "/root/config.yaml"]
+    networks:
+      - monitoring
+    depends_on:
+      - redis
+      - victoriametrics
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis for distributed state storage
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    networks:
+      - monitoring
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Load balancer (nginx) for gateway instances
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - prometheus-oauth-gateway-1
+      - prometheus-oauth-gateway-2
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # VictoriaMetrics cluster node 1
+  victoriametrics-1:
+    image: victoriametrics/victoria-metrics:v1.95.1
+    ports:
+      - "8428:8428"
+    volumes:
+      - vm-data-1:/victoria-metrics-data
+    command:
+      - '--storageDataPath=/victoria-metrics-data'
+      - '--httpListenAddr=:8428'
+      - '--retentionPeriod=1y'
+      - '--maxConcurrentInserts=8'
+    networks:
+      - monitoring
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8428/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # VictoriaMetrics cluster node 2
+  victoriametrics-2:
+    image: victoriametrics/victoria-metrics:v1.95.1
+    ports:
+      - "8429:8428"
+    volumes:
+      - vm-data-2:/victoria-metrics-data
+    command:
+      - '--storageDataPath=/victoria-metrics-data'
+      - '--httpListenAddr=:8428'
+      - '--retentionPeriod=1y'
+      - '--maxConcurrentInserts=8'
+    networks:
+      - monitoring
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8428/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # VictoriaMetrics cluster node 3
+  victoriametrics-3:
+    image: victoriametrics/victoria-metrics:v1.95.1
+    ports:
+      - "8430:8428"
+    volumes:
+      - vm-data-3:/victoria-metrics-data
+    command:
+      - '--storageDataPath=/victoria-metrics-data'
+      - '--httpListenAddr=:8428'
+      - '--retentionPeriod=1y'
+      - '--maxConcurrentInserts=8'
+    networks:
+      - monitoring
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8428/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis Commander for monitoring Redis state
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8082:8081"
+    depends_on:
+      - redis
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+volumes:
+  vm-data-1:
+    driver: local
+  vm-data-2:
+    driver: local
+  vm-data-3:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  monitoring:
+    driver: bridge

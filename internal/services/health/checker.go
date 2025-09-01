@@ -38,6 +38,7 @@ type Checker struct {
 	statesMu      sync.RWMutex
 	onStateChange func(backendURL string, oldState, newState domain.BackendState)
 	httpClient    *http.Client
+	stateStorage  domain.StateStorage
 	logger        domain.Logger
 	stopCh        chan struct{}
 	stoppedCh     chan struct{}
@@ -60,6 +61,7 @@ func NewChecker(
 	config CheckerConfig,
 	backends []domain.Backend,
 	onStateChange func(string, domain.BackendState, domain.BackendState),
+	stateStorage domain.StateStorage,
 	logger domain.Logger,
 ) *Checker {
 	// Set defaults only when not specified (-1 or 0 means disabled)
@@ -96,9 +98,10 @@ func NewChecker(
 		httpClient: &http.Client{
 			Timeout: config.Timeout,
 		},
-		logger:    logger.With(domain.Field{Key: "component", Value: "health_checker"}),
-		stopCh:    make(chan struct{}),
-		stoppedCh: make(chan struct{}),
+		stateStorage: stateStorage,
+		logger:       logger.With(domain.Field{Key: "component", Value: "health_checker"}),
+		stopCh:       make(chan struct{}),
+		stoppedCh:    make(chan struct{}),
 	}
 }
 

@@ -40,11 +40,12 @@ func TestChecker_CheckHealth_Success(t *testing.T) {
 	var stateChanges []stateChange
 	var stateChangeMu sync.Mutex
 
+	stateStorage := testutils.NewMockStateStorage()
 	checker := health.NewChecker(config, backends, func(url string, oldState, newState domain.BackendState) {
 		stateChangeMu.Lock()
 		stateChanges = append(stateChanges, stateChange{url, oldState, newState})
 		stateChangeMu.Unlock()
-	}, logger)
+	}, stateStorage, logger)
 
 	ctx := context.Background()
 	err := checker.CheckHealth(ctx, &backends[0])
@@ -80,7 +81,8 @@ func TestChecker_CheckHealth_Failure(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	checker := health.NewChecker(config, backends, nil, logger)
+	stateStorage := testutils.NewMockStateStorage()
+	checker := health.NewChecker(config, backends, nil, stateStorage, logger)
 
 	ctx := context.Background()
 	err := checker.CheckHealth(ctx, &backends[0])
@@ -124,11 +126,12 @@ func TestChecker_StateTransitions(t *testing.T) {
 	var stateChanges []stateChange
 	var stateChangeMu sync.Mutex
 
+	stateStorage := testutils.NewMockStateStorage()
 	checker := health.NewChecker(config, backends, func(url string, oldState, newState domain.BackendState) {
 		stateChangeMu.Lock()
 		stateChanges = append(stateChanges, stateChange{url, oldState, newState})
 		stateChangeMu.Unlock()
-	}, logger)
+	}, stateStorage, logger)
 
 	ctx := context.Background()
 	backend := &backends[0]
@@ -180,9 +183,10 @@ func TestChecker_MaintenanceMode(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	var stateChanges []stateChange
 
+	stateStorage := testutils.NewMockStateStorage()
 	checker := health.NewChecker(config, backends, func(url string, oldState, newState domain.BackendState) {
 		stateChanges = append(stateChanges, stateChange{url, oldState, newState})
-	}, logger)
+	}, stateStorage, logger)
 
 	ctx := context.Background()
 
@@ -219,7 +223,8 @@ func TestChecker_ConcurrentChecks(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	checker := health.NewChecker(config, backends, nil, logger)
+	stateStorage := testutils.NewMockStateStorage()
+	checker := health.NewChecker(config, backends, nil, stateStorage, logger)
 
 	ctx := context.Background()
 
@@ -270,7 +275,8 @@ func TestChecker_StartStopMonitoring(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	checker := health.NewChecker(config, backends, nil, logger)
+	stateStorage := testutils.NewMockStateStorage()
+	checker := health.NewChecker(config, backends, nil, stateStorage, logger)
 
 	ctx := t.Context()
 
@@ -320,7 +326,8 @@ func TestChecker_ContextCancellation(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	checker := health.NewChecker(config, backends, nil, logger)
+	stateStorage := testutils.NewMockStateStorage()
+	checker := health.NewChecker(config, backends, nil, stateStorage, logger)
 
 	// Create context with short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -347,7 +354,8 @@ func TestChecker_DefaultConfig(t *testing.T) {
 	config := health.CheckerConfig{}
 
 	logger := testutils.NewMockLogger()
-	checker := health.NewChecker(config, backends, nil, logger)
+	stateStorage := testutils.NewMockStateStorage()
+	checker := health.NewChecker(config, backends, nil, stateStorage, logger)
 
 	ctx := context.Background()
 	err := checker.CheckHealth(ctx, &backends[0])
@@ -371,7 +379,8 @@ func TestChecker_CustomHealthEndpoint(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	checker := health.NewChecker(config, backends, nil, logger)
+	stateStorage := testutils.NewMockStateStorage()
+	checker := health.NewChecker(config, backends, nil, stateStorage, logger)
 
 	ctx := context.Background()
 	err := checker.CheckHealth(ctx, &backends[0])
@@ -403,7 +412,8 @@ func BenchmarkChecker_CheckHealth(b *testing.B) {
 	}
 
 	logger := testutils.NewMockLogger()
-	checker := health.NewChecker(config, backends, nil, logger)
+	stateStorage := testutils.NewMockStateStorage()
+	checker := health.NewChecker(config, backends, nil, stateStorage, logger)
 
 	ctx := context.Background()
 	backend := &backends[0]

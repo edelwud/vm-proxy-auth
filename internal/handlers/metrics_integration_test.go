@@ -74,7 +74,8 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 		EnableQueueing: false,
 	}
 
-	proxyService, err := proxy.NewEnhancedService(enhancedConfig, logger, metricsService)
+	stateStorage := testutils.NewMockStateStorage()
+	proxyService, err := proxy.NewEnhancedService(enhancedConfig, logger, metricsService, stateStorage)
 	require.NoError(t, err)
 
 	// Start the service

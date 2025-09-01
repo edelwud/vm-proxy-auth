@@ -174,7 +174,8 @@ func TestCompleteSystemIntegration(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockEnhancedMetricsService{}
 
-	service, err := proxy.NewEnhancedService(config, logger, metrics)
+	stateStorage := testutils.NewMockStateStorage()
+	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	defer service.Close()
 
