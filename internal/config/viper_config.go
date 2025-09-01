@@ -446,39 +446,7 @@ func (c *ViperConfig) ValidateStateStorage() error {
 
 	// Validate Redis configuration if Redis is selected
 	if stateType == StateStorageTypeRedis {
-		redis := c.StateStorage.Redis
-		if redis.Address == "" {
-			return errors.New("redis address is required when using Redis state storage")
-		}
-
-		if redis.Database < 0 {
-			return fmt.Errorf("redis database must be non-negative, got %d", redis.Database)
-		}
-
-		if redis.PoolSize <= 0 {
-			return fmt.Errorf("redis pool size must be positive, got %d", redis.PoolSize)
-		}
-
-		if redis.MinIdleConns < 0 {
-			return fmt.Errorf("redis min idle connections cannot be negative, got %d", redis.MinIdleConns)
-		}
-
-		if redis.MinIdleConns > redis.PoolSize {
-			return fmt.Errorf("redis min idle connections (%d) cannot exceed pool size (%d)",
-				redis.MinIdleConns, redis.PoolSize)
-		}
-
-		if redis.ConnectTimeout <= 0 {
-			return fmt.Errorf("redis connect timeout must be positive, got %v", redis.ConnectTimeout)
-		}
-
-		if redis.ReadTimeout <= 0 {
-			return fmt.Errorf("redis read timeout must be positive, got %v", redis.ReadTimeout)
-		}
-
-		if redis.WriteTimeout <= 0 {
-			return fmt.Errorf("redis write timeout must be positive, got %v", redis.WriteTimeout)
-		}
+		return c.validateRedisConfig()
 	}
 
 	// Validate Raft configuration if Raft is selected
@@ -495,6 +463,45 @@ func (c *ViperConfig) ValidateStateStorage() error {
 		if raft.DataDir == "" {
 			return errors.New("raft data directory is required when using Raft state storage")
 		}
+	}
+
+	return nil
+}
+
+// validateRedisConfig validates Redis-specific configuration.
+func (c *ViperConfig) validateRedisConfig() error {
+	redis := c.StateStorage.Redis
+	if redis.Address == "" {
+		return errors.New("redis address is required when using Redis state storage")
+	}
+
+	if redis.Database < 0 {
+		return fmt.Errorf("redis database must be non-negative, got %d", redis.Database)
+	}
+
+	if redis.PoolSize <= 0 {
+		return fmt.Errorf("redis pool size must be positive, got %d", redis.PoolSize)
+	}
+
+	if redis.MinIdleConns < 0 {
+		return fmt.Errorf("redis min idle connections cannot be negative, got %d", redis.MinIdleConns)
+	}
+
+	if redis.MinIdleConns > redis.PoolSize {
+		return fmt.Errorf("redis min idle connections (%d) cannot exceed pool size (%d)",
+			redis.MinIdleConns, redis.PoolSize)
+	}
+
+	if redis.ConnectTimeout <= 0 {
+		return fmt.Errorf("redis connect timeout must be positive, got %v", redis.ConnectTimeout)
+	}
+
+	if redis.ReadTimeout <= 0 {
+		return fmt.Errorf("redis read timeout must be positive, got %v", redis.ReadTimeout)
+	}
+
+	if redis.WriteTimeout <= 0 {
+		return fmt.Errorf("redis write timeout must be positive, got %v", redis.WriteTimeout)
 	}
 
 	return nil
