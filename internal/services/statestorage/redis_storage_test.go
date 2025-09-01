@@ -385,6 +385,8 @@ func TestRedisStorage_ConnectionHandling(t *testing.T) {
 }
 
 // TestRedisStorage_ConcurrentOperations tests thread safety.
+//
+//nolint:gocognit // test case
 func TestRedisStorage_ConcurrentOperations(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping Redis integration test in short mode")

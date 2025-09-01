@@ -470,30 +470,27 @@ func (rs *RedisStorage) processPubSubMessages() {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			// Check if closed
+	for range ticker.C {
+		// Check if closed
+		if rs.isClosed() {
+			return
+		}
+
+		// Non-blocking receive
+		msg, err := rs.pubsub.ReceiveTimeout(context.Background(), defaultReceiveTimeout)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				continue // Normal timeout, keep checking
+			}
 			if rs.isClosed() {
 				return
 			}
+			rs.logger.Error("Redis PubSub receive error", domain.Field{Key: "error", Value: err})
+			continue
+		}
 
-			// Non-blocking receive
-			msg, err := rs.pubsub.ReceiveTimeout(context.Background(), defaultReceiveTimeout)
-			if err != nil {
-				if errors.Is(err, context.DeadlineExceeded) {
-					continue // Normal timeout, keep checking
-				}
-				if rs.isClosed() {
-					return
-				}
-				rs.logger.Error("Redis PubSub receive error", domain.Field{Key: "error", Value: err})
-				continue
-			}
-
-			if pubSubMsg, ok := msg.(*redis.Message); ok {
-				rs.handlePubSubMessage(pubSubMsg)
-			}
+		if pubSubMsg, ok := msg.(*redis.Message); ok {
+			rs.handlePubSubMessage(pubSubMsg)
 		}
 	}
 }

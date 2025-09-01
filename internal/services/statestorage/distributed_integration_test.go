@@ -181,6 +181,8 @@ func TestDistributedStateEventPropagation(t *testing.T) {
 
 // TestDistributedStateConsistency tests data consistency across multiple
 // storage instances with concurrent operations.
+//
+//nolint:gocognit // test case
 func TestDistributedStateConsistency(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping distributed consistency test in short mode")

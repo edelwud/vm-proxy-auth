@@ -45,7 +45,7 @@ const (
 	defaultRetryBackoffSeconds      = 5
 )
 
-//nolint:funlen
+//nolint:funlen,gocognit
 func main() {
 	var (
 		configPath     = flag.String("config", "", "Path to configuration file")
