@@ -1,6 +1,7 @@
 package statestorage
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/edelwud/vm-proxy-auth/internal/config"
@@ -50,7 +51,7 @@ func NewStateStorage(
 
 	case "raft":
 		// Future: Implement Raft storage
-		return nil, fmt.Errorf("Raft state storage not yet implemented")
+		return nil, errors.New("raft state storage not yet implemented")
 
 	default:
 		return nil, fmt.Errorf("unsupported state storage type: %s", storageType)

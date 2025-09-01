@@ -448,36 +448,36 @@ func (c *ViperConfig) ValidateStateStorage() error {
 	if stateType == StateStorageTypeRedis {
 		redis := c.StateStorage.Redis
 		if redis.Address == "" {
-			return errors.New("Redis address is required when using Redis state storage")
+			return errors.New("redis address is required when using Redis state storage")
 		}
 
 		if redis.Database < 0 {
-			return fmt.Errorf("Redis database must be non-negative, got %d", redis.Database)
+			return fmt.Errorf("redis database must be non-negative, got %d", redis.Database)
 		}
 
 		if redis.PoolSize <= 0 {
-			return fmt.Errorf("Redis pool size must be positive, got %d", redis.PoolSize)
+			return fmt.Errorf("redis pool size must be positive, got %d", redis.PoolSize)
 		}
 
 		if redis.MinIdleConns < 0 {
-			return fmt.Errorf("Redis min idle connections cannot be negative, got %d", redis.MinIdleConns)
+			return fmt.Errorf("redis min idle connections cannot be negative, got %d", redis.MinIdleConns)
 		}
 
 		if redis.MinIdleConns > redis.PoolSize {
-			return fmt.Errorf("Redis min idle connections (%d) cannot exceed pool size (%d)",
+			return fmt.Errorf("redis min idle connections (%d) cannot exceed pool size (%d)",
 				redis.MinIdleConns, redis.PoolSize)
 		}
 
 		if redis.ConnectTimeout <= 0 {
-			return fmt.Errorf("Redis connect timeout must be positive, got %v", redis.ConnectTimeout)
+			return fmt.Errorf("redis connect timeout must be positive, got %v", redis.ConnectTimeout)
 		}
 
 		if redis.ReadTimeout <= 0 {
-			return fmt.Errorf("Redis read timeout must be positive, got %v", redis.ReadTimeout)
+			return fmt.Errorf("redis read timeout must be positive, got %v", redis.ReadTimeout)
 		}
 
 		if redis.WriteTimeout <= 0 {
-			return fmt.Errorf("Redis write timeout must be positive, got %v", redis.WriteTimeout)
+			return fmt.Errorf("redis write timeout must be positive, got %v", redis.WriteTimeout)
 		}
 	}
 
@@ -485,15 +485,15 @@ func (c *ViperConfig) ValidateStateStorage() error {
 	if stateType == StateStorageTypeRaft {
 		raft := c.StateStorage.Raft
 		if raft.NodeID == "" {
-			return errors.New("Raft node ID is required when using Raft state storage")
+			return errors.New("raft node ID is required when using Raft state storage")
 		}
 
 		if len(raft.Peers) == 0 {
-			return errors.New("Raft peers list cannot be empty when using Raft state storage")
+			return errors.New("raft peers list cannot be empty when using Raft state storage")
 		}
 
 		if raft.DataDir == "" {
-			return errors.New("Raft data directory is required when using Raft state storage")
+			return errors.New("raft data directory is required when using Raft state storage")
 		}
 	}
 

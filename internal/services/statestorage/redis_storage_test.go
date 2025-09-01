@@ -1,4 +1,4 @@
-package statestorage
+package statestorage_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
+	"github.com/edelwud/vm-proxy-auth/internal/services/statestorage"
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
@@ -17,13 +18,13 @@ import (
 func TestRedisStorageConfig_Validation(t *testing.T) {
 	tests := []struct {
 		name        string
-		config      RedisStorageConfig
+		config      statestorage.RedisStorageConfig
 		expectError bool
 		errorMsg    string
 	}{
 		{
 			name: "valid_config",
-			config: RedisStorageConfig{
+			config: statestorage.RedisStorageConfig{
 				Address:        "localhost:6379",
 				Database:       0,
 				KeyPrefix:      "test:",
@@ -37,7 +38,7 @@ func TestRedisStorageConfig_Validation(t *testing.T) {
 		},
 		{
 			name: "missing_address",
-			config: RedisStorageConfig{
+			config: statestorage.RedisStorageConfig{
 				Database:       0,
 				ConnectTimeout: 5 * time.Second,
 			},
@@ -46,7 +47,7 @@ func TestRedisStorageConfig_Validation(t *testing.T) {
 		},
 		{
 			name: "invalid_pool_config",
-			config: RedisStorageConfig{
+			config: statestorage.RedisStorageConfig{
 				Address:      "localhost:6379",
 				PoolSize:     5,
 				MinIdleConns: 10, // More than pool size
@@ -59,7 +60,7 @@ func TestRedisStorageConfig_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewRedisStorage(tt.config, "test-node", logger)
+			_, err := statestorage.NewRedisStorage(tt.config, "test-node", logger)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -82,7 +83,7 @@ func TestRedisStorage_GetSet(t *testing.T) {
 		t.Skip("Skipping Redis integration test in short mode")
 	}
 
-	config := RedisStorageConfig{
+	config := statestorage.RedisStorageConfig{
 		Address:        "localhost:6379",
 		Database:       1, // Use test database
 		KeyPrefix:      "test:",
@@ -94,7 +95,7 @@ func TestRedisStorage_GetSet(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	storage, err := NewRedisStorage(config, "test-node-1", logger)
+	storage, err := statestorage.NewRedisStorage(config, "test-node-1", logger)
 	// Skip test if Redis is not available
 	if err != nil {
 		t.Skipf("Redis not available: %v", err)
@@ -109,21 +110,21 @@ func TestRedisStorage_GetSet(t *testing.T) {
 		value := []byte("test-value")
 
 		// Set value
-		err := storage.Set(ctx, key, value, 0)
-		require.NoError(t, err)
+		setErr := storage.Set(ctx, key, value, 0)
+		require.NoError(t, setErr)
 
 		// Get value
-		result, err := storage.Get(ctx, key)
-		require.NoError(t, err)
+		result, getErr := storage.Get(ctx, key)
+		require.NoError(t, getErr)
 		assert.Equal(t, value, result)
 
 		// Delete value
-		err = storage.Delete(ctx, key)
-		require.NoError(t, err)
+		deleteErr := storage.Delete(ctx, key)
+		require.NoError(t, deleteErr)
 
 		// Verify deleted
-		_, err = storage.Get(ctx, key)
-		assert.ErrorIs(t, err, domain.ErrKeyNotFound)
+		_, getDeletedErr := storage.Get(ctx, key)
+		assert.ErrorIs(t, getDeletedErr, domain.ErrKeyNotFound)
 	})
 
 	t.Run("ttl_expiration", func(t *testing.T) {
@@ -132,25 +133,25 @@ func TestRedisStorage_GetSet(t *testing.T) {
 		ttl := 100 * time.Millisecond
 
 		// Set with TTL
-		err := storage.Set(ctx, key, value, ttl)
-		require.NoError(t, err)
+		setErr := storage.Set(ctx, key, value, ttl)
+		require.NoError(t, setErr)
 
 		// Should exist immediately
-		result, err := storage.Get(ctx, key)
-		require.NoError(t, err)
+		result, getErr := storage.Get(ctx, key)
+		require.NoError(t, getErr)
 		assert.Equal(t, value, result)
 
 		// Wait for expiration
 		time.Sleep(150 * time.Millisecond)
 
 		// Should be expired
-		_, err = storage.Get(ctx, key)
-		assert.ErrorIs(t, err, domain.ErrKeyNotFound)
+		_, getExpiredErr := storage.Get(ctx, key)
+		assert.ErrorIs(t, getExpiredErr, domain.ErrKeyNotFound)
 	})
 
 	t.Run("nonexistent_key", func(t *testing.T) {
-		_, err := storage.Get(ctx, "nonexistent-key")
-		assert.ErrorIs(t, err, domain.ErrKeyNotFound)
+		_, getNonexistentErr := storage.Get(ctx, "nonexistent-key")
+		assert.ErrorIs(t, getNonexistentErr, domain.ErrKeyNotFound)
 	})
 }
 
@@ -160,7 +161,7 @@ func TestRedisStorage_MultipleOperations(t *testing.T) {
 		t.Skip("Skipping Redis integration test in short mode")
 	}
 
-	config := RedisStorageConfig{
+	config := statestorage.RedisStorageConfig{
 		Address:        "localhost:6379",
 		Database:       1, // Use test database
 		KeyPrefix:      "test:",
@@ -172,7 +173,7 @@ func TestRedisStorage_MultipleOperations(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	storage, err := NewRedisStorage(config, "test-node-2", logger)
+	storage, err := statestorage.NewRedisStorage(config, "test-node-2", logger)
 	if err != nil {
 		t.Skipf("Redis not available: %v", err)
 		return
@@ -189,8 +190,8 @@ func TestRedisStorage_MultipleOperations(t *testing.T) {
 		}
 
 		// Set multiple
-		err := storage.SetMultiple(ctx, items, 0)
-		require.NoError(t, err)
+		setMultipleErr := storage.SetMultiple(ctx, items, 0)
+		require.NoError(t, setMultipleErr)
 
 		// Verify all values
 		for key, expectedValue := range items {
@@ -213,13 +214,13 @@ func TestRedisStorage_MultipleOperations(t *testing.T) {
 		}
 
 		// Set up test data
-		err := storage.SetMultiple(ctx, items, 0)
-		require.NoError(t, err)
+		setMultipleErr := storage.SetMultiple(ctx, items, 0)
+		require.NoError(t, setMultipleErr)
 
 		// Get multiple including non-existent key
 		keys := []string{"multi-key1", "multi-key2", "nonexistent", "multi-key3"}
-		results, err := storage.GetMultiple(ctx, keys)
-		require.NoError(t, err)
+		results, getMultipleErr := storage.GetMultiple(ctx, keys)
+		require.NoError(t, getMultipleErr)
 
 		// Should get 3 out of 4 keys (excluding nonexistent)
 		assert.Len(t, results, 3)
@@ -236,12 +237,12 @@ func TestRedisStorage_MultipleOperations(t *testing.T) {
 
 	t.Run("empty_operations", func(t *testing.T) {
 		// Empty set multiple
-		err := storage.SetMultiple(ctx, map[string][]byte{}, 0)
-		assert.NoError(t, err)
+		setEmptyErr := storage.SetMultiple(ctx, map[string][]byte{}, 0)
+		require.NoError(t, setEmptyErr)
 
 		// Empty get multiple
-		results, err := storage.GetMultiple(ctx, []string{})
-		assert.NoError(t, err)
+		results, getEmptyErr := storage.GetMultiple(ctx, []string{})
+		require.NoError(t, getEmptyErr)
 		assert.Empty(t, results)
 	})
 }
@@ -252,7 +253,7 @@ func TestRedisStorage_Watch(t *testing.T) {
 		t.Skip("Skipping Redis integration test in short mode")
 	}
 
-	config := RedisStorageConfig{
+	config := statestorage.RedisStorageConfig{
 		Address:        "localhost:6379",
 		Database:       1,
 		KeyPrefix:      "test:",
@@ -266,16 +267,16 @@ func TestRedisStorage_Watch(t *testing.T) {
 	logger := testutils.NewMockLogger()
 
 	// Create two separate storage instances to test distributed events
-	storage1, err := NewRedisStorage(config, "test-node-1", logger)
+	storage1, err := statestorage.NewRedisStorage(config, "test-node-1", logger)
 	if err != nil {
 		t.Skipf("Redis not available: %v", err)
 		return
 	}
 	defer storage1.Close()
 
-	storage2, err := NewRedisStorage(config, "test-node-2", logger)
-	if err != nil {
-		t.Skipf("Redis not available: %v", err)
+	storage2, storage2Err := statestorage.NewRedisStorage(config, "test-node-2", logger)
+	if storage2Err != nil {
+		t.Skipf("Redis not available: %v", storage2Err)
 		return
 	}
 	defer storage2.Close()
@@ -285,8 +286,8 @@ func TestRedisStorage_Watch(t *testing.T) {
 
 	t.Run("watch_events", func(t *testing.T) {
 		// Start watching from storage1
-		eventCh, err := storage1.Watch(ctx, "watch-test:")
-		require.NoError(t, err)
+		eventCh, watchErr := storage1.Watch(ctx, "watch-test:")
+		require.NoError(t, watchErr)
 
 		// Allow time for PubSub setup
 		time.Sleep(100 * time.Millisecond)
@@ -334,35 +335,35 @@ func TestRedisStorage_ConnectionHandling(t *testing.T) {
 	logger := testutils.NewMockLogger()
 
 	t.Run("invalid_address", func(t *testing.T) {
-		config := RedisStorageConfig{
+		config := statestorage.RedisStorageConfig{
 			Address:        "invalid:12345",
 			ConnectTimeout: 1 * time.Second,
 		}
 
-		_, err := NewRedisStorage(config, "test-node", logger)
-		assert.Error(t, err)
+		_, err := statestorage.NewRedisStorage(config, "test-node", logger)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to connect to Redis")
 	})
 
 	t.Run("missing_address", func(t *testing.T) {
-		config := RedisStorageConfig{
+		config := statestorage.RedisStorageConfig{
 			Address: "",
 		}
 
-		_, err := NewRedisStorage(config, "test-node", logger)
-		assert.Error(t, err)
+		_, err := statestorage.NewRedisStorage(config, "test-node", logger)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "redis address is required")
 	})
 
 	t.Run("ping_after_close", func(t *testing.T) {
 		// Skip if Redis not available
-		config := RedisStorageConfig{
+		config := statestorage.RedisStorageConfig{
 			Address:        "localhost:6379",
 			Database:       1,
 			ConnectTimeout: 1 * time.Second,
 		}
 
-		storage, err := NewRedisStorage(config, "test-node", logger)
+		storage, err := statestorage.NewRedisStorage(config, "test-node", logger)
 		if err != nil {
 			t.Skipf("Redis not available: %v", err)
 			return
@@ -370,16 +371,16 @@ func TestRedisStorage_ConnectionHandling(t *testing.T) {
 
 		// Ping should work
 		ctx := context.Background()
-		err = storage.Ping(ctx)
-		require.NoError(t, err)
+		pingErr := storage.Ping(ctx)
+		require.NoError(t, pingErr)
 
 		// Close storage
-		err = storage.Close()
-		require.NoError(t, err)
+		closeErr := storage.Close()
+		require.NoError(t, closeErr)
 
 		// Ping should fail after close
-		err = storage.Ping(ctx)
-		assert.ErrorIs(t, err, domain.ErrStorageUnavailable)
+		pingAfterCloseErr := storage.Ping(ctx)
+		require.ErrorIs(t, pingAfterCloseErr, domain.ErrStorageUnavailable)
 	})
 }
 
@@ -389,7 +390,7 @@ func TestRedisStorage_ConcurrentOperations(t *testing.T) {
 		t.Skip("Skipping Redis integration test in short mode")
 	}
 
-	config := RedisStorageConfig{
+	config := statestorage.RedisStorageConfig{
 		Address:        "localhost:6379",
 		Database:       1,
 		KeyPrefix:      "concurrent:",
@@ -399,7 +400,7 @@ func TestRedisStorage_ConcurrentOperations(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	storage, err := NewRedisStorage(config, "concurrent-node", logger)
+	storage, err := statestorage.NewRedisStorage(config, "concurrent-node", logger)
 	if err != nil {
 		t.Skipf("Redis not available: %v", err)
 		return
@@ -450,8 +451,8 @@ func TestRedisStorage_ConcurrentOperations(t *testing.T) {
 		close(errChan)
 
 		var errors []error
-		for err := range errChan {
-			errors = append(errors, err)
+		for rangeErr := range errChan {
+			errors = append(errors, rangeErr)
 		}
 
 		if len(errors) > 0 {
@@ -466,7 +467,7 @@ func BenchmarkRedisStorage_Operations(b *testing.B) {
 		b.Skip("Skipping Redis benchmark in short mode")
 	}
 
-	config := RedisStorageConfig{
+	config := statestorage.RedisStorageConfig{
 		Address:        "localhost:6379",
 		Database:       1,
 		KeyPrefix:      "bench:",
@@ -476,7 +477,7 @@ func BenchmarkRedisStorage_Operations(b *testing.B) {
 	}
 
 	logger := testutils.NewMockLogger()
-	storage, err := NewRedisStorage(config, "benchmark-node", logger)
+	storage, err := statestorage.NewRedisStorage(config, "benchmark-node", logger)
 	if err != nil {
 		b.Skipf("Redis not available: %v", err)
 		return
@@ -490,9 +491,9 @@ func BenchmarkRedisStorage_Operations(b *testing.B) {
 	b.Run("Set", func(b *testing.B) {
 		b.ResetTimer()
 		for i := range b.N {
-			err := storage.Set(ctx, fmt.Sprintf("%s-%d", key, i), value, 0)
-			if err != nil {
-				b.Fatalf("Set failed: %v", err)
+			setErr := storage.Set(ctx, fmt.Sprintf("%s-%d", key, i), value, 0)
+			if setErr != nil {
+				b.Fatalf("Set failed: %v", setErr)
 			}
 		}
 	})
@@ -504,9 +505,9 @@ func BenchmarkRedisStorage_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for range b.N {
-			_, err := storage.Get(ctx, testKey)
-			if err != nil {
-				b.Fatalf("Get failed: %v", err)
+			_, getErr := storage.Get(ctx, testKey)
+			if getErr != nil {
+				b.Fatalf("Get failed: %v", getErr)
 			}
 		}
 	})
@@ -519,9 +520,9 @@ func BenchmarkRedisStorage_Operations(b *testing.B) {
 
 		b.ResetTimer()
 		for range b.N {
-			err := storage.SetMultiple(ctx, items, 0)
-			if err != nil {
-				b.Fatalf("SetMultiple failed: %v", err)
+			setMultipleErr := storage.SetMultiple(ctx, items, 0)
+			if setMultipleErr != nil {
+				b.Fatalf("SetMultiple failed: %v", setMultipleErr)
 			}
 		}
 	})
@@ -533,13 +534,13 @@ func TestRedisStorage_EdgeCases(t *testing.T) {
 
 	t.Run("operations_after_close", func(t *testing.T) {
 		// Use a config that won't connect to test close behavior
-		config := RedisStorageConfig{
+		config := statestorage.RedisStorageConfig{
 			Address:        "localhost:6379",
 			Database:       1,
 			ConnectTimeout: 1 * time.Second,
 		}
 
-		storage, err := NewRedisStorage(config, "edge-case-node", logger)
+		storage, err := statestorage.NewRedisStorage(config, "edge-case-node", logger)
 		if err != nil {
 			t.Skipf("Redis not available: %v", err)
 			return
@@ -552,41 +553,41 @@ func TestRedisStorage_EdgeCases(t *testing.T) {
 		ctx := context.Background()
 
 		// All operations should return ErrStorageUnavailable
-		_, err = storage.Get(ctx, "test-key")
-		assert.ErrorIs(t, err, domain.ErrStorageUnavailable)
+		_, getAfterCloseErr := storage.Get(ctx, "test-key")
+		require.ErrorIs(t, getAfterCloseErr, domain.ErrStorageUnavailable)
 
-		err = storage.Set(ctx, "test-key", []byte("value"), 0)
-		assert.ErrorIs(t, err, domain.ErrStorageUnavailable)
+		setAfterCloseErr := storage.Set(ctx, "test-key", []byte("value"), 0)
+		require.ErrorIs(t, setAfterCloseErr, domain.ErrStorageUnavailable)
 
-		err = storage.Delete(ctx, "test-key")
-		assert.ErrorIs(t, err, domain.ErrStorageUnavailable)
+		deleteAfterCloseErr := storage.Delete(ctx, "test-key")
+		require.ErrorIs(t, deleteAfterCloseErr, domain.ErrStorageUnavailable)
 
-		_, err = storage.Watch(ctx, "test:")
-		assert.ErrorIs(t, err, domain.ErrStorageUnavailable)
+		_, watchAfterCloseErr := storage.Watch(ctx, "test:")
+		require.ErrorIs(t, watchAfterCloseErr, domain.ErrStorageUnavailable)
 
-		err = storage.Ping(ctx)
-		assert.ErrorIs(t, err, domain.ErrStorageUnavailable)
+		pingAfterCloseErr := storage.Ping(ctx)
+		require.ErrorIs(t, pingAfterCloseErr, domain.ErrStorageUnavailable)
 	})
 
 	t.Run("double_close", func(t *testing.T) {
-		config := RedisStorageConfig{
+		config := statestorage.RedisStorageConfig{
 			Address:        "localhost:6379",
 			Database:       1,
 			ConnectTimeout: 1 * time.Second,
 		}
 
-		storage, err := NewRedisStorage(config, "double-close-node", logger)
+		storage, err := statestorage.NewRedisStorage(config, "double-close-node", logger)
 		if err != nil {
 			t.Skipf("Redis not available: %v", err)
 			return
 		}
 
 		// First close
-		err = storage.Close()
-		require.NoError(t, err)
+		firstCloseErr := storage.Close()
+		require.NoError(t, firstCloseErr)
 
 		// Second close should not error
-		err = storage.Close()
-		assert.NoError(t, err)
+		secondCloseErr := storage.Close()
+		require.NoError(t, secondCloseErr)
 	})
 }

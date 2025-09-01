@@ -24,6 +24,8 @@ const (
 	defaultKeyPrefix           = "vm-proxy-auth:"
 	defaultPubSubChannel       = "vm-proxy-auth:events"
 	redisWatchChannelBuffer    = 100
+	defaultConnMaxIdleTime     = 30 * time.Minute
+	defaultReceiveTimeout      = 100 * time.Millisecond
 )
 
 // RedisStorageConfig holds configuration for Redis storage.
@@ -63,7 +65,7 @@ func NewRedisStorage(
 	logger domain.Logger,
 ) (*RedisStorage, error) {
 	if config.Address == "" {
-		return nil, fmt.Errorf("redis address is required")
+		return nil, errors.New("redis address is required")
 	}
 
 	if config.KeyPrefix == "" {
@@ -93,7 +95,7 @@ func NewRedisStorage(
 		Password:        config.Password,
 		DB:              config.Database,
 		ConnMaxLifetime: time.Hour,
-		ConnMaxIdleTime: 30 * time.Minute,
+		ConnMaxIdleTime: defaultConnMaxIdleTime,
 		MaxRetries:      config.MaxRetries,
 		MinRetryBackoff: config.MinRetryBackoff,
 		MaxRetryBackoff: config.MaxRetryBackoff,
@@ -418,7 +420,7 @@ func (rs *RedisStorage) Ping(ctx context.Context) error {
 
 	if err := rs.client.Ping(ctx).Err(); err != nil {
 		rs.logger.Error("Redis ping failed", domain.Field{Key: "error", Value: err})
-		return fmt.Errorf("Redis ping failed: %w", err)
+		return fmt.Errorf("redis ping failed: %w", err)
 	}
 
 	return nil
@@ -465,16 +467,19 @@ func (rs *RedisStorage) processPubSubMessages() {
 		}
 	}()
 
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
-		case <-time.After(time.Second):
+		case <-ticker.C:
 			// Check if closed
 			if rs.isClosed() {
 				return
 			}
 
 			// Non-blocking receive
-			msg, err := rs.pubsub.ReceiveTimeout(context.Background(), 100*time.Millisecond)
+			msg, err := rs.pubsub.ReceiveTimeout(context.Background(), defaultReceiveTimeout)
 			if err != nil {
 				if errors.Is(err, context.DeadlineExceeded) {
 					continue // Normal timeout, keep checking
@@ -540,10 +545,10 @@ func (rs *RedisStorage) publishStateEvent(event domain.StateEvent) {
 	ctx, cancel := context.WithTimeout(context.Background(), rs.config.WriteTimeout)
 	defer cancel()
 
-	if err := rs.client.Publish(ctx, defaultPubSubChannel, eventJSON).Err(); err != nil {
+	if publishErr := rs.client.Publish(ctx, defaultPubSubChannel, eventJSON).Err(); publishErr != nil {
 		rs.logger.Error("Failed to publish state event",
 			domain.Field{Key: "event", Value: event},
-			domain.Field{Key: "error", Value: err})
+			domain.Field{Key: "error", Value: publishErr})
 		return
 	}
 

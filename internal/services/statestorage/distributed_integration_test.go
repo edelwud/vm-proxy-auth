@@ -1,4 +1,4 @@
-package statestorage
+package statestorage_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
+	"github.com/edelwud/vm-proxy-auth/internal/services/statestorage"
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
@@ -19,7 +20,7 @@ func TestDistributedStateEventPropagation(t *testing.T) {
 		t.Skip("Skipping distributed integration test in short mode")
 	}
 
-	config := RedisStorageConfig{
+	config := statestorage.RedisStorageConfig{
 		Address:        "localhost:6379",
 		Database:       2, // Use separate test database
 		KeyPrefix:      "distributed-test:",
@@ -33,14 +34,14 @@ func TestDistributedStateEventPropagation(t *testing.T) {
 	logger := testutils.NewMockLogger()
 
 	// Create two separate storage instances to simulate distributed deployment
-	storage1, err := NewRedisStorage(config, "node-1", logger)
+	storage1, err := statestorage.NewRedisStorage(config, "node-1", logger)
 	if err != nil {
 		t.Skipf("Redis not available: %v", err)
 		return
 	}
 	defer storage1.Close()
 
-	storage2, err := NewRedisStorage(config, "node-2", logger)
+	storage2, err := statestorage.NewRedisStorage(config, "node-2", logger)
 	if err != nil {
 		t.Skipf("Redis not available: %v", err)
 		return
@@ -62,10 +63,10 @@ func TestDistributedStateEventPropagation(t *testing.T) {
 		key := "distributed-test:set:key1"
 		value := []byte("distributed-value-1")
 
+		var setErr error
 		go func() {
 			time.Sleep(100 * time.Millisecond)
-			setErr := storage1.Set(ctx, key, value, 0)
-			require.NoError(t, setErr)
+			setErr = storage1.Set(ctx, key, value, 0)
 		}()
 
 		// Should receive event on storage2
@@ -80,13 +81,16 @@ func TestDistributedStateEventPropagation(t *testing.T) {
 			t.Fatal("Timeout waiting for distributed set event")
 		}
 
+		// Check for set errors after goroutine completion
+		require.NoError(t, setErr)
+
 		// Verify the value is accessible from both instances
-		result1, err := storage1.Get(ctx, key)
-		require.NoError(t, err)
+		result1, getErr1 := storage1.Get(ctx, key)
+		require.NoError(t, getErr1)
 		assert.Equal(t, value, result1)
 
-		result2, err := storage2.Get(ctx, key)
-		require.NoError(t, err)
+		result2, getErr2 := storage2.Get(ctx, key)
+		require.NoError(t, getErr2)
 		assert.Equal(t, value, result2)
 	})
 
@@ -95,20 +99,20 @@ func TestDistributedStateEventPropagation(t *testing.T) {
 		key := "distributed-test:delete:key1"
 		value := []byte("to-be-deleted")
 
-		err := storage1.Set(ctx, key, value, 0)
-		require.NoError(t, err)
+		setDataErr := storage1.Set(ctx, key, value, 0)
+		require.NoError(t, setDataErr)
 
 		// Start watching from storage2
-		eventCh, err := storage2.Watch(ctx, "distributed-test:delete:")
-		require.NoError(t, err)
+		eventCh, watchErr := storage2.Watch(ctx, "distributed-test:delete:")
+		require.NoError(t, watchErr)
 
 		time.Sleep(100 * time.Millisecond)
 
 		// Delete from storage1
+		var deleteErr error
 		go func() {
 			time.Sleep(100 * time.Millisecond)
-			err := storage1.Delete(ctx, key)
-			require.NoError(t, err)
+			deleteErr = storage1.Delete(ctx, key)
 		}()
 
 		// Should receive delete event on storage2
@@ -122,23 +126,26 @@ func TestDistributedStateEventPropagation(t *testing.T) {
 			t.Fatal("Timeout waiting for distributed delete event")
 		}
 
-		// Verify key is deleted from both instances
-		_, err = storage1.Get(ctx, key)
-		assert.ErrorIs(t, err, domain.ErrKeyNotFound)
+		// Check for delete errors after goroutine completion
+		require.NoError(t, deleteErr)
 
-		_, err = storage2.Get(ctx, key)
-		assert.ErrorIs(t, err, domain.ErrKeyNotFound)
+		// Verify key is deleted from both instances
+		_, getErr1 := storage1.Get(ctx, key)
+		require.ErrorIs(t, getErr1, domain.ErrKeyNotFound)
+
+		_, getErr2 := storage2.Get(ctx, key)
+		require.ErrorIs(t, getErr2, domain.ErrKeyNotFound)
 	})
 
 	t.Run("multiple_watchers_same_prefix", func(t *testing.T) {
 		// Create multiple watchers on the same prefix from different nodes
 		prefix := "distributed-test:multi:"
 
-		eventCh1, err := storage1.Watch(ctx, prefix)
-		require.NoError(t, err)
+		eventCh1, watchErr1 := storage1.Watch(ctx, prefix)
+		require.NoError(t, watchErr1)
 
-		eventCh2, err := storage2.Watch(ctx, prefix)
-		require.NoError(t, err)
+		eventCh2, watchErr2 := storage2.Watch(ctx, prefix)
+		require.NoError(t, watchErr2)
 
 		time.Sleep(200 * time.Millisecond)
 
@@ -146,8 +153,8 @@ func TestDistributedStateEventPropagation(t *testing.T) {
 		key := prefix + "shared-key"
 		value := []byte("shared-value")
 
-		err = storage1.Set(ctx, key, value, 0)
-		require.NoError(t, err)
+		setErr := storage1.Set(ctx, key, value, 0)
+		require.NoError(t, setErr)
 
 		// Both watchers should receive the event (but node-1 watcher should skip it)
 		receivedCount := 0
@@ -179,7 +186,7 @@ func TestDistributedStateConsistency(t *testing.T) {
 		t.Skip("Skipping distributed consistency test in short mode")
 	}
 
-	config := RedisStorageConfig{
+	config := statestorage.RedisStorageConfig{
 		Address:        "localhost:6379",
 		Database:       3, // Use separate test database
 		KeyPrefix:      "consistency-test:",
@@ -193,11 +200,11 @@ func TestDistributedStateConsistency(t *testing.T) {
 	logger := testutils.NewMockLogger()
 
 	// Create three storage instances to simulate real distributed deployment
-	storages := make([]*RedisStorage, 3)
+	storages := make([]*statestorage.RedisStorage, 3)
 	for i := range storages {
-		storage, err := NewRedisStorage(config, nodeID(i), logger)
-		if err != nil {
-			t.Skipf("Redis not available: %v", err)
+		storage, storageErr := statestorage.NewRedisStorage(config, nodeID(i), logger)
+		if storageErr != nil {
+			t.Skipf("Redis not available: %v", storageErr)
 			return
 		}
 		defer storage.Close()
@@ -211,16 +218,16 @@ func TestDistributedStateConsistency(t *testing.T) {
 		value := []byte("consistent-value")
 
 		// Set from first instance
-		err := storages[0].Set(ctx, key, value, 0)
-		require.NoError(t, err)
+		setErr := storages[0].Set(ctx, key, value, 0)
+		require.NoError(t, setErr)
 
 		// Allow time for Redis replication (should be near-instant)
 		time.Sleep(50 * time.Millisecond)
 
 		// Verify all instances can read the value
 		for i, storage := range storages {
-			result, err := storage.Get(ctx, key)
-			require.NoError(t, err, "instance %d should read the value", i)
+			result, getErr := storage.Get(ctx, key)
+			require.NoError(t, getErr, "instance %d should read the value", i)
 			assert.Equal(t, value, result, "instance %d should have consistent value", i)
 		}
 	})
@@ -231,16 +238,19 @@ func TestDistributedStateConsistency(t *testing.T) {
 		// Perform concurrent writes from different instances
 		done := make(chan bool, 3)
 
+		concurrentErrors := make([]error, len(storages))
 		for i, storage := range storages {
-			go func(instance int, stor *RedisStorage) {
+			go func(instance int, stor *statestorage.RedisStorage) {
 				defer func() { done <- true }()
 
-				for j := 0; j < 10; j++ {
+				for j := range 10 {
 					key := baseKey + nodeID(instance) + ":" + string(rune('0'+j))
 					value := []byte("value-from-" + nodeID(instance) + "-" + string(rune('0'+j)))
 
-					err := stor.Set(ctx, key, value, 0)
-					require.NoError(t, err)
+					if setErr := stor.Set(ctx, key, value, 0); setErr != nil {
+						concurrentErrors[instance] = setErr
+						return
+					}
 				}
 			}(i, storage)
 		}
@@ -250,16 +260,22 @@ func TestDistributedStateConsistency(t *testing.T) {
 			<-done
 		}
 
+		// Check for concurrent operation errors
+		for i, concurrentErr := range concurrentErrors {
+			require.NoError(t, concurrentErr, "Concurrent operation failed for instance %d", i)
+		}
+
 		// Verify all values are consistent across all instances
-		for i := 0; i < 3; i++ {
-			for j := 0; j < 10; j++ {
+		for i := range 3 {
+			for j := range 10 {
 				key := baseKey + nodeID(i) + ":" + string(rune('0'+j))
 				expectedValue := []byte("value-from-" + nodeID(i) + "-" + string(rune('0'+j)))
 
 				for k, storage := range storages {
-					result, err := storage.Get(ctx, key)
-					require.NoError(t, err, "instance %d should read key %s", k, key)
-					assert.Equal(t, expectedValue, result, "instance %d should have consistent value for key %s", k, key)
+					result, getErr := storage.Get(ctx, key)
+					require.NoError(t, getErr, "instance %d should read key %s", k, key)
+					assert.Equal(t, expectedValue, result,
+						"instance %d should have consistent value for key %s", k, key)
 				}
 			}
 		}
@@ -270,15 +286,15 @@ func TestDistributedStateConsistency(t *testing.T) {
 
 		// Prepare bulk data
 		items := make(map[string][]byte)
-		for i := 0; i < 50; i++ {
+		for i := range 50 {
 			key := prefix + string(rune('a'+i%26)) + string(rune('0'+i/26))
 			value := []byte("bulk-value-" + string(rune('0'+i)))
 			items[key] = value
 		}
 
 		// Set bulk data from first instance
-		err := storages[0].SetMultiple(ctx, items, 0)
-		require.NoError(t, err)
+		setMultipleErr := storages[0].SetMultiple(ctx, items, 0)
+		require.NoError(t, setMultipleErr)
 
 		// Allow time for all operations to replicate
 		time.Sleep(100 * time.Millisecond)
@@ -290,9 +306,9 @@ func TestDistributedStateConsistency(t *testing.T) {
 				keys = append(keys, key)
 			}
 
-			results, err := storage.GetMultiple(ctx, keys)
-			require.NoError(t, err, "instance %d should perform bulk read", i)
-			assert.Equal(t, len(items), len(results), "instance %d should have all items", i)
+			results, getErr := storage.GetMultiple(ctx, keys)
+			require.NoError(t, getErr, "instance %d should perform bulk read", i)
+			assert.Len(t, results, len(items), "instance %d should have all items", i)
 
 			for key, expectedValue := range items {
 				actualValue, exists := results[key]
@@ -310,7 +326,7 @@ func TestDistributedStateFailover(t *testing.T) {
 		t.Skip("Skipping distributed failover test in short mode")
 	}
 
-	config := RedisStorageConfig{
+	config := statestorage.RedisStorageConfig{
 		Address:        "localhost:6379",
 		Database:       4, // Use separate test database
 		KeyPrefix:      "failover-test:",
@@ -323,15 +339,15 @@ func TestDistributedStateFailover(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 
-	storage1, err := NewRedisStorage(config, "primary-node", logger)
+	storage1, err := statestorage.NewRedisStorage(config, "primary-node", logger)
 	if err != nil {
 		t.Skipf("Redis not available: %v", err)
 		return
 	}
 
-	storage2, err := NewRedisStorage(config, "backup-node", logger)
-	if err != nil {
-		t.Skipf("Redis not available: %v", err)
+	storage2, storage2Err := statestorage.NewRedisStorage(config, "backup-node", logger)
+	if storage2Err != nil {
+		t.Skipf("Redis not available: %v", storage2Err)
 		return
 	}
 
@@ -342,35 +358,35 @@ func TestDistributedStateFailover(t *testing.T) {
 		key := "failover-test:data"
 		value := []byte("persistent-data")
 
-		err := storage1.Set(ctx, key, value, 0)
-		require.NoError(t, err)
+		initialSetErr := storage1.Set(ctx, key, value, 0)
+		require.NoError(t, initialSetErr)
 
 		// Verify both can read
-		result1, err := storage1.Get(ctx, key)
-		require.NoError(t, err)
+		result1, getErr1 := storage1.Get(ctx, key)
+		require.NoError(t, getErr1)
 		assert.Equal(t, value, result1)
 
-		result2, err := storage2.Get(ctx, key)
-		require.NoError(t, err)
+		result2, getErr2 := storage2.Get(ctx, key)
+		require.NoError(t, getErr2)
 		assert.Equal(t, value, result2)
 
 		// Simulate node1 failure by closing it
-		err = storage1.Close()
-		require.NoError(t, err)
+		closeErr := storage1.Close()
+		require.NoError(t, closeErr)
 
 		// Node2 should still be able to read the data
-		result2After, err := storage2.Get(ctx, key)
-		require.NoError(t, err)
+		result2After, getAfterErr := storage2.Get(ctx, key)
+		require.NoError(t, getAfterErr)
 		assert.Equal(t, value, result2After)
 
 		// Node2 should be able to update data
 		newValue := []byte("updated-after-failover")
-		err = storage2.Set(ctx, key, newValue, 0)
-		require.NoError(t, err)
+		updateErr := storage2.Set(ctx, key, newValue, 0)
+		require.NoError(t, updateErr)
 
 		// Verify update
-		resultUpdated, err := storage2.Get(ctx, key)
-		require.NoError(t, err)
+		resultUpdated, getUpdatedErr := storage2.Get(ctx, key)
+		require.NoError(t, getUpdatedErr)
 		assert.Equal(t, newValue, resultUpdated)
 	})
 
