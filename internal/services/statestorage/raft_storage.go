@@ -3,6 +3,7 @@ package statestorage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -16,6 +17,14 @@ import (
 	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
 
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
+)
+
+const (
+	raftMaxConnections    = 3
+	raftApplyTimeout      = 10 * time.Second
+	raftApplyTimeoutBulk  = 30 * time.Second
+	raftWatchChannelSize  = 100
+	raftMinPeerParts      = 2
 )
 
 // RaftStorageConfig holds Raft storage configuration.
@@ -75,7 +84,7 @@ func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logge
 		return nil, fmt.Errorf("failed to resolve bind address: %w", err)
 	}
 
-	transport, err := raft.NewTCPTransport(config.BindAddress, addr, 3, 10*time.Second, os.Stderr)
+	transport, err := raft.NewTCPTransport(config.BindAddress, addr, raftMaxConnections, raftApplyTimeout, os.Stderr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create transport: %w", err)
 	}
@@ -175,7 +184,7 @@ func (rs *RaftStorage) bootstrapCluster() error {
 		if peer != rs.config.NodeID+":"+rs.config.BindAddress {
 			// Parse peer format: "nodeID:address"
 			parts := strings.Split(peer, ":")
-			if len(parts) >= 2 {
+			if len(parts) >= raftMinPeerParts {
 				nodeID := parts[0]
 				address := strings.Join(parts[1:], ":")
 				servers = append(servers, raft.Server{
@@ -206,7 +215,7 @@ func (rs *RaftStorage) bootstrapCluster() error {
 }
 
 // Get retrieves a value by key.
-func (rs *RaftStorage) Get(ctx context.Context, key string) ([]byte, error) {
+func (rs *RaftStorage) Get(_ context.Context, key string) ([]byte, error) {
 	if rs.isClosed() {
 		return nil, domain.ErrStorageClosed
 	}
@@ -224,7 +233,7 @@ func (rs *RaftStorage) Get(ctx context.Context, key string) ([]byte, error) {
 }
 
 // Set stores a value with optional TTL.
-func (rs *RaftStorage) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+func (rs *RaftStorage) Set(_ context.Context, key string, value []byte, ttl time.Duration) error {
 	if rs.isClosed() {
 		return domain.ErrStorageClosed
 	}
@@ -251,7 +260,7 @@ func (rs *RaftStorage) Set(ctx context.Context, key string, value []byte, ttl ti
 		return fmt.Errorf("failed to marshal command: %w", err)
 	}
 
-	future := rs.raft.Apply(data, 10*time.Second)
+	future := rs.raft.Apply(data, raftApplyTimeout)
 	if err := future.Error(); err != nil {
 		return fmt.Errorf("failed to apply raft command: %w", err)
 	}
@@ -265,7 +274,7 @@ func (rs *RaftStorage) Set(ctx context.Context, key string, value []byte, ttl ti
 }
 
 // Delete removes a key.
-func (rs *RaftStorage) Delete(ctx context.Context, key string) error {
+func (rs *RaftStorage) Delete(_ context.Context, key string) error {
 	if rs.isClosed() {
 		return domain.ErrStorageClosed
 	}
@@ -290,7 +299,7 @@ func (rs *RaftStorage) Delete(ctx context.Context, key string) error {
 		return fmt.Errorf("failed to marshal command: %w", err)
 	}
 
-	future := rs.raft.Apply(data, 10*time.Second)
+	future := rs.raft.Apply(data, raftApplyTimeout)
 	if err := future.Error(); err != nil {
 		return fmt.Errorf("failed to apply raft command: %w", err)
 	}
@@ -302,7 +311,7 @@ func (rs *RaftStorage) Delete(ctx context.Context, key string) error {
 }
 
 // GetMultiple retrieves multiple values efficiently.
-func (rs *RaftStorage) GetMultiple(ctx context.Context, keys []string) (map[string][]byte, error) {
+func (rs *RaftStorage) GetMultiple(_ context.Context, keys []string) (map[string][]byte, error) {
 	if rs.isClosed() {
 		return nil, domain.ErrStorageClosed
 	}
@@ -322,7 +331,7 @@ func (rs *RaftStorage) GetMultiple(ctx context.Context, keys []string) (map[stri
 }
 
 // SetMultiple stores multiple values efficiently.
-func (rs *RaftStorage) SetMultiple(ctx context.Context, items map[string][]byte, ttl time.Duration) error {
+func (rs *RaftStorage) SetMultiple(_ context.Context, items map[string][]byte, ttl time.Duration) error {
 	if rs.isClosed() {
 		return domain.ErrStorageClosed
 	}
@@ -330,7 +339,7 @@ func (rs *RaftStorage) SetMultiple(ctx context.Context, items map[string][]byte,
 	if rs.raft.State() != raft.Leader {
 		leader := string(rs.raft.Leader())
 		if leader == "" {
-			return fmt.Errorf("no leader available for bulk write operation")
+			return errors.New("no leader available for bulk write operation")
 		}
 		return fmt.Errorf("not leader, current leader: %s", leader)
 	}
@@ -348,7 +357,7 @@ func (rs *RaftStorage) SetMultiple(ctx context.Context, items map[string][]byte,
 		return fmt.Errorf("failed to marshal bulk command: %w", err)
 	}
 
-	future := rs.raft.Apply(data, 30*time.Second)
+	future := rs.raft.Apply(data, raftApplyTimeoutBulk)
 	if err := future.Error(); err != nil {
 		return fmt.Errorf("failed to apply bulk raft command: %w", err)
 	}
@@ -366,7 +375,7 @@ func (rs *RaftStorage) Watch(ctx context.Context, keyPrefix string) (<-chan doma
 		return nil, domain.ErrStorageClosed
 	}
 
-	ch := make(chan domain.StateEvent, 100)
+	ch := make(chan domain.StateEvent, raftWatchChannelSize)
 
 	rs.mu.Lock()
 	rs.watchChans[keyPrefix] = append(rs.watchChans[keyPrefix], ch)
@@ -436,7 +445,7 @@ func (rs *RaftStorage) Close() error {
 }
 
 // Ping checks the health of the storage system.
-func (rs *RaftStorage) Ping(ctx context.Context) error {
+func (rs *RaftStorage) Ping(_ context.Context) error {
 	if rs.isClosed() {
 		return domain.ErrStorageClosed
 	}
@@ -445,7 +454,7 @@ func (rs *RaftStorage) Ping(ctx context.Context) error {
 	leader := rs.raft.Leader()
 
 	if state == raft.Shutdown {
-		return fmt.Errorf("raft is shutdown")
+		return errors.New("raft is shutdown")
 	}
 
 	rs.logger.Debug("Raft storage ping",
@@ -759,7 +768,7 @@ type raftSnapshot struct {
 func (s *raftSnapshot) Persist(sink raft.SnapshotSink) error {
 	encoder := json.NewEncoder(sink)
 	if err := encoder.Encode(s.data); err != nil {
-		sink.Cancel()
+		_ = sink.Cancel()
 		return fmt.Errorf("failed to encode snapshot: %w", err)
 	}
 	return sink.Close()

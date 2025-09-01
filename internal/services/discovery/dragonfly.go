@@ -12,6 +12,14 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
+const (
+	defaultConnectionTimeout     = 5 * time.Second
+	defaultUpdateInterval        = 30 * time.Second
+	defaultTTL                   = 2 * time.Minute
+	defaultWatchChannelSize      = 100
+	dragonflyMinKeyParts         = 2
+)
+
 // DragonflyDiscoveryConfig holds Dragonfly service discovery configuration.
 type DragonflyDiscoveryConfig struct {
 	Address            string            `json:"address"`
@@ -44,7 +52,7 @@ func NewDragonflyDiscovery(config DragonflyDiscoveryConfig, nodeID string, logge
 	})
 
 	// Test connection
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultConnectionTimeout)
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
@@ -63,17 +71,17 @@ func NewDragonflyDiscovery(config DragonflyDiscoveryConfig, nodeID string, logge
 		config.BackendRegistryKey = "backends"
 	}
 	if config.UpdateInterval == 0 {
-		config.UpdateInterval = 30 * time.Second
+		config.UpdateInterval = defaultUpdateInterval
 	}
 	if config.TTL == 0 {
-		config.TTL = 2 * time.Minute
+		config.TTL = defaultTTL
 	}
 
 	dd := &DragonflyDiscovery{
 		client:  client,
 		config:  config,
 		logger:  logger.With(domain.Field{Key: "component", Value: "dragonfly.discovery"}),
-		watchCh: make(chan domain.ServiceDiscoveryEvent, 100),
+		watchCh: make(chan domain.ServiceDiscoveryEvent, defaultWatchChannelSize),
 		stopCh:  make(chan struct{}),
 		nodeID:  nodeID,
 	}
@@ -84,8 +92,17 @@ func NewDragonflyDiscovery(config DragonflyDiscoveryConfig, nodeID string, logge
 // DiscoverPeers discovers peer nodes for Raft cluster formation.
 func (dd *DragonflyDiscovery) DiscoverPeers(ctx context.Context) ([]domain.PeerInfo, error) {
 	key := dd.config.KeyPrefix + dd.config.PeerRegistryKey
+	return dd.discoverPeersFromKey(ctx, key)
+}
 
-	// Get all peer entries from Dragonfly hash
+// DiscoverBackends discovers backend services (VictoriaMetrics instances).
+func (dd *DragonflyDiscovery) DiscoverBackends(ctx context.Context) ([]domain.BackendInfo, error) {
+	key := dd.config.KeyPrefix + dd.config.BackendRegistryKey
+	return dd.discoverBackendsFromKey(ctx, key)
+}
+
+// discoverPeersFromKey implements the discovery logic for peers.
+func (dd *DragonflyDiscovery) discoverPeersFromKey(ctx context.Context, key string) ([]domain.PeerInfo, error) {
 	result, err := dd.client.HGetAll(ctx, key).Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get peers from Dragonfly: %w", err)
@@ -95,17 +112,11 @@ func (dd *DragonflyDiscovery) DiscoverPeers(ctx context.Context) ([]domain.PeerI
 	for nodeID, data := range result {
 		var peerInfo domain.PeerInfo
 		if err := json.Unmarshal([]byte(data), &peerInfo); err != nil {
-			dd.logger.Warn("Failed to unmarshal peer data",
-				domain.Field{Key: "node_id", Value: nodeID},
-				domain.Field{Key: "error", Value: err.Error()})
+			dd.logUnmarshalError("peer", nodeID, err)
 			continue
 		}
 
-		// Check if peer data is recent (not stale)
-		if time.Since(peerInfo.LastSeen) > dd.config.TTL {
-			dd.logger.Debug("Peer data is stale, skipping",
-				domain.Field{Key: "node_id", Value: nodeID},
-				domain.Field{Key: "last_seen", Value: peerInfo.LastSeen})
+		if dd.isDataStale(peerInfo.LastSeen, nodeID, "peer") {
 			continue
 		}
 
@@ -118,11 +129,8 @@ func (dd *DragonflyDiscovery) DiscoverPeers(ctx context.Context) ([]domain.PeerI
 	return peers, nil
 }
 
-// DiscoverBackends discovers backend services (VictoriaMetrics instances).
-func (dd *DragonflyDiscovery) DiscoverBackends(ctx context.Context) ([]domain.BackendInfo, error) {
-	key := dd.config.KeyPrefix + dd.config.BackendRegistryKey
-
-	// Get all backend entries from Dragonfly hash
+// discoverBackendsFromKey implements the discovery logic for backends.
+func (dd *DragonflyDiscovery) discoverBackendsFromKey(ctx context.Context, key string) ([]domain.BackendInfo, error) {
 	result, err := dd.client.HGetAll(ctx, key).Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get backends from Dragonfly: %w", err)
@@ -132,17 +140,11 @@ func (dd *DragonflyDiscovery) DiscoverBackends(ctx context.Context) ([]domain.Ba
 	for backendID, data := range result {
 		var backendInfo domain.BackendInfo
 		if err := json.Unmarshal([]byte(data), &backendInfo); err != nil {
-			dd.logger.Warn("Failed to unmarshal backend data",
-				domain.Field{Key: "backend_id", Value: backendID},
-				domain.Field{Key: "error", Value: err.Error()})
+			dd.logUnmarshalError("backend", backendID, err)
 			continue
 		}
 
-		// Check if backend data is recent (not stale)
-		if time.Since(backendInfo.LastSeen) > dd.config.TTL {
-			dd.logger.Debug("Backend data is stale, skipping",
-				domain.Field{Key: "backend_id", Value: backendID},
-				domain.Field{Key: "last_seen", Value: backendInfo.LastSeen})
+		if dd.isDataStale(backendInfo.LastSeen, backendID, "backend") {
 			continue
 		}
 
@@ -153,6 +155,24 @@ func (dd *DragonflyDiscovery) DiscoverBackends(ctx context.Context) ([]domain.Ba
 		domain.Field{Key: "backends_count", Value: len(backends)})
 
 	return backends, nil
+}
+
+// logUnmarshalError logs unmarshal errors consistently.
+func (dd *DragonflyDiscovery) logUnmarshalError(dataType, id string, err error) {
+	dd.logger.Warn("Failed to unmarshal "+dataType+" data",
+		domain.Field{Key: dataType + "_id", Value: id},
+		domain.Field{Key: "error", Value: err.Error()})
+}
+
+// isDataStale checks if data is older than TTL and logs if stale.
+func (dd *DragonflyDiscovery) isDataStale(lastSeen time.Time, id, dataType string) bool {
+	if time.Since(lastSeen) > dd.config.TTL {
+		dd.logger.Debug(dataType+" data is stale, skipping",
+			domain.Field{Key: dataType + "_id", Value: id},
+			domain.Field{Key: "last_seen", Value: lastSeen})
+		return true
+	}
+	return false
 }
 
 // Watch monitors changes in service topology using Dragonfly keyspace notifications.
@@ -194,7 +214,7 @@ func (dd *DragonflyDiscovery) handleKeyspaceNotification(ctx context.Context, ms
 	// Parse keyspace notification
 	// Format: __keyspace@DB__:key operation
 	parts := strings.Split(msg.Channel, ":")
-	if len(parts) < 2 {
+	if len(parts) < dragonflyMinKeyParts {
 		return
 	}
 
@@ -232,11 +252,14 @@ func (dd *DragonflyDiscovery) handlePeerChange(ctx context.Context, operation st
 		return
 	}
 
-	eventType := domain.ServiceDiscoveryNodeUpdated
-	if operation == "hdel" {
+	var eventType domain.ServiceDiscoveryEventType
+	switch operation {
+	case "hdel":
 		eventType = domain.ServiceDiscoveryNodeLeft
-	} else if operation == "hset" {
+	case "hset":
 		eventType = domain.ServiceDiscoveryNodeJoined
+	default:
+		eventType = domain.ServiceDiscoveryNodeUpdated
 	}
 
 	// Send events for all current peers
@@ -266,11 +289,14 @@ func (dd *DragonflyDiscovery) handleBackendChange(ctx context.Context, operation
 		return
 	}
 
-	eventType := domain.ServiceDiscoveryBackendUpdated
-	if operation == "hdel" {
+	var eventType domain.ServiceDiscoveryEventType
+	switch operation {
+	case "hdel":
 		eventType = domain.ServiceDiscoveryBackendRemoved
-	} else if operation == "hset" {
+	case "hset":
 		eventType = domain.ServiceDiscoveryBackendAdded
+	default:
+		eventType = domain.ServiceDiscoveryBackendUpdated
 	}
 
 	// Send events for all current backends
@@ -522,7 +548,7 @@ func (dd *DragonflyDiscovery) Close() error {
 	dd.logger.Info("Shutting down Dragonfly service discovery")
 
 	// Unregister self before closing
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultConnectionTimeout)
 	defer cancel()
 
 	if err := dd.UnregisterSelf(ctx); err != nil {

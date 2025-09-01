@@ -636,7 +636,7 @@ func createRaftLastAppliedGauge() *prometheus.GaugeVec {
 func createRaftPeerCountGauge() *prometheus.GaugeVec {
 	return prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "vm_proxy_auth_raft_peer_count",
+			Name: "vm_proxy_auth_raft_peers",
 			Help: "Number of Raft cluster peers",
 		},
 		[]string{"node_id"},
@@ -667,7 +667,7 @@ func createServiceDiscoveryEventsCounter() *prometheus.CounterVec {
 func createServiceDiscoveryPeersGauge() *prometheus.GaugeVec {
 	return prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "vm_proxy_auth_service_discovery_peers_count",
+			Name: "vm_proxy_auth_service_discovery_peers",
 			Help: "Number of discovered peers",
 		},
 		[]string{"source"},
@@ -677,7 +677,7 @@ func createServiceDiscoveryPeersGauge() *prometheus.GaugeVec {
 func createServiceDiscoveryBackendsGauge() *prometheus.GaugeVec {
 	return prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "vm_proxy_auth_service_discovery_backends_count",
+			Name: "vm_proxy_auth_service_discovery_backends",
 			Help: "Number of discovered backends",
 		},
 		[]string{"source"},

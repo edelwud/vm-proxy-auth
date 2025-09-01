@@ -19,6 +19,12 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
+const (
+	k8sDefaultUpdateInterval    = 30 * time.Second
+	k8sDefaultWatchChannelSize  = 100
+	k8sWatchRetryDelay          = 5 * time.Second
+)
+
 // KubernetesDiscoveryConfig holds Kubernetes service discovery configuration.
 type KubernetesDiscoveryConfig struct {
 	Namespace            string            `json:"namespace"`
@@ -72,14 +78,14 @@ func NewKubernetesDiscovery(config KubernetesDiscoveryConfig, logger domain.Logg
 		config.HTTPPortName = "http"
 	}
 	if config.UpdateInterval == 0 {
-		config.UpdateInterval = 30 * time.Second
+		config.UpdateInterval = k8sDefaultUpdateInterval
 	}
 
 	kd := &KubernetesDiscovery{
 		client:    client,
 		config:    config,
 		logger:    logger.With(domain.Field{Key: "component", Value: "k8s.discovery"}),
-		watchCh:   make(chan domain.ServiceDiscoveryEvent, 100),
+		watchCh:   make(chan domain.ServiceDiscoveryEvent, k8sDefaultWatchChannelSize),
 		stopCh:    make(chan struct{}),
 		namespace: config.Namespace,
 	}
@@ -330,7 +336,7 @@ func (kd *KubernetesDiscovery) watchPods(ctx context.Context) {
 		if err != nil {
 			kd.logger.Error("Failed to create pod watcher",
 				domain.Field{Key: "error", Value: err.Error()})
-			time.Sleep(5 * time.Second)
+			time.Sleep(k8sWatchRetryDelay)
 			continue
 		}
 
@@ -348,6 +354,8 @@ func (kd *KubernetesDiscovery) watchPods(ctx context.Context) {
 				eventType = domain.ServiceDiscoveryNodeLeft
 			case watch.Modified:
 				eventType = domain.ServiceDiscoveryNodeUpdated
+			case watch.Bookmark, watch.Error:
+				continue
 			default:
 				continue
 			}
@@ -424,7 +432,7 @@ func (kd *KubernetesDiscovery) watchServices(ctx context.Context) {
 		if err != nil {
 			kd.logger.Error("Failed to create service watcher",
 				domain.Field{Key: "error", Value: err.Error()})
-			time.Sleep(5 * time.Second)
+			time.Sleep(k8sWatchRetryDelay)
 			continue
 		}
 
@@ -442,6 +450,8 @@ func (kd *KubernetesDiscovery) watchServices(ctx context.Context) {
 				eventType = domain.ServiceDiscoveryBackendRemoved
 			case watch.Modified:
 				eventType = domain.ServiceDiscoveryBackendUpdated
+			case watch.Bookmark, watch.Error:
+				continue
 			default:
 				continue
 			}
