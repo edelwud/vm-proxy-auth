@@ -129,68 +129,10 @@ func (kd *KubernetesDiscovery) DiscoverPeers(ctx context.Context) ([]domain.Peer
 
 	var peers []domain.PeerInfo
 	for _, pod := range pods.Items {
-		if pod.Status.Phase != corev1.PodRunning {
-			continue
+		peer, ok := kd.processPodForPeer(pod)
+		if ok {
+			peers = append(peers, peer)
 		}
-
-		// Extract node information from pod
-		nodeID := pod.Name
-		if pod.Labels["node-id"] != "" {
-			nodeID = pod.Labels["node-id"]
-		}
-
-		// Find Raft port
-		raftAddress := ""
-		httpAddress := ""
-		for _, container := range pod.Spec.Containers {
-			for _, port := range container.Ports {
-				if port.Name == kd.config.RaftPortName {
-					raftAddress = fmt.Sprintf("%s:%d", pod.Status.PodIP, port.ContainerPort)
-				}
-				if port.Name == kd.config.HTTPPortName {
-					httpAddress = fmt.Sprintf("%s:%d", pod.Status.PodIP, port.ContainerPort)
-				}
-			}
-		}
-
-		if raftAddress == "" {
-			kd.logger.Warn("Pod has no Raft port defined",
-				domain.Field{Key: "pod_name", Value: pod.Name},
-				domain.Field{Key: "expected_port_name", Value: kd.config.RaftPortName})
-			continue
-		}
-
-		// Check pod readiness
-		healthy := false
-		for _, condition := range pod.Status.Conditions {
-			if condition.Type == corev1.PodReady {
-				healthy = condition.Status == corev1.ConditionTrue
-				break
-			}
-		}
-
-		peer := domain.PeerInfo{
-			NodeID:      nodeID,
-			Address:     httpAddress,
-			RaftAddress: raftAddress,
-			Healthy:     healthy,
-			LastSeen:    time.Now(),
-			Metadata: map[string]string{
-				"pod_name":      pod.Name,
-				"pod_namespace": pod.Namespace,
-				"pod_ip":        pod.Status.PodIP,
-				"node_name":     pod.Spec.NodeName,
-			},
-		}
-
-		// Add custom metadata from pod labels
-		for key, value := range pod.Labels {
-			if strings.HasPrefix(key, "discovery.") {
-				peer.Metadata[key] = value
-			}
-		}
-
-		peers = append(peers, peer)
 	}
 
 	kd.logger.Debug("Discovered Raft peers",
@@ -198,6 +140,87 @@ func (kd *KubernetesDiscovery) DiscoverPeers(ctx context.Context) ([]domain.Peer
 		domain.Field{Key: "namespace", Value: kd.namespace})
 
 	return peers, nil
+}
+
+// processPodForPeer extracts peer information from a Kubernetes pod.
+func (kd *KubernetesDiscovery) processPodForPeer(pod corev1.Pod) (domain.PeerInfo, bool) {
+	if pod.Status.Phase != corev1.PodRunning {
+		return domain.PeerInfo{}, false
+	}
+
+	nodeID := kd.extractNodeID(pod)
+	raftAddress, httpAddress := kd.extractPodAddresses(pod)
+
+	if raftAddress == "" {
+		kd.logger.Warn("Pod has no Raft port defined",
+			domain.Field{Key: "pod_name", Value: pod.Name},
+			domain.Field{Key: "expected_port_name", Value: kd.config.RaftPortName})
+		return domain.PeerInfo{}, false
+	}
+
+	healthy := kd.isPodHealthy(pod)
+	metadata := kd.buildPodMetadata(pod)
+
+	return domain.PeerInfo{
+		NodeID:      nodeID,
+		Address:     httpAddress,
+		RaftAddress: raftAddress,
+		Healthy:     healthy,
+		LastSeen:    time.Now(),
+		Metadata:    metadata,
+	}, true
+}
+
+// extractNodeID extracts node ID from pod labels or uses pod name as fallback.
+func (kd *KubernetesDiscovery) extractNodeID(pod corev1.Pod) string {
+	if nodeID := pod.Labels["node-id"]; nodeID != "" {
+		return nodeID
+	}
+	return pod.Name
+}
+
+// extractPodAddresses finds Raft and HTTP addresses from pod containers.
+func (kd *KubernetesDiscovery) extractPodAddresses(pod corev1.Pod) (raftAddress, httpAddress string) {
+	for _, container := range pod.Spec.Containers {
+		for _, port := range container.Ports {
+			switch port.Name {
+			case kd.config.RaftPortName:
+				raftAddress = fmt.Sprintf("%s:%d", pod.Status.PodIP, port.ContainerPort)
+			case kd.config.HTTPPortName:
+				httpAddress = fmt.Sprintf("%s:%d", pod.Status.PodIP, port.ContainerPort)
+			}
+		}
+	}
+	return raftAddress, httpAddress
+}
+
+// isPodHealthy checks if pod is ready.
+func (kd *KubernetesDiscovery) isPodHealthy(pod corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+	return false
+}
+
+// buildPodMetadata creates metadata map from pod information.
+func (kd *KubernetesDiscovery) buildPodMetadata(pod corev1.Pod) map[string]string {
+	metadata := map[string]string{
+		"pod_name":      pod.Name,
+		"pod_namespace": pod.Namespace,
+		"pod_ip":        pod.Status.PodIP,
+		"node_name":     pod.Spec.NodeName,
+	}
+
+	// Add custom metadata from pod labels
+	for key, value := range pod.Labels {
+		if strings.HasPrefix(key, "discovery.") {
+			metadata[key] = value
+		}
+	}
+
+	return metadata
 }
 
 // DiscoverBackends discovers backend services (VictoriaMetrics instances).

@@ -133,7 +133,7 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 
 	t.Run("ping_health_check", func(t *testing.T) {
 		err := storage.Ping(ctx)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -206,7 +206,7 @@ func TestRaftStorage_MultiNode(t *testing.T) {
 		// Verify all nodes have the data
 		for i, node := range nodes {
 			retrieved, err := node.Get(ctx, key)
-			assert.NoError(t, err, "Node %d should have replicated data", i)
+			require.NoError(t, err, "Node %d should have replicated data", i)
 			assert.Equal(t, value, retrieved, "Node %d has incorrect data", i)
 		}
 	})
@@ -244,14 +244,14 @@ func TestRaftStorage_MultiNode(t *testing.T) {
 
 		// Verify data is still accessible from new leader
 		retrieved, err := newLeader.Get(ctx, key)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, value, retrieved)
 
 		// Verify new leader can write
 		newKey := "post-failover-key"
 		newValue := []byte("post-failover-value")
 		err = newLeader.Set(ctx, newKey, newValue, time.Minute)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -266,7 +266,7 @@ func TestRaftStorage_ErrorCases(t *testing.T) {
 		}
 
 		storage, err := statestorage.NewStateStorage(raftConfig, "raft", "test-node", logger)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, storage)
 		assert.Contains(t, err.Error(), "failed to create data directory")
 	})
@@ -453,7 +453,7 @@ func TestRaftStorage_ConcurrentOperations(t *testing.T) {
 		// Check all writes succeeded
 		for i := 0; i < numOperations; i++ {
 			err := <-errCh
-			assert.NoError(t, err, "Write %d should succeed", i)
+			require.NoError(t, err, "Write %d should succeed", i)
 		}
 
 		// Verify all values
@@ -462,7 +462,7 @@ func TestRaftStorage_ConcurrentOperations(t *testing.T) {
 			expected := []byte(fmt.Sprintf("value-%d", i))
 
 			value, err := storage.Get(ctx, key)
-			assert.NoError(t, err, "Read %d should succeed", i)
+			require.NoError(t, err, "Read %d should succeed", i)
 			assert.Equal(t, expected, value, "Value %d should match", i)
 		}
 	})
@@ -527,7 +527,7 @@ func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
 	// Verify data persisted
 	for key, expectedValue := range testData {
 		value, err := storage2.Get(ctx, key)
-		assert.NoError(t, err, "Key %s should persist after restart", key)
+		require.NoError(t, err, "Key %s should persist after restart", key)
 		assert.Equal(t, expectedValue, value, "Value for %s should match after restart", key)
 	}
 
@@ -583,10 +583,10 @@ func TestRaftStorage_Factory_Integration(t *testing.T) {
 		time.Sleep(2 * time.Second) // Wait for leadership
 
 		err = storage.Set(ctx, "factory-test", []byte("factory-value"), time.Minute)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		value, err := storage.Get(ctx, "factory-test")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, []byte("factory-value"), value)
 	})
 
@@ -619,7 +619,7 @@ func TestRaftStorage_DataDir_Management(t *testing.T) {
 
 		// Verify directory was created
 		info, err := os.Stat(dataDirPath)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, info.IsDir())
 
 		// Verify Raft files are created
