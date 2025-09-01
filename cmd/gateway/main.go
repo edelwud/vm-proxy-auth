@@ -22,6 +22,7 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/services/health"
 	"github.com/edelwud/vm-proxy-auth/internal/services/metrics"
 	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
+	"github.com/edelwud/vm-proxy-auth/internal/services/statestorage"
 	"github.com/edelwud/vm-proxy-auth/internal/services/tenant"
 )
 
@@ -164,7 +165,23 @@ func main() {
 		}
 	}
 
-	proxyService, err := proxy.NewEnhancedService(enhancedConfig, appLogger, metricsService)
+	// Create state storage based on configuration
+	stateStorageConfig, storageType, err := cfg.ToStateStorageConfig()
+	if err != nil {
+		appLogger.Error("Invalid state storage configuration",
+			domain.Field{Key: "error", Value: err.Error()})
+		os.Exit(1)
+	}
+
+	stateStorage, err := createStateStorage(stateStorageConfig, storageType, "gateway-node", appLogger)
+	if err != nil {
+		appLogger.Error("Failed to create state storage",
+			domain.Field{Key: "type", Value: storageType},
+			domain.Field{Key: "error", Value: err.Error()})
+		os.Exit(1)
+	}
+
+	proxyService, err := proxy.NewEnhancedService(enhancedConfig, appLogger, metricsService, stateStorage)
 	if err != nil {
 		appLogger.Error("Failed to create enhanced proxy service",
 			domain.Field{Key: "error", Value: err.Error()})
@@ -258,6 +275,16 @@ func main() {
 	}
 
 	appLogger.Info("Server stopped gracefully")
+}
+
+// createStateStorage creates a state storage instance based on configuration.
+func createStateStorage(
+	storageConfig interface{},
+	storageType string,
+	nodeID string,
+	logger domain.Logger,
+) (domain.StateStorage, error) {
+	return statestorage.NewStateStorage(storageConfig, storageType, nodeID, logger)
 }
 
 // showVersionInfo displays version information to stdout.

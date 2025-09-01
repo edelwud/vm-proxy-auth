@@ -80,7 +80,8 @@ func TestQueueIntegrationWithBackendFailures(t *testing.T) {
 	}
 
 	// Create and start service
-	service, err := proxy.NewEnhancedService(config, logger, metricsService)
+	stateStorage := testutils.NewMockStateStorage()
+	service, err := proxy.NewEnhancedService(config, logger, metricsService, stateStorage)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -243,7 +244,8 @@ func TestQueueStats(t *testing.T) {
 		EnableQueueing: true,
 	}
 
-	service, err := proxy.NewEnhancedService(config, logger, metricsService)
+	stateStorage := testutils.NewMockStateStorage()
+	service, err := proxy.NewEnhancedService(config, logger, metricsService, stateStorage)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
