@@ -63,7 +63,7 @@ func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logge
 	}
 
 	raftConfig := createRaftConfig(config, logger)
-	
+
 	transport, err := createRaftTransport(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create transport: %w", err)
@@ -155,9 +155,9 @@ func createRaftTransport(config RaftStorageConfig) (*raft.NetworkTransport, erro
 }
 
 // createRaftStores creates BoltDB stores for Raft.
-func createRaftStores(config RaftStorageConfig, transport *raft.NetworkTransport) (
-	raft.LogStore, raft.StableStore, raft.SnapshotStore, error) {
-	
+func createRaftStores(config RaftStorageConfig, _ *raft.NetworkTransport) (
+	raft.LogStore, raft.StableStore, raft.SnapshotStore, error,
+) {
 	logStore, err := raftboltdb.NewBoltStore(filepath.Join(config.DataDir, "raft-log.db"))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create log store: %w", err)
@@ -189,10 +189,14 @@ func createRaftFSM(logger domain.Logger) *raftFSM {
 }
 
 // cleanupStores closes transport and stores on error.
-func cleanupStores(transport *raft.NetworkTransport, logStore, stableStore io.Closer) {
+func cleanupStores(transport *raft.NetworkTransport, logStore raft.LogStore, stableStore raft.StableStore) {
 	_ = transport.Close()
-	_ = logStore.Close()
-	_ = stableStore.Close()
+	if closer, ok := logStore.(io.Closer); ok {
+		_ = closer.Close()
+	}
+	if closer, ok := stableStore.(io.Closer); ok {
+		_ = closer.Close()
+	}
 }
 
 // bootstrapCluster handles cluster initialization and joining.

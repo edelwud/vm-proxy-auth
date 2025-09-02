@@ -79,7 +79,7 @@ func TestNewService_ErrorWithoutAuthConfig(t *testing.T) {
 	service, err := auth.NewService(cfg, tenantMaps, logger, metrics)
 	require.Error(t, err)
 	assert.Nil(t, service)
-	assert.Contains(t, err.Error(), "JWT authentication requires either jwt_secret or jwks_url")
+	assert.Contains(t, err.Error(), "jWT authentication requires either jwt_secret or jwks_url")
 }
 
 func TestService_Authenticate_ValidToken(t *testing.T) {
