@@ -62,71 +62,25 @@ func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logge
 		return nil, fmt.Errorf("failed to create data directory: %w", err)
 	}
 
-	raftConfig := raft.DefaultConfig()
-	raftConfig.LocalID = raft.ServerID(config.NodeID)
-	raftConfig.HeartbeatTimeout = config.HeartbeatTimeout
-	raftConfig.ElectionTimeout = config.ElectionTimeout
-	raftConfig.LeaderLeaseTimeout = config.LeaderLeaseTimeout
-	raftConfig.CommitTimeout = config.CommitTimeout
-	raftConfig.SnapshotThreshold = config.SnapshotThreshold
-	raftConfig.TrailingLogs = config.TrailingLogs
-
-	// Use our structured logger adapter for consistent logging
-	raftConfig.Logger = infralogger.NewHCLogAdapter(logger)
-
-	// Create transport
-	addr, err := net.ResolveTCPAddr("tcp", config.BindAddress)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve bind address: %w", err)
-	}
-
-	transport, err := raft.NewTCPTransport(
-		config.BindAddress,
-		addr,
-		domain.DefaultRaftMaxConnections,
-		domain.DefaultRaftApplyTimeout,
-		os.Stderr,
-	)
+	raftConfig := createRaftConfig(config, logger)
+	
+	transport, err := createRaftTransport(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create transport: %w", err)
 	}
 
-	// Create BoltDB stores
-	logStore, err := raftboltdb.NewBoltStore(filepath.Join(config.DataDir, "raft-log.db"))
+	logStore, stableStore, snapStore, err := createRaftStores(config, transport)
 	if err != nil {
 		_ = transport.Close()
-		return nil, fmt.Errorf("failed to create log store: %w", err)
+		return nil, err
 	}
 
-	stableStore, err := raftboltdb.NewBoltStore(filepath.Join(config.DataDir, "raft-stable.db"))
-	if err != nil {
-		_ = transport.Close()
-		_ = logStore.Close()
-		return nil, fmt.Errorf("failed to create stable store: %w", err)
-	}
-
-	snapStore, err := raft.NewFileSnapshotStore(config.DataDir, config.SnapshotRetention, os.Stderr)
-	if err != nil {
-		_ = transport.Close()
-		_ = logStore.Close()
-		_ = stableStore.Close()
-		return nil, fmt.Errorf("failed to create snapshot store: %w", err)
-	}
-
-	// Create FSM
-	fsm := &raftFSM{
-		data:       make(map[string]*storageItem),
-		watchChans: make(map[string][]chan domain.StateEvent),
-		logger:     logger.With(domain.Field{Key: "component", Value: "raft.fsm"}),
-	}
+	fsm := createRaftFSM(logger)
 
 	// Create Raft instance
 	r, err := raft.NewRaft(raftConfig, fsm, logStore, stableStore, snapStore, transport)
 	if err != nil {
-		_ = transport.Close()
-		_ = logStore.Close()
-		_ = stableStore.Close()
-		// snapStore doesn't need explicit close
+		cleanupStores(transport, logStore, stableStore)
 		return nil, fmt.Errorf("failed to create raft instance: %w", err)
 	}
 
@@ -163,6 +117,82 @@ func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logge
 		domain.Field{Key: "peers", Value: fmt.Sprintf("%v", config.Peers)})
 
 	return rs, nil
+}
+
+// createRaftConfig creates and configures a Raft configuration.
+func createRaftConfig(config RaftStorageConfig, logger domain.Logger) *raft.Config {
+	raftConfig := raft.DefaultConfig()
+	raftConfig.LocalID = raft.ServerID(config.NodeID)
+	raftConfig.HeartbeatTimeout = config.HeartbeatTimeout
+	raftConfig.ElectionTimeout = config.ElectionTimeout
+	raftConfig.LeaderLeaseTimeout = config.LeaderLeaseTimeout
+	raftConfig.CommitTimeout = config.CommitTimeout
+	raftConfig.SnapshotThreshold = config.SnapshotThreshold
+	raftConfig.TrailingLogs = config.TrailingLogs
+	raftConfig.Logger = infralogger.NewHCLogAdapter(logger)
+	return raftConfig
+}
+
+// createRaftTransport creates a Raft network transport.
+func createRaftTransport(config RaftStorageConfig) (*raft.NetworkTransport, error) {
+	addr, err := net.ResolveTCPAddr("tcp", config.BindAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve bind address: %w", err)
+	}
+
+	transport, err := raft.NewTCPTransport(
+		config.BindAddress,
+		addr,
+		domain.DefaultRaftMaxConnections,
+		domain.DefaultRaftApplyTimeout,
+		os.Stderr,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create transport: %w", err)
+	}
+
+	return transport, nil
+}
+
+// createRaftStores creates BoltDB stores for Raft.
+func createRaftStores(config RaftStorageConfig, transport *raft.NetworkTransport) (
+	raft.LogStore, raft.StableStore, raft.SnapshotStore, error) {
+	
+	logStore, err := raftboltdb.NewBoltStore(filepath.Join(config.DataDir, "raft-log.db"))
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to create log store: %w", err)
+	}
+
+	stableStore, err := raftboltdb.NewBoltStore(filepath.Join(config.DataDir, "raft-stable.db"))
+	if err != nil {
+		_ = logStore.Close()
+		return nil, nil, nil, fmt.Errorf("failed to create stable store: %w", err)
+	}
+
+	snapStore, err := raft.NewFileSnapshotStore(config.DataDir, config.SnapshotRetention, os.Stderr)
+	if err != nil {
+		_ = logStore.Close()
+		_ = stableStore.Close()
+		return nil, nil, nil, fmt.Errorf("failed to create snapshot store: %w", err)
+	}
+
+	return logStore, stableStore, snapStore, nil
+}
+
+// createRaftFSM creates the Finite State Machine for Raft.
+func createRaftFSM(logger domain.Logger) *raftFSM {
+	return &raftFSM{
+		data:       make(map[string]*storageItem),
+		watchChans: make(map[string][]chan domain.StateEvent),
+		logger:     logger.With(domain.Field{Key: "component", Value: "raft.fsm"}),
+	}
+}
+
+// cleanupStores closes transport and stores on error.
+func cleanupStores(transport *raft.NetworkTransport, logStore, stableStore io.Closer) {
+	_ = transport.Close()
+	_ = logStore.Close()
+	_ = stableStore.Close()
 }
 
 // bootstrapCluster handles cluster initialization and joining.
