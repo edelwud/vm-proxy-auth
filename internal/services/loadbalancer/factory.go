@@ -34,15 +34,15 @@ func (f *Factory) CreateLoadBalancer(
 		domain.Field{Key: "backends_count", Value: len(backends)})
 
 	switch strategy {
-	case domain.LoadBalancingRoundRobin:
+	case domain.LoadBalancingStrategyRoundRobin:
 		f.logger.Debug("Creating Round Robin load balancer")
 		return NewRoundRobinBalancer(backends, f.logger), nil
 
-	case domain.LoadBalancingWeightedRoundRobin:
+	case domain.LoadBalancingStrategyWeighted:
 		f.logger.Debug("Creating Weighted Round Robin load balancer")
 		return NewWeightedRoundRobinBalancer(backends, f.logger), nil
 
-	case domain.LoadBalancingLeastConnections:
+	case domain.LoadBalancingStrategyLeastConnection:
 		f.logger.Debug("Creating Least Connections load balancer")
 		return NewLeastConnectionsBalancer(backends, f.logger), nil
 
@@ -56,9 +56,9 @@ func (f *Factory) CreateLoadBalancer(
 // GetSupportedStrategies returns all supported load balancing strategies.
 func (f *Factory) GetSupportedStrategies() []domain.LoadBalancingStrategy {
 	return []domain.LoadBalancingStrategy{
-		domain.LoadBalancingRoundRobin,
-		domain.LoadBalancingWeightedRoundRobin,
-		domain.LoadBalancingLeastConnections,
+		domain.LoadBalancingStrategyRoundRobin,
+		domain.LoadBalancingStrategyWeighted,
+		domain.LoadBalancingStrategyLeastConnection,
 	}
 }
 
@@ -77,13 +77,13 @@ func (f *Factory) ValidateStrategy(strategy domain.LoadBalancingStrategy) error 
 // GetStrategyDescription returns a human-readable description of the strategy.
 func (f *Factory) GetStrategyDescription(strategy domain.LoadBalancingStrategy) string {
 	switch strategy {
-	case domain.LoadBalancingRoundRobin:
+	case domain.LoadBalancingStrategyRoundRobin:
 		return "Round Robin: Distributes requests evenly across all healthy backends in sequence"
 
-	case domain.LoadBalancingWeightedRoundRobin:
+	case domain.LoadBalancingStrategyWeighted:
 		return "Weighted Round Robin: Distributes requests based on backend weights using smooth algorithm"
 
-	case domain.LoadBalancingLeastConnections:
+	case domain.LoadBalancingStrategyLeastConnection:
 		return "Least Connections: Routes requests to the backend with the fewest active connections"
 
 	default:

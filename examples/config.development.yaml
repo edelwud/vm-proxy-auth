@@ -1,0 +1,73 @@
+# Development Configuration
+# Minimal setup for local development and testing
+
+server:
+  address: "localhost:8080"
+  timeouts:
+    readTimeout: "10s"
+    writeTimeout: "10s"
+    idleTimeout: "30s"
+
+backends:
+  - url: "http://localhost:8428"
+    weight: 1
+
+loadBalancing:
+  strategy: "round-robin"
+
+healthCheck:
+  checkInterval: "10s"
+  timeout: "5s"
+  healthyThreshold: 1
+  unhealthyThreshold: 2
+  healthEndpoint: "/health"
+
+queue:
+  enabled: false
+  maxSize: 100
+  timeout: "1s"
+
+timeout: "10s"
+maxRetries: 1
+retryBackoff: "50ms"
+
+# Local state storage
+stateStorage:
+  type: "local"
+
+# Development JWT (insecure - for testing only)
+auth:
+  jwt:
+    algorithm: "HS256"
+    secret: "dev-secret-key-not-for-production"
+    tokenTtl: "24h"
+    cacheTtl: "1m"
+    validation:
+      validateAudience: false
+      validateIssuer: false
+    claims:
+      userGroupsClaim: "groups"
+
+# Simple tenant mapping
+tenantMapping:
+  - groups: ["dev", "admin"]
+    vmTenants:
+      - accountId: "1"
+        projectId: "dev"
+    readOnly: false
+
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: false
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+# Debug logging
+logging:
+  level: "debug"
+  format: "pretty"

@@ -65,7 +65,7 @@ func TestEnhancedService_BasicForwarding(t *testing.T) {
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval: -1, // Explicitly disable health checking
@@ -119,7 +119,7 @@ func TestEnhancedService_LoadBalancing_RoundRobin(t *testing.T) {
 			{URL: backends[2].URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval: -1, // Explicitly disable health checking
@@ -172,7 +172,7 @@ func TestEnhancedService_LoadBalancing_WeightedRoundRobin(t *testing.T) {
 			{URL: backends[1].URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingWeightedRoundRobin,
+			Strategy: domain.LoadBalancingStrategyWeighted,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval: -1, // Explicitly disable health checking
@@ -229,7 +229,7 @@ func TestEnhancedService_RetryOnFailure(t *testing.T) {
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		MaxRetries:   3,
 		RetryBackoff: 10 * time.Millisecond,
@@ -276,7 +276,7 @@ func TestEnhancedService_MaxRetriesExceeded(t *testing.T) {
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		MaxRetries:   2,
 		RetryBackoff: 1 * time.Millisecond,
@@ -311,7 +311,7 @@ func TestEnhancedService_NoHealthyBackends(t *testing.T) {
 			{URL: "http://localhost:99999", Weight: 1}, // Non-existent backend
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval:      50 * time.Millisecond,
@@ -354,7 +354,7 @@ func TestEnhancedService_MaintenanceMode(t *testing.T) {
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval: -1, // Explicitly disable health checking
@@ -404,7 +404,7 @@ func TestEnhancedService_BackendsStatus(t *testing.T) {
 			{URL: backend.URL, Weight: 2},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval: -1, // Explicitly disable health checking
@@ -443,7 +443,7 @@ func TestEnhancedService_ConcurrentRequests(t *testing.T) {
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval: -1, // Explicitly disable health checking
@@ -504,7 +504,7 @@ func TestEnhancedService_ContextCancellation(t *testing.T) {
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval: -1, // Explicitly disable health checking

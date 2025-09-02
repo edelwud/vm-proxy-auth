@@ -8,14 +8,6 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
-const (
-	defaultLeaderLeaseTimeout = 500 * time.Millisecond
-	defaultCommitTimeout      = 50 * time.Millisecond
-	defaultSnapshotRetention  = 3
-	defaultSnapshotThreshold  = 1024
-	defaultTrailingLogs       = 1024
-)
-
 // NewStateStorage creates a state storage instance based on configuration.
 func NewStateStorage(
 	storageConfig interface{},
@@ -72,11 +64,11 @@ func NewStateStorage(
 			PeerDiscovery:      &raftConfig.PeerDiscovery,
 			HeartbeatTimeout:   1 * time.Second,
 			ElectionTimeout:    1 * time.Second,
-			LeaderLeaseTimeout: defaultLeaderLeaseTimeout,
-			CommitTimeout:      defaultCommitTimeout,
-			SnapshotRetention:  defaultSnapshotRetention,
-			SnapshotThreshold:  defaultSnapshotThreshold,
-			TrailingLogs:       defaultTrailingLogs,
+			LeaderLeaseTimeout: domain.DefaultLeaderLeaseTimeout,
+			CommitTimeout:      domain.DefaultCommitTimeout,
+			SnapshotRetention:  domain.DefaultSnapshotRetention,
+			SnapshotThreshold:  domain.DefaultSnapshotThreshold,
+			TrailingLogs:       domain.DefaultTrailingLogs,
 		}
 
 		logger.Info("Creating Raft state storage",

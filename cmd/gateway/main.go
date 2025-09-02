@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -19,7 +18,7 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
 	"github.com/edelwud/vm-proxy-auth/internal/services/access"
 	"github.com/edelwud/vm-proxy-auth/internal/services/auth"
-	"github.com/edelwud/vm-proxy-auth/internal/services/health"
+	"github.com/edelwud/vm-proxy-auth/internal/services/discovery"
 	"github.com/edelwud/vm-proxy-auth/internal/services/metrics"
 	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/services/statestorage"
@@ -31,18 +30,6 @@ var (
 	version   = "dev"
 	buildTime = "unknown"
 	gitCommit = "unknown"
-)
-
-// Default configuration constants for single upstream mode.
-const (
-	defaultHealthCheckInterval      = 30 * time.Second
-	defaultHealthCheckTimeout       = 10 * time.Second
-	defaultHealthyThreshold         = 2
-	defaultUnhealthyThreshold       = 3
-	defaultQueueMaxSize             = 1000
-	defaultQueueTimeout             = 5 * time.Second
-	defaultRetryBackoffMilliseconds = 100
-	defaultRetryBackoffSeconds      = 5
 )
 
 //nolint:funlen,gocognit
@@ -89,7 +76,7 @@ func main() {
 		domain.Field{Key: "git_commit", Value: gitCommit},
 		domain.Field{Key: "config_path", Value: *configPath},
 		domain.Field{Key: "server_address", Value: cfg.Server.Address},
-		domain.Field{Key: "upstream_url", Value: cfg.Upstream.URL},
+		domain.Field{Key: "backends_count", Value: len(cfg.Backends)},
 		domain.Field{Key: "log_level", Value: cfg.Logging.Level},
 	)
 
@@ -99,70 +86,22 @@ func main() {
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to initialize auth service")
 	}
-	tenantService := tenant.NewService(&cfg.Upstream, &cfg.TenantFilter, appLogger, metricsService)
+	tenantService := tenant.NewService(&cfg.TenantFilter, appLogger, metricsService)
 	accessService := access.NewService(appLogger)
 
-	// Initialize enhanced proxy service (supports both single and multiple upstreams)
-	var configData *config.EnhancedServiceConfig
-
-	if cfg.IsMultipleUpstreamsEnabled() {
-		configData, err = cfg.ToEnhancedServiceConfig()
-		if err != nil {
-			appLogger.Error("Failed to create enhanced service configuration",
-				domain.Field{Key: "error", Value: err.Error()})
-			os.Exit(1)
-		}
-	} else {
-		// Create single backend configuration
-		configData = &config.EnhancedServiceConfig{
-			Backends: []config.BackendConfig{
-				{URL: cfg.Upstream.URL, Weight: 1},
-			},
-			LoadBalancing: config.LoadBalancingConfig{
-				Strategy: "round-robin",
-			},
-			HealthCheck: config.HealthCheckConfig{
-				CheckInterval:      defaultHealthCheckInterval,
-				Timeout:            defaultHealthCheckTimeout,
-				HealthyThreshold:   defaultHealthyThreshold,
-				UnhealthyThreshold: defaultUnhealthyThreshold,
-				HealthEndpoint:     "/health",
-			},
-			Queue: config.QueueConfig{
-				MaxSize: defaultQueueMaxSize,
-				Timeout: defaultQueueTimeout,
-			},
-			Timeout:        cfg.Upstream.Timeout,
-			MaxRetries:     cfg.Upstream.Retry.MaxRetries,
-			RetryBackoff:   cfg.Upstream.Retry.RetryDelay,
-			EnableQueueing: false, // Disabled by default for single upstream
-		}
+	// Initialize enhanced proxy service
+	if validationErr := cfg.ValidateBackends(); validationErr != nil {
+		appLogger.Error("Invalid backend configuration",
+			domain.Field{Key: "error", Value: validationErr.Error()})
+		os.Exit(1)
 	}
 
-	// Convert config.EnhancedServiceConfig to proxy.EnhancedServiceConfig
-	enhancedConfig := proxy.EnhancedServiceConfig{
-		Backends:      make([]proxy.BackendConfig, len(configData.Backends)),
-		LoadBalancing: proxy.LoadBalancingConfig{Strategy: configData.LoadBalancing.Strategy},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval:      configData.HealthCheck.CheckInterval,
-			Timeout:            configData.HealthCheck.Timeout,
-			HealthyThreshold:   configData.HealthCheck.HealthyThreshold,
-			UnhealthyThreshold: configData.HealthCheck.UnhealthyThreshold,
-			HealthEndpoint:     configData.HealthCheck.HealthEndpoint,
-		},
-		Queue:          proxy.QueueConfig{MaxSize: configData.Queue.MaxSize, Timeout: configData.Queue.Timeout},
-		Timeout:        configData.Timeout,
-		MaxRetries:     configData.MaxRetries,
-		RetryBackoff:   configData.RetryBackoff,
-		EnableQueueing: configData.EnableQueueing,
-	}
-
-	// Convert backends
-	for i, backend := range configData.Backends {
-		enhancedConfig.Backends[i] = proxy.BackendConfig{
-			URL:    backend.URL,
-			Weight: backend.Weight,
-		}
+	// Convert configuration to proxy service config
+	enhancedConfig, err := cfg.ToProxyServiceConfig()
+	if err != nil {
+		appLogger.Error("Failed to convert proxy configuration",
+			domain.Field{Key: "error", Value: err.Error()})
+		os.Exit(1)
 	}
 
 	// Create state storage based on configuration
@@ -181,6 +120,33 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create service discovery if configured
+	ctx := context.Background()
+	var serviceDiscovery domain.ServiceDiscovery
+	if storageType == string(domain.StateStorageTypeRaft) && cfg.StateStorage.Raft.PeerDiscovery.Enabled {
+		discoveryType := cfg.StateStorage.Raft.PeerDiscovery.Type
+		serviceDiscovery, err = createServiceDiscovery(
+			discoveryType,
+			cfg.StateStorage.Raft.PeerDiscovery.Kubernetes,
+			cfg.StateStorage.Raft.PeerDiscovery.DNS,
+			cfg.StateStorage.Raft.PeerDiscovery.MDNS,
+			appLogger,
+		)
+		if err != nil {
+			appLogger.Error("Failed to create service discovery",
+				domain.Field{Key: "type", Value: discoveryType},
+				domain.Field{Key: "error", Value: err.Error()})
+			os.Exit(1)
+		}
+
+		// Start service discovery
+		if startErr := serviceDiscovery.Start(ctx); startErr != nil {
+			appLogger.Error("Failed to start service discovery",
+				domain.Field{Key: "error", Value: startErr.Error()})
+			os.Exit(1)
+		}
+	}
+
 	proxyService, err := proxy.NewEnhancedService(enhancedConfig, appLogger, metricsService, stateStorage)
 	if err != nil {
 		appLogger.Error("Failed to create enhanced proxy service",
@@ -189,21 +155,15 @@ func main() {
 	}
 
 	// Start enhanced service
-	ctx := context.Background()
 	if startErr := proxyService.Start(ctx); startErr != nil {
 		appLogger.Error("Failed to start enhanced proxy service",
 			domain.Field{Key: "error", Value: startErr.Error()})
 		os.Exit(1)
 	}
 
-	if cfg.IsMultipleUpstreamsEnabled() {
-		appLogger.Info("Enhanced proxy service started with multiple upstreams",
-			domain.Field{Key: "backends", Value: len(enhancedConfig.Backends)},
-			domain.Field{Key: "strategy", Value: string(enhancedConfig.LoadBalancing.Strategy)})
-	} else {
-		appLogger.Info("Enhanced proxy service started with single upstream",
-			domain.Field{Key: "upstream_url", Value: cfg.Upstream.URL})
-	}
+	appLogger.Info("Proxy service started",
+		domain.Field{Key: "backends", Value: len(enhancedConfig.Backends)},
+		domain.Field{Key: "strategy", Value: string(enhancedConfig.LoadBalancing.Strategy)})
 
 	// Initialize main gateway handler
 	gatewayHandler := handlers.NewGatewayHandler(
@@ -216,7 +176,7 @@ func main() {
 	)
 
 	// Initialize health check handler
-	healthHandler := handlers.NewHealthHandler(appLogger, version)
+	healthHandler := handlers.NewHealthHandler(appLogger, version, proxyService)
 
 	// Setup HTTP router
 	mux := http.NewServeMux()
@@ -285,6 +245,16 @@ func createStateStorage(
 	logger domain.Logger,
 ) (domain.StateStorage, error) {
 	return statestorage.NewStateStorage(storageConfig, storageType, nodeID, logger)
+}
+
+func createServiceDiscovery(
+	discoveryType string,
+	kubeConfig config.KubernetesDiscoveryConfig,
+	dnsConfig config.DNSDiscoveryConfig,
+	mdnsConfig config.MDNSDiscoveryConfig,
+	logger domain.Logger,
+) (domain.ServiceDiscovery, error) {
+	return discovery.NewServiceDiscovery(discoveryType, kubeConfig, dnsConfig, mdnsConfig, logger)
 }
 
 // showVersionInfo displays version information to stdout.

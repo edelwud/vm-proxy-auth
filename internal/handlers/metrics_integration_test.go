@@ -35,10 +35,6 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create other services
-	upstreamConfig := config.UpstreamSettings{
-		URL: "http://localhost:8428",
-	}
-
 	tenantConfig := config.TenantFilterSettings{
 		Strategy: "or_conditions",
 		Labels: config.TenantFilterLabels{
@@ -48,15 +44,15 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 		},
 	}
 
-	tenantService := tenant.NewService(&upstreamConfig, &tenantConfig, logger, metricsService)
+	tenantService := tenant.NewService(&tenantConfig, logger, metricsService)
 	accessService := access.NewService(logger)
 
-	// Create enhanced proxy service for single upstream
+	// Create enhanced proxy service
 	enhancedConfig := proxy.EnhancedServiceConfig{
 		Backends: []proxy.BackendConfig{
 			{URL: "http://localhost:8428", Weight: 1},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{Strategy: "round-robin"},
+		LoadBalancing: proxy.LoadBalancingConfig{Strategy: domain.LoadBalancingStrategyRoundRobin},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval:      30 * time.Second,
 			Timeout:            10 * time.Second,
@@ -133,7 +129,7 @@ func TestMetricsIntegration_HealthCheck(t *testing.T) {
 	metricsService := metrics.NewService(logger)
 
 	// Create health handler
-	healthHandler := handlers.NewHealthHandler(logger, "test")
+	healthHandler := handlers.NewHealthHandler(logger, "test", nil)
 
 	// Create request
 	req := httptest.NewRequest(http.MethodGet, "/health", http.NoBody)

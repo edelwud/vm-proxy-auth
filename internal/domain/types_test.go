@@ -137,17 +137,17 @@ func TestLoadBalancingStrategy_IsValid(t *testing.T) {
 	}{
 		{
 			name:     "round robin is valid",
-			strategy: domain.LoadBalancingRoundRobin,
+			strategy: domain.LoadBalancingStrategyRoundRobin,
 			valid:    true,
 		},
 		{
 			name:     "weighted round robin is valid",
-			strategy: domain.LoadBalancingWeightedRoundRobin,
+			strategy: domain.LoadBalancingStrategyWeighted,
 			valid:    true,
 		},
 		{
 			name:     "least connections is valid",
-			strategy: domain.LoadBalancingLeastConnections,
+			strategy: domain.LoadBalancingStrategyLeastConnection,
 			valid:    true,
 		},
 		{

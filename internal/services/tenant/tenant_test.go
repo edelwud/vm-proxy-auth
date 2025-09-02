@@ -19,12 +19,8 @@ func TestService_FilterQuery_ORStrategy(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
-	upstreamCfg := &config.UpstreamSettings{
-		URL: "https://test.example.com",
-	}
-
 	tenantCfg := &config.TenantFilterSettings{
-		Strategy: "or_conditions", // Use secure OR strategy
+		Strategy: string(domain.TenantFilterStrategyOrConditions),
 		Labels: config.TenantFilterLabels{
 			AccountLabel: "vm_account_id",
 			ProjectLabel: "vm_project_id",
@@ -32,7 +28,7 @@ func TestService_FilterQuery_ORStrategy(t *testing.T) {
 		},
 	}
 
-	service := tenant.NewService(upstreamCfg, tenantCfg, logger, metrics)
+	service := tenant.NewService(tenantCfg, logger, metrics)
 
 	user := &domain.User{
 		ID: "test-user",
@@ -55,16 +51,12 @@ func TestService_FilterQuery_ORStrategy(t *testing.T) {
 	assert.Contains(t, filteredQuery, " or ")
 }
 
-func TestService_FilterQuery_SingleTenant(t *testing.T) {
+func TestService_FilterQuery_OneTenant(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
-	upstreamCfg := &config.UpstreamSettings{
-		URL: "https://test.example.com",
-	}
-
 	tenantCfg := &config.TenantFilterSettings{
-		Strategy: "or_conditions", // OR strategy configured
+		Strategy: string(domain.TenantFilterStrategyOrConditions),
 		Labels: config.TenantFilterLabels{
 			AccountLabel: "vm_account_id",
 			ProjectLabel: "vm_project_id",
@@ -72,12 +64,12 @@ func TestService_FilterQuery_SingleTenant(t *testing.T) {
 		},
 	}
 
-	service := tenant.NewService(upstreamCfg, tenantCfg, logger, metrics)
+	service := tenant.NewService(tenantCfg, logger, metrics)
 
 	user := &domain.User{
 		ID: "test-user",
 		VMTenants: []domain.VMTenant{
-			{AccountID: "1000", ProjectID: "10"}, // Single tenant
+			{AccountID: "1000", ProjectID: "10"},
 		},
 	}
 
@@ -85,25 +77,20 @@ func TestService_FilterQuery_SingleTenant(t *testing.T) {
 	filteredQuery, err := service.FilterQuery(context.Background(), user, originalQuery)
 	require.NoError(t, err)
 
-	t.Logf("Single tenant result: %s", filteredQuery)
+	t.Logf("One tenant result: %s", filteredQuery)
 
-	// With a single tenant, the query should now have the labels injected
-	assert.NotEqual(t, originalQuery, filteredQuery, "Query should be modified for single tenant")
+	assert.NotEqual(t, originalQuery, filteredQuery, "Query should be modified")
 	assert.Contains(t, filteredQuery, "vm_account_id=\"1000\"")
 	assert.Contains(t, filteredQuery, "vm_project_id=\"10\"")
-	assert.NotContains(t, filteredQuery, " or ", "OR should not be used for a single tenant")
+	assert.NotContains(t, filteredQuery, " or ", "OR should not be used for one tenant")
 }
 
 func TestService_FilterQuery_ComplexQuery_ORStrategy(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
-	upstreamCfg := &config.UpstreamSettings{
-		URL: "https://test.example.com",
-	}
-
 	tenantCfg := &config.TenantFilterSettings{
-		Strategy: "or_conditions",
+		Strategy: string(domain.TenantFilterStrategyOrConditions),
 		Labels: config.TenantFilterLabels{
 			AccountLabel: "vm_account_id",
 			ProjectLabel: "vm_project_id",
@@ -111,7 +98,7 @@ func TestService_FilterQuery_ComplexQuery_ORStrategy(t *testing.T) {
 		},
 	}
 
-	service := tenant.NewService(upstreamCfg, tenantCfg, logger, metrics)
+	service := tenant.NewService(tenantCfg, logger, metrics)
 
 	user := &domain.User{
 		ID: "test-user",
@@ -183,12 +170,8 @@ func TestService_CanAccessTenant(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
-	upstreamCfg := &config.UpstreamSettings{
-		URL: "https://test.example.com",
-	}
-
 	tenantCfg := &config.TenantFilterSettings{
-		Strategy: "or_conditions",
+		Strategy: string(domain.TenantFilterStrategyOrConditions),
 		Labels: config.TenantFilterLabels{
 			AccountLabel: "vm_account_id",
 			ProjectLabel: "vm_project_id",
@@ -196,7 +179,7 @@ func TestService_CanAccessTenant(t *testing.T) {
 		},
 	}
 
-	service := tenant.NewService(upstreamCfg, tenantCfg, logger, metrics)
+	service := tenant.NewService(tenantCfg, logger, metrics)
 
 	t.Run("access_allowed_by_account_id", func(t *testing.T) {
 		user := &domain.User{
@@ -260,12 +243,8 @@ func TestService_DetermineTargetTenant(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
-	upstreamCfg := &config.UpstreamSettings{
-		URL: "https://test.example.com",
-	}
-
 	tenantCfg := &config.TenantFilterSettings{
-		Strategy: "or_conditions",
+		Strategy: string(domain.TenantFilterStrategyOrConditions),
 		Labels: config.TenantFilterLabels{
 			AccountLabel: "vm_account_id",
 			ProjectLabel: "vm_project_id",
@@ -273,7 +252,7 @@ func TestService_DetermineTargetTenant(t *testing.T) {
 		},
 	}
 
-	service := tenant.NewService(upstreamCfg, tenantCfg, logger, metrics)
+	service := tenant.NewService(tenantCfg, logger, metrics)
 
 	t.Run("use_tenant_from_header_x_prometheus_tenant", func(t *testing.T) {
 		user := &domain.User{

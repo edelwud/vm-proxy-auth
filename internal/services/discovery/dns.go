@@ -14,14 +14,6 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
-const (
-	dnsDefaultUpdateInterval   = 30 * time.Second
-	dnsDefaultPort             = 8080
-	dnsDefaultRaftPort         = 9000
-	dnsDefaultTTL              = 2 * time.Minute
-	dnsDefaultEventChannelSize = 100
-)
-
 // DNSDiscovery implements service discovery using DNS lookups.
 type DNSDiscovery struct {
 	config   config.DNSDiscoveryConfig
@@ -37,25 +29,25 @@ type DNSDiscovery struct {
 func NewDNSDiscovery(config config.DNSDiscoveryConfig, logger domain.Logger) *DNSDiscovery {
 	// Set defaults
 	if config.UpdateInterval == 0 {
-		config.UpdateInterval = dnsDefaultUpdateInterval
+		config.UpdateInterval = domain.DefaultDNSUpdateInterval
 	}
 	if config.Port == 0 {
-		config.Port = dnsDefaultPort
+		config.Port = domain.DefaultDNSPort
 	}
 	if config.RaftPort == 0 {
-		config.RaftPort = dnsDefaultRaftPort
+		config.RaftPort = domain.DefaultDNSRaftPort
 	}
 	if config.SRVService == "" {
-		config.SRVService = "vm-proxy-auth"
+		config.SRVService = string(domain.DefaultDNSSRVService)
 	}
 	if config.SRVProtocol == "" {
-		config.SRVProtocol = "tcp"
+		config.SRVProtocol = string(domain.DefaultDNSSRVProtocol)
 	}
 
 	return &DNSDiscovery{
 		config:   config,
 		logger:   logger,
-		watchCh:  make(chan domain.ServiceDiscoveryEvent, dnsDefaultEventChannelSize),
+		watchCh:  make(chan domain.ServiceDiscoveryEvent, domain.DefaultDNSEventChannelSize),
 		stopCh:   make(chan struct{}),
 		lastSeen: make(map[string]time.Time),
 	}
@@ -182,8 +174,16 @@ func (d *DNSDiscovery) performDiscovery(ctx context.Context) {
 	// Discover peers
 	peers, err := d.DiscoverPeers(ctx)
 	if err != nil {
-		d.logger.Error("Failed to discover peers",
-			domain.Field{Key: "error", Value: err.Error()})
+		// Check if it's a DNS lookup failure (common in development)
+		if strings.Contains(err.Error(), "no such host") {
+			d.logger.Debug("DNS lookup failed (expected in development without DNS setup)",
+				domain.Field{Key: "error", Value: err.Error()},
+				domain.Field{Key: "domain", Value: d.config.Domain},
+				domain.Field{Key: "srv_service", Value: d.config.SRVService})
+		} else {
+			d.logger.Error("Failed to discover peers",
+				domain.Field{Key: "error", Value: err.Error()})
+		}
 	} else {
 		d.processPeerChanges(peers)
 	}
@@ -191,8 +191,15 @@ func (d *DNSDiscovery) performDiscovery(ctx context.Context) {
 	// Discover backends
 	backends, err := d.DiscoverBackends(ctx)
 	if err != nil {
-		d.logger.Error("Failed to discover backends",
-			domain.Field{Key: "error", Value: err.Error()})
+		// Check if it's a DNS lookup failure (common in development)
+		if strings.Contains(err.Error(), "no such host") {
+			d.logger.Debug("DNS backend lookup failed (expected in development without DNS setup)",
+				domain.Field{Key: "error", Value: err.Error()},
+				domain.Field{Key: "domain", Value: d.config.Domain})
+		} else {
+			d.logger.Error("Failed to discover backends",
+				domain.Field{Key: "error", Value: err.Error()})
+		}
 	} else {
 		d.processBackendChanges(backends)
 	}
@@ -268,7 +275,7 @@ func (d *DNSDiscovery) discoverPeersViaA(ctx context.Context) ([]*domain.PeerInf
 
 // discoverBackendsViaSRV discovers backends using SRV records.
 func (d *DNSDiscovery) discoverBackendsViaSRV(ctx context.Context) ([]*domain.BackendInfo, error) {
-	backendService := "vm-backend"
+	backendService := domain.DefaultDNSBackendService
 	srvName := fmt.Sprintf("_%s._%s.%s", backendService, d.config.SRVProtocol, d.config.Domain)
 
 	resolver := &net.Resolver{}
@@ -349,7 +356,7 @@ func (d *DNSDiscovery) processPeerChanges(peers []*domain.PeerInfo) {
 	// Check for removed peers (not seen for TTL period)
 	now := time.Now()
 	for nodeID, lastSeen := range d.lastSeen {
-		if _, exists := currentPeers[nodeID]; !exists && now.Sub(lastSeen) > dnsDefaultTTL {
+		if _, exists := currentPeers[nodeID]; !exists && now.Sub(lastSeen) > domain.DefaultDNSTTL {
 			d.sendEvent(
 				domain.ServiceDiscoveryEventTypePeerLeft,
 				&domain.PeerInfo{NodeID: nodeID},

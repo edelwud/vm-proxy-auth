@@ -42,7 +42,13 @@ func TestServiceDiscoveryInterface(t *testing.T) {
 		}
 
 		// Test DNS creation
-		dnsDiscovery, err := discovery.NewServiceDiscovery("dns", kubeConfig, dnsConfig, logger)
+		dnsDiscovery, err := discovery.NewServiceDiscovery(
+			"dns",
+			kubeConfig,
+			dnsConfig,
+			config.MDNSDiscoveryConfig{},
+			logger,
+		)
 		require.NoError(t, err)
 		require.NotNil(t, dnsDiscovery)
 
@@ -50,7 +56,13 @@ func TestServiceDiscoveryInterface(t *testing.T) {
 		_ = dnsDiscovery
 
 		// Test unsupported type
-		invalidDiscovery, err := discovery.NewServiceDiscovery("invalid", kubeConfig, dnsConfig, logger)
+		invalidDiscovery, err := discovery.NewServiceDiscovery(
+			"invalid",
+			kubeConfig,
+			dnsConfig,
+			config.MDNSDiscoveryConfig{},
+			logger,
+		)
 		require.Error(t, err)
 		require.Nil(t, invalidDiscovery)
 	})

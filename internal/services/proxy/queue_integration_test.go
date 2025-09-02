@@ -60,7 +60,7 @@ func TestQueueIntegrationWithBackendFailures(t *testing.T) {
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval:      200 * time.Millisecond,
@@ -225,7 +225,7 @@ func TestQueueStats(t *testing.T) {
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval:      100 * time.Millisecond,

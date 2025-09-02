@@ -25,7 +25,7 @@ func TestFactory_CreateLoadBalancer_RoundRobin(t *testing.T) {
 	factory := loadbalancer.NewFactory(logger)
 	backends := createTestBackends()
 
-	lb, err := factory.CreateLoadBalancer(domain.LoadBalancingRoundRobin, backends)
+	lb, err := factory.CreateLoadBalancer(domain.LoadBalancingStrategyRoundRobin, backends)
 	require.NoError(t, err)
 	require.NotNil(t, lb)
 
@@ -39,7 +39,7 @@ func TestFactory_CreateLoadBalancer_WeightedRoundRobin(t *testing.T) {
 	factory := loadbalancer.NewFactory(logger)
 	backends := createTestBackends()
 
-	lb, err := factory.CreateLoadBalancer(domain.LoadBalancingWeightedRoundRobin, backends)
+	lb, err := factory.CreateLoadBalancer(domain.LoadBalancingStrategyWeighted, backends)
 	require.NoError(t, err)
 	require.NotNil(t, lb)
 
@@ -53,7 +53,7 @@ func TestFactory_CreateLoadBalancer_LeastConnections(t *testing.T) {
 	factory := loadbalancer.NewFactory(logger)
 	backends := createTestBackends()
 
-	lb, err := factory.CreateLoadBalancer(domain.LoadBalancingLeastConnections, backends)
+	lb, err := factory.CreateLoadBalancer(domain.LoadBalancingStrategyLeastConnection, backends)
 	require.NoError(t, err)
 	require.NotNil(t, lb)
 
@@ -77,7 +77,7 @@ func TestFactory_CreateLoadBalancer_EmptyBackends(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	factory := loadbalancer.NewFactory(logger)
 
-	lb, err := factory.CreateLoadBalancer(domain.LoadBalancingRoundRobin, []domain.Backend{})
+	lb, err := factory.CreateLoadBalancer(domain.LoadBalancingStrategyRoundRobin, []domain.Backend{})
 	require.Error(t, err)
 	assert.Nil(t, lb)
 	assert.Contains(t, err.Error(), "cannot create load balancer with empty backends list")
@@ -90,9 +90,9 @@ func TestFactory_GetSupportedStrategies(t *testing.T) {
 	strategies := factory.GetSupportedStrategies()
 
 	expectedStrategies := []domain.LoadBalancingStrategy{
-		domain.LoadBalancingRoundRobin,
-		domain.LoadBalancingWeightedRoundRobin,
-		domain.LoadBalancingLeastConnections,
+		domain.LoadBalancingStrategyRoundRobin,
+		domain.LoadBalancingStrategyWeighted,
+		domain.LoadBalancingStrategyLeastConnection,
 	}
 
 	assert.ElementsMatch(t, expectedStrategies, strategies)
@@ -110,17 +110,17 @@ func TestFactory_ValidateStrategy(t *testing.T) {
 	}{
 		{
 			name:     "Valid Round Robin",
-			strategy: domain.LoadBalancingRoundRobin,
+			strategy: domain.LoadBalancingStrategyRoundRobin,
 			wantErr:  false,
 		},
 		{
 			name:     "Valid Weighted Round Robin",
-			strategy: domain.LoadBalancingWeightedRoundRobin,
+			strategy: domain.LoadBalancingStrategyWeighted,
 			wantErr:  false,
 		},
 		{
 			name:     "Valid Least Connections",
-			strategy: domain.LoadBalancingLeastConnections,
+			strategy: domain.LoadBalancingStrategyLeastConnection,
 			wantErr:  false,
 		},
 		{
@@ -152,15 +152,15 @@ func TestFactory_GetStrategyDescription(t *testing.T) {
 		shouldContain string
 	}{
 		{
-			strategy:      domain.LoadBalancingRoundRobin,
+			strategy:      domain.LoadBalancingStrategyRoundRobin,
 			shouldContain: "Round Robin",
 		},
 		{
-			strategy:      domain.LoadBalancingWeightedRoundRobin,
+			strategy:      domain.LoadBalancingStrategyWeighted,
 			shouldContain: "Weighted Round Robin",
 		},
 		{
-			strategy:      domain.LoadBalancingLeastConnections,
+			strategy:      domain.LoadBalancingStrategyLeastConnection,
 			shouldContain: "Least Connections",
 		},
 		{
@@ -184,9 +184,9 @@ func TestFactory_CreatedLoadBalancersWork(t *testing.T) {
 	backends := createTestBackends()
 
 	strategies := []domain.LoadBalancingStrategy{
-		domain.LoadBalancingRoundRobin,
-		domain.LoadBalancingWeightedRoundRobin,
-		domain.LoadBalancingLeastConnections,
+		domain.LoadBalancingStrategyRoundRobin,
+		domain.LoadBalancingStrategyWeighted,
+		domain.LoadBalancingStrategyLeastConnection,
 	}
 
 	for _, strategy := range strategies {
@@ -227,11 +227,11 @@ func TestFactory_MultipleInstancesAreSeparate(t *testing.T) {
 	backends := createTestBackends()
 
 	// Create two load balancers of the same type
-	lb1, err1 := factory.CreateLoadBalancer(domain.LoadBalancingRoundRobin, backends)
+	lb1, err1 := factory.CreateLoadBalancer(domain.LoadBalancingStrategyRoundRobin, backends)
 	require.NoError(t, err1)
 	defer lb1.Close()
 
-	lb2, err2 := factory.CreateLoadBalancer(domain.LoadBalancingRoundRobin, backends)
+	lb2, err2 := factory.CreateLoadBalancer(domain.LoadBalancingStrategyRoundRobin, backends)
 	require.NoError(t, err2)
 	defer lb2.Close()
 
@@ -254,7 +254,7 @@ func BenchmarkFactory_CreateLoadBalancer(b *testing.B) {
 	backends := createTestBackends()
 
 	for b.Loop() {
-		lb, err := factory.CreateLoadBalancer(domain.LoadBalancingRoundRobin, backends)
+		lb, err := factory.CreateLoadBalancer(domain.LoadBalancingStrategyRoundRobin, backends)
 		if err != nil {
 			b.Fatal(err)
 		}

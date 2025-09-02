@@ -2,14 +2,9 @@ package discovery
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
-)
-
-const (
-	k8sDefaultWatchTimeout = 10 * time.Minute
 )
 
 // NewServiceDiscovery creates a new service discovery instance based on type.
@@ -17,6 +12,7 @@ func NewServiceDiscovery(
 	discoveryType string,
 	kubeConfig config.KubernetesDiscoveryConfig,
 	dnsConfig config.DNSDiscoveryConfig,
+	mdnsConfig config.MDNSDiscoveryConfig,
 	logger domain.Logger,
 ) (domain.ServiceDiscovery, error) {
 	switch discoveryType {
@@ -24,6 +20,8 @@ func NewServiceDiscovery(
 		return newKubernetesDiscovery(kubeConfig, logger)
 	case "dns":
 		return newDNSDiscovery(dnsConfig, logger), nil
+	case "mdns":
+		return newMDNSDiscovery(mdnsConfig, logger), nil
 	default:
 		return nil, fmt.Errorf("unsupported service discovery type: %s", discoveryType)
 	}
@@ -53,4 +51,12 @@ func newDNSDiscovery(
 	logger domain.Logger,
 ) domain.ServiceDiscovery {
 	return NewDNSDiscovery(config, logger)
+}
+
+// newMDNSDiscovery creates a new mDNS service discovery instance.
+func newMDNSDiscovery(
+	config config.MDNSDiscoveryConfig,
+	logger domain.Logger,
+) domain.ServiceDiscovery {
+	return NewMDNSDiscovery(config, logger)
 }

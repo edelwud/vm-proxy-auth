@@ -86,7 +86,7 @@ func TestHealthCheckerLoadBalancerIntegration(t *testing.T) {
 			{URL: backend2.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval:      50 * time.Millisecond, // Fast for testing
@@ -228,7 +228,7 @@ func TestHealthCheckerMaintenanceMode(t *testing.T) {
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval:      50 * time.Millisecond,
@@ -344,7 +344,7 @@ func TestHealthCheckerWithWeightedLoadBalancer(t *testing.T) {
 			{URL: backend2.URL, Weight: 1}, // Lower weight
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingWeightedRoundRobin,
+			Strategy: domain.LoadBalancingStrategyWeighted,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval:      50 * time.Millisecond,

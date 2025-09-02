@@ -1,0 +1,106 @@
+# Kubernetes Deployment with Raft State Storage and Service Discovery
+# For distributed deployments with automatic peer discovery
+
+server:
+  address: "0.0.0.0:8080"
+  timeouts:
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    idleTimeout: "60s"
+
+# Kubernetes service backends (discovered dynamically)
+backends:
+  - url: "http://vm-service.monitoring.svc.cluster.local:8428"
+    weight: 1
+
+loadBalancing:
+  strategy: "round-robin"
+
+healthCheck:
+  checkInterval: "30s"
+  timeout: "10s"
+  healthyThreshold: 2
+  unhealthyThreshold: 3
+  healthEndpoint: "/health"
+
+queue:
+  enabled: true
+  maxSize: 2000
+  timeout: "8s"
+
+timeout: "45s"
+maxRetries: 4
+retryBackoff: "150ms"
+
+# Raft consensus for distributed state
+stateStorage:
+  type: "raft"
+  raft:
+    nodeId: "${HOSTNAME}"
+    peers: []  # Populated via service discovery
+    dataDir: "/data/raft"
+    peerDiscovery:
+      enabled: true
+      type: "kubernetes"
+      kubernetes:
+        namespace: "vm-proxy-auth"
+        peerLabelSelector: "app=vm-proxy-auth,component=gateway"
+        backendLabelSelector: "app=victoriametrics"
+        httpPortName: "http"
+        raftPortName: "raft"
+        watchTimeout: "30s"
+
+# Kubernetes-compatible JWT
+auth:
+  jwt:
+    algorithm: "RS256"
+    jwksUrl: "https://kubernetes.default.svc/openid/v1/jwks"
+    tokenTtl: "1h"
+    cacheTtl: "10m"
+    validation:
+      validateAudience: true
+      validateIssuer: true
+      requiredIssuer: "https://kubernetes.default.svc"
+      requiredAudience: ["vm-proxy-auth"]
+    claims:
+      userGroupsClaim: "groups"
+
+# Kubernetes RBAC-based tenant mapping
+tenantMapping:
+  - groups: ["system:masters", "cluster-admins"]
+    vmTenants:
+      - accountId: "0"
+        projectId: "system"
+    readOnly: false
+  - groups: ["monitoring:admin"]
+    vmTenants:
+      - accountId: "100"
+        projectId: "monitoring"
+    readOnly: false
+  - groups: ["developers"]
+    vmTenants:
+      - accountId: "200"
+        projectId: "dev"
+    readOnly: false
+  - groups: ["monitoring:readonly"]
+    vmTenants:
+      - accountId: "100"
+        projectId: "monitoring"
+      - accountId: "200"
+        projectId: "dev"
+    readOnly: true
+
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: true
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+logging:
+  level: "info"
+  format: "json"

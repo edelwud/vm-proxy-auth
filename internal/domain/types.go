@@ -223,10 +223,29 @@ type ContextualLogger interface {
 type TenantFilterStrategy string
 
 const (
-	// TenantFilterStrategyOR uses separate OR conditions for each tenant pair.
+	// TenantFilterStrategyOrConditions uses separate OR conditions for each tenant pair.
 	// This ensures exact tenant isolation and prevents cross-tenant data leakage.
 	// Example: {vm_account_id="1000"} or {vm_account_id="2000",vm_project_id="20"}.
-	TenantFilterStrategyOR TenantFilterStrategy = "or_conditions"
+	TenantFilterStrategyOrConditions TenantFilterStrategy = "orConditions"
+	// TenantFilterStrategyAndConditions uses AND conditions for tenant filtering.
+	TenantFilterStrategyAndConditions TenantFilterStrategy = "andConditions"
+)
+
+// StateStorageType defines the type of state storage backend.
+type StateStorageType string
+
+const (
+	StateStorageTypeLocal StateStorageType = "local"
+	StateStorageTypeRedis StateStorageType = "redis"
+	StateStorageTypeRaft  StateStorageType = "raft"
+)
+
+// JWTAlgorithm defines JWT signing algorithms.
+type JWTAlgorithm string
+
+const (
+	JWTAlgorithmHS256 JWTAlgorithm = "HS256"
+	JWTAlgorithmRS256 JWTAlgorithm = "RS256"
 )
 
 // TenantFilterConfig contains configuration for tenant filtering strategy.
@@ -236,7 +255,7 @@ type TenantFilterConfig struct {
 
 // IsValid validates the tenant filter strategy.
 func (s TenantFilterStrategy) IsValid() bool {
-	return s == TenantFilterStrategyOR
+	return s == TenantFilterStrategyOrConditions || s == TenantFilterStrategyAndConditions
 }
 
 // TenantFilter represents a filter that can be applied to PromQL queries.
@@ -330,18 +349,18 @@ func (bs BackendState) IsAvailableWithFallback() bool {
 type LoadBalancingStrategy string
 
 const (
-	// LoadBalancingRoundRobin distributes requests in round-robin fashion.
-	LoadBalancingRoundRobin LoadBalancingStrategy = "round-robin"
-	// LoadBalancingWeightedRoundRobin distributes requests based on backend weights.
-	LoadBalancingWeightedRoundRobin LoadBalancingStrategy = "weighted-round-robin"
-	// LoadBalancingLeastConnections routes to backend with fewest active connections.
-	LoadBalancingLeastConnections LoadBalancingStrategy = "least-connections"
+	// LoadBalancingStrategyRoundRobin distributes requests in round-robin fashion.
+	LoadBalancingStrategyRoundRobin LoadBalancingStrategy = "round-robin"
+	// LoadBalancingStrategyWeighted distributes requests based on backend weights.
+	LoadBalancingStrategyWeighted LoadBalancingStrategy = "weighted-round-robin"
+	// LoadBalancingStrategyLeastConnection routes to backend with fewest active connections.
+	LoadBalancingStrategyLeastConnection LoadBalancingStrategy = "least-connections"
 )
 
 // IsValid validates the load balancing strategy.
 func (lbs LoadBalancingStrategy) IsValid() bool {
 	switch lbs {
-	case LoadBalancingRoundRobin, LoadBalancingWeightedRoundRobin, LoadBalancingLeastConnections:
+	case LoadBalancingStrategyRoundRobin, LoadBalancingStrategyWeighted, LoadBalancingStrategyLeastConnection:
 		return true
 	default:
 		return false

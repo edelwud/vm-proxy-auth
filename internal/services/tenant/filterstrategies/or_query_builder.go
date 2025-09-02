@@ -36,7 +36,6 @@ func NewORQueryBuilder(logger domain.Logger) *ORQueryBuilder {
 func (b *ORQueryBuilder) BuildSecureQuery(
 	originalQuery string,
 	tenants []domain.VMTenant,
-	upstreamCfg *config.UpstreamSettings,
 	tenantCfg *config.TenantFilterSettings,
 ) (string, error) {
 	if len(tenants) == 0 {
@@ -46,7 +45,7 @@ func (b *ORQueryBuilder) BuildSecureQuery(
 	if len(tenants) == 1 {
 		// Single tenant - inject labels directly without OR
 		promqlInjector := NewPromQLTenantInjector(b.logger)
-		return promqlInjector.InjectTenantLabels(originalQuery, tenants, upstreamCfg, tenantCfg)
+		return promqlInjector.InjectTenantLabels(originalQuery, tenants, tenantCfg)
 	}
 
 	// Parse the original query

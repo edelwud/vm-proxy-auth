@@ -152,7 +152,7 @@ func TestCompleteSystemIntegration(t *testing.T) {
 			{URL: backend3.URL, Weight: 1}, // Tertiary backend
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingWeightedRoundRobin,
+			Strategy: domain.LoadBalancingStrategyWeighted,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval:      100 * time.Millisecond, // Fast for testing

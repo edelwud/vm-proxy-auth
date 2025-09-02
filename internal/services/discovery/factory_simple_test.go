@@ -20,7 +20,7 @@ func TestNewServiceDiscovery_DNS(t *testing.T) {
 		Domain: "test.local",
 	}
 
-	discovery, err := discovery.NewServiceDiscovery("dns", kubeConfig, dnsConfig, logger)
+	discovery, err := discovery.NewServiceDiscovery("dns", kubeConfig, dnsConfig, config.MDNSDiscoveryConfig{}, logger)
 	require.NoError(t, err)
 	require.NotNil(t, discovery)
 }
@@ -31,7 +31,13 @@ func TestNewServiceDiscovery_UnsupportedType(t *testing.T) {
 	kubeConfig := config.KubernetesDiscoveryConfig{}
 	dnsConfig := config.DNSDiscoveryConfig{}
 
-	discovery, err := discovery.NewServiceDiscovery("unsupported", kubeConfig, dnsConfig, logger)
+	discovery, err := discovery.NewServiceDiscovery(
+		"unsupported",
+		kubeConfig,
+		dnsConfig,
+		config.MDNSDiscoveryConfig{},
+		logger,
+	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unsupported service discovery type")
 	require.Nil(t, discovery)

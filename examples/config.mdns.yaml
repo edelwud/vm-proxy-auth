@@ -1,0 +1,88 @@
+# mDNS Discovery Configuration
+# Ideal for local development and small deployments with automatic service discovery
+
+server:
+  address: "0.0.0.0:8080"
+  timeouts:
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    idleTimeout: "60s"
+
+# Backends will be discovered automatically via mDNS
+backends:
+  - url: "http://localhost:8428"  # Fallback backend
+    weight: 1
+
+loadBalancing:
+  strategy: "round-robin"
+
+healthCheck:
+  checkInterval: "30s"
+  timeout: "10s"
+  healthyThreshold: 2
+  unhealthyThreshold: 3
+  healthEndpoint: "/health"
+
+queue:
+  enabled: true
+  maxSize: 1000
+  timeout: "10s"
+
+timeout: "30s"
+maxRetries: 3
+retryBackoff: "200ms"
+
+# Raft with mDNS peer discovery
+stateStorage:
+  type: "raft"
+  raft:
+    nodeId: "node-${HOSTNAME:-local}"
+    peers: []  # Empty - will be discovered via mDNS
+    dataDir: "/tmp/vm-proxy-auth/raft-data"
+    peerDiscovery:
+      enabled: true
+      type: "mdns"
+      mdns:
+        serviceType: "_vm-proxy-auth._tcp"
+        serviceDomain: "local."
+        port: 8080
+        raftPort: 9000
+        updateInterval: "15s"
+        disableIpv6: true  # Avoid IPv6 multicast binding issues
+
+# Development JWT
+auth:
+  jwt:
+    algorithm: "HS256"
+    secret: "dev-secret-for-mdns-testing"
+    tokenTtl: "24h"
+    cacheTtl: "5m"
+    validation:
+      validateAudience: false
+      validateIssuer: false
+    claims:
+      userGroupsClaim: "groups"
+
+# Simple tenant mapping
+tenantMapping:
+  - groups: ["dev", "admin"]
+    vmTenants:
+      - accountId: "1"
+        projectId: "development"
+    readOnly: false
+
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: true
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+# Debug logging for mDNS discovery
+logging:
+  level: "debug"
+  format: "pretty"

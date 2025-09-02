@@ -18,14 +18,7 @@ import (
 
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
-)
-
-const (
-	raftMaxConnections   = 3
-	raftApplyTimeout     = 10 * time.Second
-	raftApplyTimeoutBulk = 30 * time.Second
-	raftWatchChannelSize = 100
-	raftMinPeerParts     = 2
+	infralogger "github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
 )
 
 // RaftStorageConfig holds Raft storage configuration.
@@ -78,8 +71,8 @@ func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logge
 	raftConfig.SnapshotThreshold = config.SnapshotThreshold
 	raftConfig.TrailingLogs = config.TrailingLogs
 
-	// Use built-in logger for Raft (we'll handle our own logging)
-	// raftConfig.Logger will use default hclog
+	// Use our structured logger adapter for consistent logging
+	raftConfig.Logger = infralogger.NewHCLogAdapter(logger)
 
 	// Create transport
 	addr, err := net.ResolveTCPAddr("tcp", config.BindAddress)
@@ -87,7 +80,13 @@ func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logge
 		return nil, fmt.Errorf("failed to resolve bind address: %w", err)
 	}
 
-	transport, err := raft.NewTCPTransport(config.BindAddress, addr, raftMaxConnections, raftApplyTimeout, os.Stderr)
+	transport, err := raft.NewTCPTransport(
+		config.BindAddress,
+		addr,
+		domain.DefaultRaftMaxConnections,
+		domain.DefaultRaftApplyTimeout,
+		os.Stderr,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create transport: %w", err)
 	}
@@ -145,14 +144,10 @@ func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logge
 		logger:      logger.With(domain.Field{Key: "component", Value: "raft.storage"}),
 	}
 
-	// Initialize peer discovery if enabled
+	// Initialize peer discovery if enabled (discovery will be set externally)
 	if config.PeerDiscovery != nil && config.PeerDiscovery.Enabled {
-		discovery, discoveryErr := rs.initializePeerDiscovery()
-		if discoveryErr != nil {
-			_ = rs.Close()
-			return nil, fmt.Errorf("failed to initialize peer discovery: %w", discoveryErr)
-		}
-		rs.discovery = discovery
+		rs.logger.Info("Peer discovery enabled, will be initialized externally",
+			domain.Field{Key: "discovery_type", Value: config.PeerDiscovery.Type})
 	}
 
 	// Bootstrap cluster if needed
@@ -183,7 +178,28 @@ func (rs *RaftStorage) bootstrapCluster() error {
 		return nil
 	}
 
-	// Bootstrap new cluster
+	// Determine bootstrap strategy
+	hasPeers := len(rs.config.Peers) > 0
+	hasDiscovery := rs.config.PeerDiscovery != nil && rs.config.PeerDiscovery.Enabled
+
+	// Case 1: Static peers configuration
+	if hasPeers {
+		return rs.bootstrapWithStaticPeers()
+	}
+
+	// Case 2: Peer discovery enabled but no static peers
+	if hasDiscovery {
+		rs.logger.Info("Bootstrapping single-node cluster, peers will be discovered and added dynamically")
+		return rs.bootstrapSingleNode()
+	}
+
+	// Case 3: Single node deployment (no peers, no discovery)
+	rs.logger.Info("Bootstrapping single-node cluster for standalone deployment")
+	return rs.bootstrapSingleNode()
+}
+
+// bootstrapWithStaticPeers bootstraps cluster with statically configured peers.
+func (rs *RaftStorage) bootstrapWithStaticPeers() error {
 	servers := make([]raft.Server, 0, len(rs.config.Peers)+1)
 
 	// Add self as server
@@ -197,7 +213,7 @@ func (rs *RaftStorage) bootstrapCluster() error {
 		if peer != rs.config.NodeID+":"+rs.config.BindAddress {
 			// Parse peer format: "nodeID:address"
 			parts := strings.Split(peer, ":")
-			if len(parts) >= raftMinPeerParts {
+			if len(parts) >= domain.DefaultRaftMinPeerParts {
 				nodeID := parts[0]
 				address := strings.Join(parts[1:], ":")
 				servers = append(servers, raft.Server{
@@ -208,21 +224,45 @@ func (rs *RaftStorage) bootstrapCluster() error {
 		}
 	}
 
-	// Bootstrap cluster with all known servers
-	if len(servers) > 0 {
-		configuration := raft.Configuration{Servers: servers}
-		future := rs.raft.BootstrapCluster(configuration)
-		if bootstrapErr := future.Error(); bootstrapErr != nil {
-			rs.logger.Error("Failed to bootstrap cluster",
-				domain.Field{Key: "error", Value: bootstrapErr.Error()},
-				domain.Field{Key: "servers", Value: fmt.Sprintf("%+v", servers)})
-			return fmt.Errorf("failed to bootstrap cluster: %w", bootstrapErr)
-		}
-
-		rs.logger.Info("Successfully bootstrapped Raft cluster",
-			domain.Field{Key: "servers_count", Value: len(servers)},
-			domain.Field{Key: "node_id", Value: rs.config.NodeID})
+	if len(servers) == 0 {
+		return errors.New("no valid servers to bootstrap cluster")
 	}
+
+	configuration := raft.Configuration{Servers: servers}
+	future := rs.raft.BootstrapCluster(configuration)
+	if bootstrapErr := future.Error(); bootstrapErr != nil {
+		rs.logger.Error("Failed to bootstrap cluster with static peers",
+			domain.Field{Key: "error", Value: bootstrapErr.Error()},
+			domain.Field{Key: "servers", Value: fmt.Sprintf("%+v", servers)})
+		return fmt.Errorf("failed to bootstrap cluster: %w", bootstrapErr)
+	}
+
+	rs.logger.Info("Successfully bootstrapped Raft cluster with static peers",
+		domain.Field{Key: "servers_count", Value: len(servers)},
+		domain.Field{Key: "node_id", Value: rs.config.NodeID})
+
+	return nil
+}
+
+// bootstrapSingleNode bootstraps a single-node cluster.
+func (rs *RaftStorage) bootstrapSingleNode() error {
+	servers := []raft.Server{{
+		ID:      raft.ServerID(rs.config.NodeID),
+		Address: raft.ServerAddress(rs.config.BindAddress),
+	}}
+
+	configuration := raft.Configuration{Servers: servers}
+	future := rs.raft.BootstrapCluster(configuration)
+	if bootstrapErr := future.Error(); bootstrapErr != nil {
+		rs.logger.Error("Failed to bootstrap single-node cluster",
+			domain.Field{Key: "error", Value: bootstrapErr.Error()},
+			domain.Field{Key: "node_id", Value: rs.config.NodeID})
+		return fmt.Errorf("failed to bootstrap single-node cluster: %w", bootstrapErr)
+	}
+
+	rs.logger.Info("Successfully bootstrapped single-node Raft cluster",
+		domain.Field{Key: "node_id", Value: rs.config.NodeID},
+		domain.Field{Key: "bind_address", Value: rs.config.BindAddress})
 
 	return nil
 }
@@ -273,7 +313,7 @@ func (rs *RaftStorage) Set(_ context.Context, key string, value []byte, ttl time
 		return fmt.Errorf("failed to marshal command: %w", err)
 	}
 
-	future := rs.raft.Apply(data, raftApplyTimeout)
+	future := rs.raft.Apply(data, domain.DefaultRaftApplyTimeout)
 	if applyErr := future.Error(); applyErr != nil {
 		return fmt.Errorf("failed to apply raft command: %w", applyErr)
 	}
@@ -312,7 +352,7 @@ func (rs *RaftStorage) Delete(_ context.Context, key string) error {
 		return fmt.Errorf("failed to marshal command: %w", err)
 	}
 
-	future := rs.raft.Apply(data, raftApplyTimeout)
+	future := rs.raft.Apply(data, domain.DefaultRaftApplyTimeout)
 	if applyErr := future.Error(); applyErr != nil {
 		return fmt.Errorf("failed to apply raft command: %w", applyErr)
 	}
@@ -370,7 +410,7 @@ func (rs *RaftStorage) SetMultiple(_ context.Context, items map[string][]byte, t
 		return fmt.Errorf("failed to marshal bulk command: %w", err)
 	}
 
-	future := rs.raft.Apply(data, raftApplyTimeoutBulk)
+	future := rs.raft.Apply(data, domain.DefaultRaftApplyTimeoutBulk)
 	if applyErr := future.Error(); applyErr != nil {
 		return fmt.Errorf("failed to apply bulk raft command: %w", applyErr)
 	}
@@ -388,7 +428,7 @@ func (rs *RaftStorage) Watch(ctx context.Context, keyPrefix string) (<-chan doma
 		return nil, domain.ErrStorageClosed
 	}
 
-	ch := make(chan domain.StateEvent, raftWatchChannelSize)
+	ch := make(chan domain.StateEvent, domain.DefaultRaftWatchChannelSize)
 
 	rs.mu.Lock()
 	rs.watchChans[keyPrefix] = append(rs.watchChans[keyPrefix], ch)
@@ -553,34 +593,6 @@ func (rs *RaftStorage) IsLeader() bool {
 		return false
 	}
 	return rs.raft.State() == raft.Leader
-}
-
-// initializePeerDiscovery initializes the peer discovery service.
-func (rs *RaftStorage) initializePeerDiscovery() (domain.ServiceDiscovery, error) {
-	switch rs.config.PeerDiscovery.Type {
-	case "kubernetes":
-		return rs.initializeKubernetesDiscovery()
-	case "dns":
-		return rs.initializeDNSDiscovery()
-	default:
-		return nil, fmt.Errorf("unsupported peer discovery type: %s", rs.config.PeerDiscovery.Type)
-	}
-}
-
-// initializeKubernetesDiscovery creates Kubernetes discovery service.
-func (rs *RaftStorage) initializeKubernetesDiscovery() (domain.ServiceDiscovery, error) {
-	// Create discovery factory to avoid circular dependencies
-	// Since we can't import discovery package from here, we'll use interface injection
-	rs.logger.Info("Kubernetes peer discovery will be integrated via external initialization")
-	return nil, errors.New("discovery must be set externally via SetPeerDiscovery")
-}
-
-// initializeDNSDiscovery creates DNS discovery service.
-func (rs *RaftStorage) initializeDNSDiscovery() (domain.ServiceDiscovery, error) {
-	// Create discovery factory to avoid circular dependencies
-	// Since we can't import discovery package from here, we'll use interface injection
-	rs.logger.Info("DNS peer discovery will be integrated via external initialization")
-	return nil, errors.New("discovery must be set externally via SetPeerDiscovery")
 }
 
 // SetPeerDiscovery sets the peer discovery service (called from external initialization).

@@ -26,7 +26,6 @@ func NewPromQLTenantInjector(logger domain.Logger) *PromQLTenantInjector {
 func (p *PromQLTenantInjector) InjectTenantLabels(
 	query string,
 	vmTenants []domain.VMTenant,
-	_ *config.UpstreamSettings,
 	tenantCfg *config.TenantFilterSettings,
 ) (string, error) {
 	p.logger.Debug("Starting production PromQL tenant injection",

@@ -8,12 +8,6 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
-// Queue utilization constants.
-const (
-	percentageMultiplier        = 100
-	healthyUtilizationThreshold = 90 // Queue is unhealthy if >90% full
-)
-
 // MemoryQueue implements a thread-safe in-memory request queue.
 type MemoryQueue struct {
 	queue         chan *domain.ProxyRequest
@@ -219,8 +213,8 @@ func (qs Stats) IsHealthy() bool {
 	}
 
 	// Consider queue unhealthy if it's consistently near capacity
-	utilizationPercent := float64(qs.Size) / float64(qs.MaxSize) * percentageMultiplier
-	return utilizationPercent < healthyUtilizationThreshold
+	utilizationPercent := float64(qs.Size) / float64(qs.MaxSize) * domain.DefaultQueuePercentageMultiplier
+	return utilizationPercent < domain.DefaultQueueHealthyUtilizationThreshold
 }
 
 // UtilizationPercent returns the current queue utilization as a percentage.
@@ -228,5 +222,5 @@ func (qs Stats) UtilizationPercent() float64 {
 	if qs.MaxSize == 0 {
 		return 0
 	}
-	return float64(qs.Size) / float64(qs.MaxSize) * percentageMultiplier
+	return float64(qs.Size) / float64(qs.MaxSize) * domain.DefaultQueuePercentageMultiplier
 }

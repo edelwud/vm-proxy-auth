@@ -78,7 +78,7 @@ func NewKubernetesDiscovery(config KubernetesDiscoveryConfig, logger domain.Logg
 		config.HTTPPortName = defaultHTTPPortName
 	}
 	if config.WatchTimeout == 0 {
-		config.WatchTimeout = k8sDefaultWatchTimeout
+		config.WatchTimeout = domain.DefaultK8sWatchTimeout
 	}
 
 	kd := &KubernetesDiscovery{

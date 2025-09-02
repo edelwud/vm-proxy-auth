@@ -1,0 +1,111 @@
+# Production RS256 JWT Configuration with JWKS
+# Production-ready configuration with multiple backends and Redis state storage
+
+server:
+  address: "0.0.0.0:8080"
+  timeouts:
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    idleTimeout: "60s"
+
+# Multiple backends with load balancing
+backends:
+  - url: "http://vm-backend-1:8428"
+    weight: 3
+  - url: "http://vm-backend-2:8428"
+    weight: 2
+  - url: "http://vm-backend-3:8428"
+    weight: 1
+
+loadBalancing:
+  strategy: "weighted-round-robin"
+
+healthCheck:
+  checkInterval: "30s"
+  timeout: "10s"
+  healthyThreshold: 2
+  unhealthyThreshold: 3
+  healthEndpoint: "/health"
+
+queue:
+  enabled: true
+  maxSize: 5000
+  timeout: "10s"
+
+timeout: "60s"
+maxRetries: 5
+retryBackoff: "200ms"
+
+# Redis state storage for distributed deployments
+stateStorage:
+  type: "redis"
+  redis:
+    address: "redis:6379"
+    password: ""
+    database: 0
+    keyPrefix: "vm-proxy-auth:"
+    connectTimeout: "5s"
+    readTimeout: "3s"
+    writeTimeout: "3s"
+    poolSize: 20
+    minIdleConns: 10
+    maxRetries: 3
+    minRetryBackoff: "100ms"
+    maxRetryBackoff: "1s"
+
+# Production JWT with JWKS
+auth:
+  jwt:
+    algorithm: "RS256"
+    jwksUrl: "https://your-auth-provider.com/.well-known/jwks.json"
+    tokenTtl: "1h"
+    cacheTtl: "15m"
+    validation:
+      validateAudience: true
+      validateIssuer: true
+      requiredIssuer: "https://your-auth-provider.com"
+      requiredAudience: ["vm-proxy-auth"]
+    claims:
+      userGroupsClaim: "groups"
+
+# Multi-tenant mapping
+tenantMapping:
+  - groups: ["admin", "platform-ops"]
+    vmTenants:
+      - accountId: "1000"
+        projectId: "platform"
+    readOnly: false
+  - groups: ["team-alpha"]
+    vmTenants:
+      - accountId: "2000"
+        projectId: "alpha"
+    readOnly: false
+  - groups: ["team-beta"]
+    vmTenants:
+      - accountId: "3000"
+        projectId: "beta"
+    readOnly: false
+  - groups: ["readonly-users"]
+    vmTenants:
+      - accountId: "1000"
+        projectId: "platform"
+      - accountId: "2000"
+        projectId: "alpha"
+      - accountId: "3000"
+        projectId: "beta"
+    readOnly: true
+
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: true
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+logging:
+  level: "info"
+  format: "json"
