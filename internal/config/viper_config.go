@@ -52,7 +52,7 @@ type ServerTimeouts struct {
 }
 
 type UpstreamSettings struct {
-	// Legacy single upstream configuration (for backward compatibility)
+	// Single upstream configuration
 	URL     string        `mapstructure:"url"`
 	Timeout time.Duration `mapstructure:"timeout"`
 	Retry   RetrySettings `mapstructure:"retry"`
@@ -702,5 +702,4 @@ type QueueConfig struct {
 	Timeout time.Duration `yaml:"timeout"`
 }
 
-// ToLegacyConfig converts ViperConfig to legacy Config for backward compatibility during migration.
-// This will be implemented in the next commit when we integrate the new config system.
+// ToConfig converts ViperConfig to standard Config structure.

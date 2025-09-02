@@ -21,7 +21,7 @@ import (
 )
 
 func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 	metricsService := metrics.NewService(logger)
 
 	// Create auth service with config
@@ -129,7 +129,7 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 }
 
 func TestMetricsIntegration_HealthCheck(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 	metricsService := metrics.NewService(logger)
 
 	// Create health handler
@@ -170,7 +170,7 @@ func TestMetricsIntegration_HealthCheck(t *testing.T) {
 }
 
 func TestMetricsIntegration_CustomMetrics(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 	metricsService := metrics.NewService(logger)
 	ctx := context.Background()
 
@@ -232,7 +232,7 @@ func TestMetricsIntegration_CustomMetrics(t *testing.T) {
 }
 
 func TestMetricsIntegration_MetricValues(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 	metricsService := metrics.NewService(logger)
 	ctx := context.Background()
 

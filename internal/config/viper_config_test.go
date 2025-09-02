@@ -348,5 +348,5 @@ func TestViperConfig_Creation(t *testing.T) {
 	viperConfig := &config.ViperConfig{}
 
 	// Test that ViperConfig can be created
-	assert.NotNil(t, viperConfig)
+	require.NotNil(t, viperConfig)
 }

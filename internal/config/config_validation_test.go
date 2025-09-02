@@ -53,12 +53,12 @@ func TestViperConfig_StructureConsistency(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test nested structures exist
-	assert.NotNil(t, viperConfig.Server.Timeouts)
-	assert.NotNil(t, viperConfig.Upstream.Retry)
-	assert.NotNil(t, viperConfig.Auth.JWT)
-	assert.NotNil(t, viperConfig.Auth.JWT.Validation)
-	assert.NotNil(t, viperConfig.Auth.JWT.Claims)
-	assert.NotNil(t, viperConfig.TenantFilter.Labels)
+	require.NotNil(t, viperConfig.Server.Timeouts)
+	require.NotNil(t, viperConfig.Upstream.Retry)
+	require.NotNil(t, viperConfig.Auth.JWT)
+	require.NotNil(t, viperConfig.Auth.JWT.Validation)
+	require.NotNil(t, viperConfig.Auth.JWT.Claims)
+	require.NotNil(t, viperConfig.TenantFilter.Labels)
 
 	// Test that durations are positive
 	assert.Positive(t, viperConfig.Server.Timeouts.ReadTimeout)

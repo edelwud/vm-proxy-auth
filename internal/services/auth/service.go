@@ -168,7 +168,7 @@ func (s *Service) determineUserPermissions(
 	for _, mapping := range s.tenantMaps {
 		if s.hasGroupMatch(userGroups, mapping.Groups) {
 			hasMatchingGroups = true
-			// Add VictoriaMetrics tenants from mapping (legacy tenants removed)
+			// Add VictoriaMetrics tenants from mapping
 
 			// Add VictoriaMetrics tenants if specified
 			for _, vmMapping := range mapping.VMTenants {

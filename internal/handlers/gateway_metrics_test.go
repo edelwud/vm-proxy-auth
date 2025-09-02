@@ -309,7 +309,7 @@ func TestGatewayHandler_MetricsCollection_Success(t *testing.T) {
 		metrics: metrics,
 	}
 
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 
 	// Create handler
 	handler := handlers.NewGatewayHandler(
@@ -404,7 +404,7 @@ func TestGatewayHandler_MetricsCollection_AuthFailure(t *testing.T) {
 	tenantService := &testableTenantService{metrics: metrics}
 	accessService := &mockAccessService{}
 	proxyService := &testableProxyService{metrics: metrics}
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 
 	// Create handler
 	handler := handlers.NewGatewayHandler(
@@ -487,7 +487,7 @@ func TestGatewayHandler_MetricsCollection_TenantAccess(t *testing.T) {
 		metrics: metrics,
 	}
 
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 
 	// Create handler
 	handler := handlers.NewGatewayHandler(
@@ -559,7 +559,7 @@ func TestGatewayHandler_MetricsCollection_UpstreamError(t *testing.T) {
 		metrics: metrics,
 	}
 
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 
 	// Create handler
 	handler := handlers.NewGatewayHandler(

@@ -185,7 +185,7 @@ func (es *EnhancedService) Forward(ctx context.Context, req *domain.ProxyRequest
 		return es.forwardWithQueue(ctx, req)
 	}
 
-	// Direct processing without queue (backward compatibility)
+	// Direct processing without queue
 	return es.forwardToBackendDirect(ctx, req)
 }
 

@@ -394,6 +394,7 @@ func TestLoadBalancerInterface(t *testing.T) {
 	ctx := context.Background()
 	result, err := lb.NextBackend(ctx)
 	require.NoError(t, err)
+	require.NotNil(t, result)
 	assert.Equal(t, backend, result)
 
 	// Test ReportResult

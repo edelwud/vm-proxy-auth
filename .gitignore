@@ -214,7 +214,7 @@ coverage/
 
 # Gateway binary
 prometheus-oauth-gateway
-gateway
+./gateway
 
 # Test files
 /tmp/test*

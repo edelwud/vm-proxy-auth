@@ -16,7 +16,7 @@ import (
 )
 
 func TestService_FilterQuery_ORStrategy(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
 	upstreamCfg := &config.UpstreamSettings{
@@ -56,7 +56,7 @@ func TestService_FilterQuery_ORStrategy(t *testing.T) {
 }
 
 func TestService_FilterQuery_SingleTenant(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
 	upstreamCfg := &config.UpstreamSettings{
@@ -95,7 +95,7 @@ func TestService_FilterQuery_SingleTenant(t *testing.T) {
 }
 
 func TestService_FilterQuery_ComplexQuery_ORStrategy(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
 	upstreamCfg := &config.UpstreamSettings{
@@ -180,7 +180,7 @@ func (m *MockMetricsService) RecordLoadBalancerSelection(
 func (m *MockMetricsService) Handler() http.Handler { return nil }
 
 func TestService_CanAccessTenant(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
 	upstreamCfg := &config.UpstreamSettings{
@@ -257,7 +257,7 @@ func TestService_CanAccessTenant(t *testing.T) {
 }
 
 func TestService_DetermineTargetTenant(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
 	upstreamCfg := &config.UpstreamSettings{

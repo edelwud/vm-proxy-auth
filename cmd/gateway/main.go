@@ -33,7 +33,7 @@ var (
 	gitCommit = "unknown"
 )
 
-// Default configuration constants for single upstream backward compatibility.
+// Default configuration constants for single upstream mode.
 const (
 	defaultHealthCheckInterval      = 30 * time.Second
 	defaultHealthCheckTimeout       = 10 * time.Second
@@ -113,7 +113,7 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
-		// Create single backend configuration for backward compatibility
+		// Create single backend configuration
 		configData = &config.EnhancedServiceConfig{
 			Backends: []config.BackendConfig{
 				{URL: cfg.Upstream.URL, Weight: 1},

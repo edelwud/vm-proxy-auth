@@ -105,12 +105,13 @@ func (p *PromQLTenantInjector) injectTenantLabelsToVectorSelector(
 		tenant := vmTenants[0]
 		p.addSingleTenantFilter(vs, tenant, tenantLabelName, projectLabelName, tenantCfg.Labels.UseProjectID)
 	} else {
-		// This should not be called anymore, but kept for compatibility
-		p.logger.Warn("Using legacy multiple tenant filter method, this is not secure",
+		// Multiple tenants case - this should not happen in production
+		// Always use the first tenant for security (prevents data leakage)
+		p.logger.Error("Multiple VM tenants not supported, using first tenant only",
 			domain.Field{Key: "metric", Value: vs.Name},
 			domain.Field{Key: "tenant_count", Value: len(vmTenants)})
 
-		// Multiple tenants - create simple filter for first tenant
+		// Use first tenant for security
 		p.addSingleTenantFilter(vs, vmTenants[0], tenantLabelName, projectLabelName, tenantCfg.Labels.UseProjectID)
 	}
 }

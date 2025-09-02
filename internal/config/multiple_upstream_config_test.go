@@ -233,7 +233,7 @@ func TestViperConfig_ToEnhancedServiceConfig(t *testing.T) {
 	require.NotNil(t, serviceConfig)
 
 	// Verify backends conversion
-	assert.Len(t, serviceConfig.Backends, 3)
+	require.Len(t, serviceConfig.Backends, 3)
 	assert.Equal(t, "http://backend1.com", serviceConfig.Backends[0].URL)
 	assert.Equal(t, 1, serviceConfig.Backends[0].Weight)
 	assert.Equal(t, "http://backend2.com", serviceConfig.Backends[1].URL)
@@ -288,6 +288,7 @@ func TestViperConfig_ToEnhancedServiceConfig_Defaults(t *testing.T) {
 	require.NotNil(t, serviceConfig)
 
 	// Verify defaults
+	require.Len(t, serviceConfig.Backends, 1)
 	assert.Equal(t, 1, serviceConfig.Backends[0].Weight)                 // Zero weight became 1
 	assert.Equal(t, 3, serviceConfig.MaxRetries)                         // Default
 	assert.Equal(t, 100*time.Millisecond, serviceConfig.RetryBackoff)    // Default
@@ -307,7 +308,7 @@ func TestViperConfig_ToEnhancedServiceConfig_NotEnabled(t *testing.T) {
 
 	serviceConfig, err := config.ToEnhancedServiceConfig()
 	require.Error(t, err)
-	assert.Nil(t, serviceConfig)
+	require.Nil(t, serviceConfig)
 	assert.Contains(t, err.Error(), "multiple upstreams not enabled")
 }
 
@@ -329,7 +330,7 @@ func TestViperConfig_ToEnhancedServiceConfig_InvalidConfig(t *testing.T) {
 
 	serviceConfig, err := config.ToEnhancedServiceConfig()
 	require.Error(t, err)
-	assert.Nil(t, serviceConfig)
+	require.Nil(t, serviceConfig)
 	assert.Contains(t, err.Error(), "invalid multiple upstream configuration")
 }
 

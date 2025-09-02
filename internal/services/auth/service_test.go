@@ -17,7 +17,7 @@ import (
 )
 
 func TestNewService_WithSecretAuth(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
 	cfg := config.AuthSettings{
@@ -44,7 +44,7 @@ func TestNewService_WithSecretAuth(t *testing.T) {
 }
 
 func TestNewService_WithJWKSAuth(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
 	cfg := config.AuthSettings{
@@ -64,7 +64,7 @@ func TestNewService_WithJWKSAuth(t *testing.T) {
 }
 
 func TestNewService_ErrorWithoutAuthConfig(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
 	cfg := config.AuthSettings{
@@ -145,7 +145,7 @@ func TestService_Authenticate_ValidToken(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			logger := &testutils.MockLogger{}
+			logger := testutils.NewMockLogger()
 			metrics := &MockMetricsService{}
 
 			cfg := config.AuthSettings{
@@ -185,7 +185,7 @@ func TestService_Authenticate_ValidToken(t *testing.T) {
 }
 
 func TestService_Authenticate_InvalidToken(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
 	cfg := config.AuthSettings{
@@ -305,7 +305,7 @@ func TestService_TenantMapping_ComplexScenarios(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			logger := &testutils.MockLogger{}
+			logger := testutils.NewMockLogger()
 			metrics := &MockMetricsService{}
 
 			cfg := config.AuthSettings{
@@ -347,7 +347,7 @@ func TestService_TenantMapping_ComplexScenarios(t *testing.T) {
 }
 
 func TestService_UserCaching(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
 	cfg := config.AuthSettings{
