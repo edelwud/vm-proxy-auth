@@ -51,23 +51,36 @@ stateStorage:
   raft:
     nodeId: "${RAFT_NODE_ID:-node-1}"
     dataDir: "${RAFT_DATA_DIR:-./data/raft}"
+    
+    # Static peer configuration (for bootstrap or simple deployments)
     peers:
       - "node-1:raft-node-1:9000"
-      - "node-2:raft-node-2:9000"
+      - "node-2:raft-node-2:9000" 
       - "node-3:raft-node-3:9000"
-
-# Service discovery configuration (optional)
-serviceDiscovery:
-  type: "dragonfly"
-  dragonfly:
-    address: "dragonfly:6379"
-    password: ""
-    database: 0
-    keyPrefix: "vm-proxy-auth:"
-    peerRegistryKey: "peers"
-    backendRegistryKey: "backends"
-    updateInterval: 30s
-    ttl: 2m
+    
+    # Dynamic peer discovery (recommended for production)
+    peerDiscovery:
+      enabled: true
+      type: "kubernetes"  # or "dns" for local environments
+      
+      # Kubernetes discovery configuration
+      kubernetes:
+        namespace: "${NAMESPACE:-default}"
+        peerLabelSelector: "app=vm-proxy-auth,component=raft"
+        backendLabelSelector: "app=vm-proxy-auth,component=backend"
+        httpPortName: "http"
+        raftPortName: "raft"
+        watchTimeout: 10m
+      
+      # DNS discovery configuration (alternative to Kubernetes)
+      dns:
+        domain: "vm-proxy-auth.local"
+        port: 8080
+        raftPort: 9000
+        updateInterval: 30s
+        useSrvRecords: true
+        srvService: "vm-proxy-auth"
+        srvProtocol: "tcp"
 
 # Authentication configuration
 auth:

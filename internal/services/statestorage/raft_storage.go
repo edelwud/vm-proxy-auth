@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
 
+	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
@@ -29,17 +30,18 @@ const (
 
 // RaftStorageConfig holds Raft storage configuration.
 type RaftStorageConfig struct {
-	NodeID             string        `json:"node_id"`
-	BindAddress        string        `json:"bind_address"`
-	DataDir            string        `json:"data_dir"`
-	Peers              []string      `json:"peers"`
-	HeartbeatTimeout   time.Duration `json:"heartbeat_timeout"`
-	ElectionTimeout    time.Duration `json:"election_timeout"`
-	LeaderLeaseTimeout time.Duration `json:"leader_lease_timeout"`
-	CommitTimeout      time.Duration `json:"commit_timeout"`
-	SnapshotRetention  int           `json:"snapshot_retention"`
-	SnapshotThreshold  uint64        `json:"snapshot_threshold"`
-	TrailingLogs       uint64        `json:"trailing_logs"`
+	NodeID             string                            `json:"node_id"`
+	BindAddress        string                            `json:"bind_address"`
+	DataDir            string                            `json:"data_dir"`
+	Peers              []string                          `json:"peers"`
+	PeerDiscovery      *config.RaftPeerDiscoverySettings `json:"peer_discovery,omitempty"`
+	HeartbeatTimeout   time.Duration                     `json:"heartbeat_timeout"`
+	ElectionTimeout    time.Duration                     `json:"election_timeout"`
+	LeaderLeaseTimeout time.Duration                     `json:"leader_lease_timeout"`
+	CommitTimeout      time.Duration                     `json:"commit_timeout"`
+	SnapshotRetention  int                               `json:"snapshot_retention"`
+	SnapshotThreshold  uint64                            `json:"snapshot_threshold"`
+	TrailingLogs       uint64                            `json:"trailing_logs"`
 }
 
 // RaftStorage implements StateStorage using HashiCorp Raft consensus.
@@ -57,6 +59,7 @@ type RaftStorage struct {
 	stopCh      chan struct{}
 	wg          sync.WaitGroup
 	logger      domain.Logger
+	discovery   domain.ServiceDiscovery
 	closed      bool
 }
 
@@ -140,6 +143,16 @@ func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logge
 		watchChans:  make(map[string][]chan domain.StateEvent),
 		stopCh:      make(chan struct{}),
 		logger:      logger.With(domain.Field{Key: "component", Value: "raft.storage"}),
+	}
+
+	// Initialize peer discovery if enabled
+	if config.PeerDiscovery != nil && config.PeerDiscovery.Enabled {
+		discovery, discoveryErr := rs.initializePeerDiscovery()
+		if discoveryErr != nil {
+			_ = rs.Close()
+			return nil, fmt.Errorf("failed to initialize peer discovery: %w", discoveryErr)
+		}
+		rs.discovery = discovery
 	}
 
 	// Bootstrap cluster if needed
@@ -540,6 +553,141 @@ func (rs *RaftStorage) IsLeader() bool {
 		return false
 	}
 	return rs.raft.State() == raft.Leader
+}
+
+// initializePeerDiscovery initializes the peer discovery service.
+func (rs *RaftStorage) initializePeerDiscovery() (domain.ServiceDiscovery, error) {
+	switch rs.config.PeerDiscovery.Type {
+	case "kubernetes":
+		return rs.initializeKubernetesDiscovery()
+	case "dns":
+		return rs.initializeDNSDiscovery()
+	default:
+		return nil, fmt.Errorf("unsupported peer discovery type: %s", rs.config.PeerDiscovery.Type)
+	}
+}
+
+// initializeKubernetesDiscovery creates Kubernetes discovery service.
+func (rs *RaftStorage) initializeKubernetesDiscovery() (domain.ServiceDiscovery, error) {
+	// Create discovery factory to avoid circular dependencies
+	// Since we can't import discovery package from here, we'll use interface injection
+	rs.logger.Info("Kubernetes peer discovery will be integrated via external initialization")
+	return nil, errors.New("discovery must be set externally via SetPeerDiscovery")
+}
+
+// initializeDNSDiscovery creates DNS discovery service.
+func (rs *RaftStorage) initializeDNSDiscovery() (domain.ServiceDiscovery, error) {
+	// Create discovery factory to avoid circular dependencies
+	// Since we can't import discovery package from here, we'll use interface injection
+	rs.logger.Info("DNS peer discovery will be integrated via external initialization")
+	return nil, errors.New("discovery must be set externally via SetPeerDiscovery")
+}
+
+// SetPeerDiscovery sets the peer discovery service (called from external initialization).
+func (rs *RaftStorage) SetPeerDiscovery(discovery domain.ServiceDiscovery) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.discovery = discovery
+
+	if discovery != nil {
+		rs.logger.Info("Peer discovery service attached to Raft storage")
+		go rs.handleDiscoveryEvents()
+	}
+}
+
+// handleDiscoveryEvents processes peer discovery events and updates Raft configuration.
+func (rs *RaftStorage) handleDiscoveryEvents() {
+	if rs.discovery == nil {
+		return
+	}
+
+	// Start discovery
+	ctx := context.Background()
+	if err := rs.discovery.Start(ctx); err != nil {
+		rs.logger.Error("Failed to start peer discovery",
+			domain.Field{Key: "error", Value: err.Error()})
+		return
+	}
+
+	// Get discovery event channel
+	events := rs.discovery.Events()
+
+	for {
+		select {
+		case <-rs.stopCh:
+			return
+		case event, ok := <-events:
+			if !ok {
+				return
+			}
+			rs.processDiscoveryEvent(event)
+		}
+	}
+}
+
+// processDiscoveryEvent processes a single discovery event.
+func (rs *RaftStorage) processDiscoveryEvent(event domain.ServiceDiscoveryEvent) {
+	switch event.Type {
+	case domain.ServiceDiscoveryEventTypePeerJoined:
+		if event.Peer != nil {
+			rs.addPeerToCluster(event.Peer)
+		}
+	case domain.ServiceDiscoveryEventTypePeerLeft:
+		if event.Peer != nil {
+			rs.removePeerFromCluster(event.Peer)
+		}
+	case domain.ServiceDiscoveryEventTypePeerUpdated:
+		// Peer updates don't affect Raft cluster membership
+	case domain.ServiceDiscoveryEventTypeBackendAdded:
+		// Backend changes don't affect Raft cluster
+	case domain.ServiceDiscoveryEventTypeBackendRemoved:
+		// Backend changes don't affect Raft cluster
+	case domain.ServiceDiscoveryEventTypeBackendUpdated:
+		// Backend changes don't affect Raft cluster
+	}
+}
+
+// addPeerToCluster adds a new peer to the Raft cluster.
+func (rs *RaftStorage) addPeerToCluster(peer *domain.PeerInfo) {
+	if !rs.IsLeader() {
+		return // Only leader can modify cluster configuration
+	}
+
+	serverID := raft.ServerID(peer.NodeID)
+	serverAddress := raft.ServerAddress(peer.RaftAddress)
+
+	future := rs.raft.AddVoter(serverID, serverAddress, 0, 0)
+	if err := future.Error(); err != nil {
+		rs.logger.Error("Failed to add peer to Raft cluster",
+			domain.Field{Key: "peer_id", Value: peer.NodeID},
+			domain.Field{Key: "peer_address", Value: peer.RaftAddress},
+			domain.Field{Key: "error", Value: err.Error()})
+		return
+	}
+
+	rs.logger.Info("Added peer to Raft cluster",
+		domain.Field{Key: "peer_id", Value: peer.NodeID},
+		domain.Field{Key: "peer_address", Value: peer.RaftAddress})
+}
+
+// removePeerFromCluster removes a peer from the Raft cluster.
+func (rs *RaftStorage) removePeerFromCluster(peer *domain.PeerInfo) {
+	if !rs.IsLeader() {
+		return // Only leader can modify cluster configuration
+	}
+
+	serverID := raft.ServerID(peer.NodeID)
+
+	future := rs.raft.RemoveServer(serverID, 0, 0)
+	if err := future.Error(); err != nil {
+		rs.logger.Error("Failed to remove peer from Raft cluster",
+			domain.Field{Key: "peer_id", Value: peer.NodeID},
+			domain.Field{Key: "error", Value: err.Error()})
+		return
+	}
+
+	rs.logger.Info("Removed peer from Raft cluster",
+		domain.Field{Key: "peer_id", Value: peer.NodeID})
 }
 
 // raftFSM implements the Raft Finite State Machine.

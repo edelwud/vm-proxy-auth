@@ -130,9 +130,39 @@ type RedisSettings struct {
 
 // RaftSettings configures Raft consensus state storage.
 type RaftSettings struct {
-	NodeID  string   `mapstructure:"nodeId"`
-	Peers   []string `mapstructure:"peers"`
-	DataDir string   `mapstructure:"dataDir"`
+	NodeID        string                    `mapstructure:"nodeId"`
+	Peers         []string                  `mapstructure:"peers"`
+	DataDir       string                    `mapstructure:"dataDir"`
+	PeerDiscovery RaftPeerDiscoverySettings `mapstructure:"peerDiscovery"`
+}
+
+// RaftPeerDiscoverySettings configures dynamic peer discovery for Raft.
+type RaftPeerDiscoverySettings struct {
+	Enabled    bool                      `mapstructure:"enabled"`
+	Type       string                    `mapstructure:"type"` // kubernetes, dns
+	Kubernetes KubernetesDiscoveryConfig `mapstructure:"kubernetes"`
+	DNS        DNSDiscoveryConfig        `mapstructure:"dns"`
+}
+
+// KubernetesDiscoveryConfig configures Kubernetes-based peer discovery.
+type KubernetesDiscoveryConfig struct {
+	Namespace            string        `mapstructure:"namespace"`
+	PeerLabelSelector    string        `mapstructure:"peerLabelSelector"`
+	BackendLabelSelector string        `mapstructure:"backendLabelSelector"`
+	HTTPPortName         string        `mapstructure:"httpPortName"`
+	RaftPortName         string        `mapstructure:"raftPortName"`
+	WatchTimeout         time.Duration `mapstructure:"watchTimeout"`
+}
+
+// DNSDiscoveryConfig configures DNS-based peer discovery.
+type DNSDiscoveryConfig struct {
+	Domain         string        `mapstructure:"domain"`
+	Port           int           `mapstructure:"port"`
+	RaftPort       int           `mapstructure:"raftPort"`
+	UpdateInterval time.Duration `mapstructure:"updateInterval"`
+	UseSRVRecords  bool          `mapstructure:"useSrvRecords"`
+	SRVService     string        `mapstructure:"srvService"`
+	SRVProtocol    string        `mapstructure:"srvProtocol"`
 }
 
 type AuthSettings struct {

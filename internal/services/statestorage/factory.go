@@ -69,6 +69,7 @@ func NewStateStorage(
 			BindAddress:        "127.0.0.1:9000", // Default bind address
 			DataDir:            raftConfig.DataDir,
 			Peers:              raftConfig.Peers,
+			PeerDiscovery:      &raftConfig.PeerDiscovery,
 			HeartbeatTimeout:   1 * time.Second,
 			ElectionTimeout:    1 * time.Second,
 			LeaderLeaseTimeout: defaultLeaderLeaseTimeout,

@@ -161,6 +161,7 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 	})
 }
 
+//nolint:gocognit // test case
 func TestRaftStorage_MultiNode(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping Raft multi-node test in short mode")

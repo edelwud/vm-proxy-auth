@@ -29,24 +29,22 @@ const (
 
 // KubernetesDiscoveryConfig holds Kubernetes service discovery configuration.
 type KubernetesDiscoveryConfig struct {
-	Namespace            string            `json:"namespace"`
-	ServiceName          string            `json:"service_name"`
-	PeerLabelSelector    string            `json:"peer_label_selector"`
-	BackendLabelSelector string            `json:"backend_label_selector"`
-	RaftPortName         string            `json:"raft_port_name"`
-	HTTPPortName         string            `json:"http_port_name"`
-	UpdateInterval       time.Duration     `json:"update_interval"`
-	Metadata             map[string]string `json:"metadata"`
+	Namespace            string        `json:"namespace"`
+	PeerLabelSelector    string        `json:"peer_label_selector"`
+	BackendLabelSelector string        `json:"backend_label_selector"`
+	RaftPortName         string        `json:"raft_port_name"`
+	HTTPPortName         string        `json:"http_port_name"`
+	WatchTimeout         time.Duration `json:"watch_timeout"`
 }
 
 // KubernetesDiscovery implements ServiceDiscovery using Kubernetes API.
 type KubernetesDiscovery struct {
-	client    kubernetes.Interface
-	config    KubernetesDiscoveryConfig
-	logger    domain.Logger
-	watchCh   chan domain.ServiceDiscoveryEvent
-	stopCh    chan struct{}
-	namespace string
+	client   kubernetes.Interface
+	config   KubernetesDiscoveryConfig
+	logger   domain.Logger
+	watchCh  chan domain.ServiceDiscoveryEvent
+	stopCh   chan struct{}
+	lastSeen map[string]time.Time
 }
 
 // NewKubernetesDiscovery creates a new Kubernetes service discovery client.
@@ -79,17 +77,17 @@ func NewKubernetesDiscovery(config KubernetesDiscoveryConfig, logger domain.Logg
 	if config.HTTPPortName == "" {
 		config.HTTPPortName = defaultHTTPPortName
 	}
-	if config.UpdateInterval == 0 {
-		config.UpdateInterval = k8sDefaultUpdateInterval
+	if config.WatchTimeout == 0 {
+		config.WatchTimeout = k8sDefaultWatchTimeout
 	}
 
 	kd := &KubernetesDiscovery{
-		client:    client,
-		config:    config,
-		logger:    logger.With(domain.Field{Key: "component", Value: "k8s.discovery"}),
-		watchCh:   make(chan domain.ServiceDiscoveryEvent, k8sDefaultWatchChannelSize),
-		stopCh:    make(chan struct{}),
-		namespace: config.Namespace,
+		client:   client,
+		config:   config,
+		logger:   logger.With(domain.Field{Key: "component", Value: "k8s.discovery"}),
+		watchCh:  make(chan domain.ServiceDiscoveryEvent, k8sDefaultWatchChannelSize),
+		stopCh:   make(chan struct{}),
+		lastSeen: make(map[string]time.Time),
 	}
 
 	return kd, nil
@@ -121,15 +119,15 @@ func getKubernetesConfig() (*rest.Config, error) {
 }
 
 // DiscoverPeers discovers peer nodes for Raft cluster formation.
-func (kd *KubernetesDiscovery) DiscoverPeers(ctx context.Context) ([]domain.PeerInfo, error) {
-	pods, err := kd.client.CoreV1().Pods(kd.namespace).List(ctx, metav1.ListOptions{
+func (kd *KubernetesDiscovery) DiscoverPeers(ctx context.Context) ([]*domain.PeerInfo, error) {
+	pods, err := kd.client.CoreV1().Pods(kd.config.Namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: kd.config.PeerLabelSelector,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pods: %w", err)
 	}
 
-	var peers []domain.PeerInfo
+	var peers []*domain.PeerInfo
 	for _, pod := range pods.Items {
 		peer, ok := kd.processPodForPeer(pod)
 		if ok {
@@ -139,15 +137,15 @@ func (kd *KubernetesDiscovery) DiscoverPeers(ctx context.Context) ([]domain.Peer
 
 	kd.logger.Debug("Discovered Raft peers",
 		domain.Field{Key: "peers_count", Value: len(peers)},
-		domain.Field{Key: "namespace", Value: kd.namespace})
+		domain.Field{Key: "namespace", Value: kd.config.Namespace})
 
 	return peers, nil
 }
 
 // processPodForPeer extracts peer information from a Kubernetes pod.
-func (kd *KubernetesDiscovery) processPodForPeer(pod corev1.Pod) (domain.PeerInfo, bool) {
+func (kd *KubernetesDiscovery) processPodForPeer(pod corev1.Pod) (*domain.PeerInfo, bool) {
 	if pod.Status.Phase != corev1.PodRunning {
-		return domain.PeerInfo{}, false
+		return nil, false
 	}
 
 	nodeID := kd.extractNodeID(pod)
@@ -157,15 +155,15 @@ func (kd *KubernetesDiscovery) processPodForPeer(pod corev1.Pod) (domain.PeerInf
 		kd.logger.Warn("Pod has no Raft port defined",
 			domain.Field{Key: "pod_name", Value: pod.Name},
 			domain.Field{Key: "expected_port_name", Value: kd.config.RaftPortName})
-		return domain.PeerInfo{}, false
+		return nil, false
 	}
 
 	healthy := kd.isPodHealthy(pod)
 	metadata := kd.buildPodMetadata(pod)
 
-	return domain.PeerInfo{
+	return &domain.PeerInfo{
 		NodeID:      nodeID,
-		Address:     httpAddress,
+		HTTPAddress: httpAddress,
 		RaftAddress: raftAddress,
 		Healthy:     healthy,
 		LastSeen:    time.Now(),
@@ -227,15 +225,15 @@ func (kd *KubernetesDiscovery) buildPodMetadata(pod corev1.Pod) map[string]strin
 }
 
 // DiscoverBackends discovers backend services (VictoriaMetrics instances).
-func (kd *KubernetesDiscovery) DiscoverBackends(ctx context.Context) ([]domain.BackendInfo, error) {
-	services, err := kd.client.CoreV1().Services(kd.namespace).List(ctx, metav1.ListOptions{
+func (kd *KubernetesDiscovery) DiscoverBackends(ctx context.Context) ([]*domain.BackendInfo, error) {
+	services, err := kd.client.CoreV1().Services(kd.config.Namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: kd.config.BackendLabelSelector,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list services: %w", err)
 	}
 
-	var backends []domain.BackendInfo
+	var backends []*domain.BackendInfo
 	for _, service := range services.Items {
 		backend, ok := kd.processServiceForBackend(service)
 		if ok {
@@ -248,18 +246,18 @@ func (kd *KubernetesDiscovery) DiscoverBackends(ctx context.Context) ([]domain.B
 
 	kd.logger.Debug("Discovered backend services",
 		domain.Field{Key: "backends_count", Value: len(backends)},
-		domain.Field{Key: "namespace", Value: kd.namespace})
+		domain.Field{Key: "namespace", Value: kd.config.Namespace})
 
 	return backends, nil
 }
 
 // processServiceForBackend converts a Kubernetes service to BackendInfo.
-func (kd *KubernetesDiscovery) processServiceForBackend(service corev1.Service) (domain.BackendInfo, bool) {
+func (kd *KubernetesDiscovery) processServiceForBackend(service corev1.Service) (*domain.BackendInfo, bool) {
 	port := kd.findHTTPPort(service)
 	if port == 0 {
 		kd.logger.Warn("Service has no HTTP port defined",
 			domain.Field{Key: "service_name", Value: service.Name})
-		return domain.BackendInfo{}, false
+		return nil, false
 	}
 
 	url := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d",
@@ -268,7 +266,7 @@ func (kd *KubernetesDiscovery) processServiceForBackend(service corev1.Service) 
 	weight := kd.extractServiceWeight(service)
 	metadata := kd.buildServiceMetadata(service)
 
-	return domain.BackendInfo{
+	return &domain.BackendInfo{
 		URL:      url,
 		Weight:   weight,
 		Healthy:  true, // Assume healthy, health checker will validate
@@ -319,9 +317,9 @@ func (kd *KubernetesDiscovery) buildServiceMetadata(service corev1.Service) map[
 
 // enrichBackendsWithEndpointsIfAvailable enriches backends with endpoint health if available.
 func (kd *KubernetesDiscovery) enrichBackendsWithEndpointsIfAvailable(
-	ctx context.Context, backends []domain.BackendInfo,
+	ctx context.Context, backends []*domain.BackendInfo,
 ) {
-	endpoints, err := kd.client.CoreV1().Endpoints(kd.namespace).List(ctx, metav1.ListOptions{
+	endpoints, err := kd.client.CoreV1().Endpoints(kd.config.Namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: kd.config.BackendLabelSelector,
 	})
 	if err == nil {
@@ -331,7 +329,7 @@ func (kd *KubernetesDiscovery) enrichBackendsWithEndpointsIfAvailable(
 
 // enrichBackendsWithEndpoints adds endpoint health information to backends.
 func (kd *KubernetesDiscovery) enrichBackendsWithEndpoints(
-	backends []domain.BackendInfo,
+	backends []*domain.BackendInfo,
 	endpoints []corev1.Endpoints,
 ) {
 	for i := range backends {
@@ -376,11 +374,11 @@ func (kd *KubernetesDiscovery) Watch(ctx context.Context) (<-chan domain.Service
 func mapWatchEventType(eventType watch.EventType) (domain.ServiceDiscoveryEventType, bool) {
 	switch eventType {
 	case watch.Added:
-		return domain.ServiceDiscoveryNodeJoined, true
+		return domain.ServiceDiscoveryEventTypePeerJoined, true
 	case watch.Deleted:
-		return domain.ServiceDiscoveryNodeLeft, true
+		return domain.ServiceDiscoveryEventTypePeerLeft, true
 	case watch.Modified:
-		return domain.ServiceDiscoveryNodeUpdated, true
+		return domain.ServiceDiscoveryEventTypePeerUpdated, true
 	case watch.Bookmark, watch.Error:
 		return "", false
 	default:
@@ -399,7 +397,7 @@ func (kd *KubernetesDiscovery) createPeerInfoFromPod(pod *corev1.Pod) *domain.Pe
 
 	return &domain.PeerInfo{
 		NodeID:      nodeID,
-		Address:     httpAddress,
+		HTTPAddress: httpAddress,
 		RaftAddress: raftAddress,
 		Healthy:     pod.Status.Phase == corev1.PodRunning,
 		LastSeen:    time.Now(),
@@ -417,7 +415,7 @@ func (kd *KubernetesDiscovery) sendDiscoveryEvent(
 ) {
 	discoveryEvent := domain.ServiceDiscoveryEvent{
 		Type:      eventType,
-		PeerInfo:  peerInfo,
+		Peer:      peerInfo,
 		Timestamp: time.Now(),
 	}
 
@@ -450,11 +448,11 @@ func (kd *KubernetesDiscovery) processPodWatchEvent(event watch.Event) {
 func mapServiceWatchEventType(eventType watch.EventType) (domain.ServiceDiscoveryEventType, bool) {
 	switch eventType {
 	case watch.Added:
-		return domain.ServiceDiscoveryBackendAdded, true
+		return domain.ServiceDiscoveryEventTypeBackendAdded, true
 	case watch.Deleted:
-		return domain.ServiceDiscoveryBackendRemoved, true
+		return domain.ServiceDiscoveryEventTypeBackendRemoved, true
 	case watch.Modified:
-		return domain.ServiceDiscoveryBackendUpdated, true
+		return domain.ServiceDiscoveryEventTypeBackendUpdated, true
 	case watch.Bookmark, watch.Error:
 		return "", false
 	default:
@@ -551,7 +549,7 @@ func (kd *KubernetesDiscovery) watchPods(ctx context.Context) {
 		default:
 		}
 
-		watcher, err := kd.client.CoreV1().Pods(kd.namespace).Watch(ctx, metav1.ListOptions{
+		watcher, err := kd.client.CoreV1().Pods(kd.config.Namespace).Watch(ctx, metav1.ListOptions{
 			LabelSelector: kd.config.PeerLabelSelector,
 		})
 		if err != nil {
@@ -583,7 +581,7 @@ func (kd *KubernetesDiscovery) watchServices(ctx context.Context) {
 		default:
 		}
 
-		watcher, err := kd.client.CoreV1().Services(kd.namespace).Watch(ctx, metav1.ListOptions{
+		watcher, err := kd.client.CoreV1().Services(kd.config.Namespace).Watch(ctx, metav1.ListOptions{
 			LabelSelector: kd.config.BackendLabelSelector,
 		})
 		if err != nil {
@@ -618,7 +616,7 @@ func (kd *KubernetesDiscovery) RegisterSelf(ctx context.Context, nodeInfo domain
 	}
 
 	// Get current pod
-	pod, err := kd.client.CoreV1().Pods(kd.namespace).Get(ctx, podName, metav1.GetOptions{})
+	pod, err := kd.client.CoreV1().Pods(kd.config.Namespace).Get(ctx, podName, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get current pod: %w", err)
 	}
@@ -638,7 +636,7 @@ func (kd *KubernetesDiscovery) RegisterSelf(ctx context.Context, nodeInfo domain
 		pod.Annotations[fmt.Sprintf("vm-proxy-auth/meta-%s", key)] = value
 	}
 
-	_, err = kd.client.CoreV1().Pods(kd.namespace).Update(ctx, pod, metav1.UpdateOptions{})
+	_, err = kd.client.CoreV1().Pods(kd.config.Namespace).Update(ctx, pod, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to update pod annotations: %w", err)
 	}
@@ -650,14 +648,29 @@ func (kd *KubernetesDiscovery) RegisterSelf(ctx context.Context, nodeInfo domain
 	return nil
 }
 
-// Close performs cleanup and graceful shutdown.
-func (kd *KubernetesDiscovery) Close() error {
+// Start begins the service discovery process.
+func (kd *KubernetesDiscovery) Start(ctx context.Context) error {
+	kd.logger.Info("Starting Kubernetes service discovery")
+
+	go kd.watchPods(ctx)
+	go kd.watchServices(ctx)
+
+	return nil
+}
+
+// Stop gracefully shuts down the service discovery.
+func (kd *KubernetesDiscovery) Stop() error {
 	kd.logger.Info("Shutting down Kubernetes service discovery")
 
 	close(kd.stopCh)
 	close(kd.watchCh)
 
 	return nil
+}
+
+// Events returns a channel for receiving discovery events.
+func (kd *KubernetesDiscovery) Events() <-chan domain.ServiceDiscoveryEvent {
+	return kd.watchCh
 }
 
 // GetClusterInfo returns information about the Kubernetes cluster.
@@ -675,7 +688,7 @@ func (kd *KubernetesDiscovery) GetClusterInfo(ctx context.Context) (map[string]i
 	return map[string]interface{}{
 		"kubernetes_version": version.String(),
 		"node_count":         len(nodes.Items),
-		"namespace":          kd.namespace,
+		"namespace":          kd.config.Namespace,
 		"peer_selector":      kd.config.PeerLabelSelector,
 		"backend_selector":   kd.config.BackendLabelSelector,
 	}, nil

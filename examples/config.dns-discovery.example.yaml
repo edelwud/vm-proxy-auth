@@ -1,0 +1,142 @@
+# VictoriaMetrics OAuth Gateway Configuration
+# DNS-based Service Discovery Example
+
+server:
+  address: ":8080"
+  timeouts:
+    readTimeout: 30s
+    writeTimeout: 30s
+    idleTimeout: 120s
+
+# Multiple upstream configuration 
+upstream:
+  multiple:
+    enabled: true
+    
+    # Backend configuration - will be discovered dynamically via DNS
+    backends: []  # Empty - backends discovered via DNS
+        
+    # Load balancing strategy
+    loadBalancing:
+      strategy: "round-robin"
+      
+    # Health checking configuration
+    healthCheck:
+      checkInterval: 30s
+      timeout: 10s
+      healthyThreshold: 2
+      unhealthyThreshold: 3
+      healthEndpoint: "/health"
+      
+    # Request handling
+    timeout: 30s
+    maxRetries: 3
+    retryBackoff: 100ms
+
+# Distributed state storage using Raft with DNS discovery
+stateStorage:
+  type: "raft"
+  raft:
+    nodeId: "${RAFT_NODE_ID:-node-1}"
+    dataDir: "${RAFT_DATA_DIR:-./data/raft}"
+    
+    # Static peer configuration (for bootstrap only)
+    peers: []  # Empty - peers discovered via DNS
+    
+    # Dynamic peer discovery using DNS
+    peerDiscovery:
+      enabled: true
+      type: "dns"
+      
+      # DNS discovery configuration
+      dns:
+        domain: "vm-proxy-auth.local"  # DNS domain for service discovery
+        port: 8080                     # HTTP port for health checks
+        raftPort: 9000                 # Raft consensus port
+        updateInterval: 30s            # How often to query DNS
+        useSrvRecords: true            # Use SRV records (recommended)
+        srvService: "vm-proxy-auth"    # SRV service name
+        srvProtocol: "tcp"             # SRV protocol
+
+# Authentication configuration
+auth:
+  jwt:
+    # Shared secret for development (not recommended for production)
+    algorithm: "HS256"
+    secret: "${JWT_SECRET:-your-secret-key-here}"
+    
+    # JWT validation settings
+    issuer: "vm-proxy-auth"
+    audience: "victoriametrics"
+    leeway: 30s
+
+# Tenant mapping configuration
+tenantMapping:
+  - jwtClaim: "team_id"
+    staticMapping:
+      team-alpha: "1000"
+      team-beta: "1001"
+      team-gamma: "1002"
+
+# Advanced tenant filtering
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: true
+
+# Metrics and monitoring
+metrics:
+  enabled: true
+  path: "/metrics"
+  
+  # DNS discovery adds these metrics:
+  # - vm_proxy_auth_service_discovery_events_total{type="dns"}
+  # - vm_proxy_auth_service_discovery_peers_count{source="dns"}
+  # - vm_proxy_auth_service_discovery_backends_count{source="dns"}
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "json"
+
+# DNS Service Discovery Setup Instructions:
+#
+# 1. SRV Records (Recommended):
+#    Create SRV records in your DNS:
+#    _vm-proxy-auth._tcp.vm-proxy-auth.local. 300 IN SRV 10 5 8080 node-1.vm-proxy-auth.local.
+#    _vm-proxy-auth._tcp.vm-proxy-auth.local. 300 IN SRV 10 5 8080 node-2.vm-proxy-auth.local.
+#    _vm-proxy-auth._tcp.vm-proxy-auth.local. 300 IN SRV 10 5 8080 node-3.vm-proxy-auth.local.
+#
+# 2. A/AAAA Records (Simple setup):
+#    Create A records pointing to your nodes:
+#    vm-proxy-auth.local. 300 IN A 10.0.1.10
+#    vm-proxy-auth.local. 300 IN A 10.0.1.11
+#    vm-proxy-auth.local. 300 IN A 10.0.1.12
+#
+# 3. Local Development with /etc/hosts:
+#    Add entries to /etc/hosts:
+#    127.0.0.1 vm-proxy-auth.local
+#    127.0.0.2 vm-proxy-auth.local
+#    127.0.0.3 vm-proxy-auth.local
+#
+# 4. DNS Benefits:
+#    - No external dependencies (unlike Redis/etcd)
+#    - Works with existing DNS infrastructure
+#    - Automatic load balancing via DNS round-robin
+#    - TTL-based failure detection
+#    - Standard DNS tools for monitoring and debugging
+
+# Performance and Scaling Notes:
+#
+# DNS discovery is ideal for:
+# - Development and testing environments
+# - Simple production deployments without Kubernetes
+# - Hybrid cloud deployments with DNS-based service mesh
+# - Legacy infrastructure with existing DNS management
+#
+# Limitations:
+# - DNS TTL delays for topology changes
+# - Limited metadata compared to Kubernetes labels
+# - Requires external DNS management for updates

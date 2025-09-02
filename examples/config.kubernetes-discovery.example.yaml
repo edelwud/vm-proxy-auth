@@ -39,37 +39,27 @@ upstream:
     maxRetries: 3
     retryBackoff: 100ms
 
-# Raft state storage with Kubernetes peer discovery
+# Raft state storage with integrated Kubernetes peer discovery
 stateStorage:
   type: "raft"
   raft:
     nodeId: "${POD_NAME}"  # Use pod name as node ID
     dataDir: "/data/raft"
     peers: []  # Peers will be discovered via Kubernetes API
-
-# Kubernetes native service discovery
-serviceDiscovery:
-  type: "kubernetes"
-  kubernetes:
-    namespace: "monitoring"  # Kubernetes namespace to watch
-    serviceName: "vm-proxy-auth"  # Service name for this application
     
-    # Label selectors for discovery
-    peerLabelSelector: "app=vm-proxy-auth,component=raft-cluster"
-    backendLabelSelector: "app=victoriametrics"
-    
-    # Port configuration
-    raftPortName: "raft"  # Named port for Raft communication
-    httpPortName: "http"  # Named port for HTTP traffic
-    
-    # Discovery settings
-    updateInterval: 30s
-    
-    # Custom metadata for service registration
-    metadata:
-      datacenter: "kubernetes"
-      environment: "production"
-      cluster_role: "proxy"
+    # Integrated peer discovery configuration
+    peerDiscovery:
+      enabled: true
+      type: "kubernetes"
+      
+      # Kubernetes discovery configuration
+      kubernetes:
+        namespace: "${NAMESPACE:-monitoring}"  # Kubernetes namespace to watch
+        peerLabelSelector: "app=vm-proxy-auth,component=raft-cluster"
+        backendLabelSelector: "app=victoriametrics"
+        httpPortName: "http"
+        raftPortName: "raft"
+        watchTimeout: 10m
 
 # Authentication configuration
 auth:
@@ -107,11 +97,11 @@ metrics:
   path: "/metrics"
   
   # Kubernetes service discovery metrics:
-  # - vm_proxy_auth_k8s_pods_discovered_total{namespace}
-  # - vm_proxy_auth_k8s_services_discovered_total{namespace}
-  # - vm_proxy_auth_k8s_endpoints_ready_total{service_name}
-  # - vm_proxy_auth_k8s_api_requests_total{operation, result}
-  # - vm_proxy_auth_k8s_watch_events_total{resource_type, event_type}
+  # - vm_proxy_auth_service_discovery_events_total{type="kubernetes"}
+  # - vm_proxy_auth_service_discovery_peers_count{source="kubernetes"}
+  # - vm_proxy_auth_service_discovery_backends_count{source="kubernetes"}
+  # - vm_proxy_auth_raft_state{state} (Leader/Follower/Candidate)
+  # - vm_proxy_auth_raft_peer_count
 
 # Logging configuration
 logging:
@@ -119,11 +109,11 @@ logging:
   format: "json"
   
   # Kubernetes service discovery logs include:
-  # - k8s_operation: pod/service/endpoint discovery operations
+  # - raft_operation: peer discovery and cluster management
   # - namespace: Kubernetes namespace being watched
   # - label_selector: selector used for resource discovery
-  # - pod_name, service_name: specific resource names
-  # - discovery_result: success/failure of discovery operations
+  # - pod_name: specific pod names discovered
+  # - discovery_event: peer join/leave events
 
 # Production deployment notes:
 #

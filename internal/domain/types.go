@@ -475,22 +475,22 @@ type RequestQueue interface {
 
 // ServiceDiscovery provides service discovery for distributed deployments.
 type ServiceDiscovery interface {
+	// Start begins the service discovery process.
+	Start(ctx context.Context) error
+	// Stop gracefully shuts down the service discovery.
+	Stop() error
+	// Events returns a channel for receiving discovery events.
+	Events() <-chan ServiceDiscoveryEvent
 	// DiscoverPeers discovers peer nodes for Raft cluster formation.
-	DiscoverPeers(ctx context.Context) ([]PeerInfo, error)
+	DiscoverPeers(ctx context.Context) ([]*PeerInfo, error)
 	// DiscoverBackends discovers backend services (VictoriaMetrics instances).
-	DiscoverBackends(ctx context.Context) ([]BackendInfo, error)
-	// Watch monitors changes in service topology.
-	Watch(ctx context.Context) (<-chan ServiceDiscoveryEvent, error)
-	// RegisterSelf registers this node in the service discovery system.
-	RegisterSelf(ctx context.Context, nodeInfo NodeInfo) error
-	// Close performs cleanup and graceful shutdown.
-	Close() error
+	DiscoverBackends(ctx context.Context) ([]*BackendInfo, error)
 }
 
 // PeerInfo represents a discovered peer node.
 type PeerInfo struct {
 	NodeID      string            `json:"node_id"`
-	Address     string            `json:"address"`
+	HTTPAddress string            `json:"http_address"`
 	RaftAddress string            `json:"raft_address"`
 	Healthy     bool              `json:"healthy"`
 	LastSeen    time.Time         `json:"last_seen"`
@@ -519,9 +519,8 @@ type NodeInfo struct {
 // ServiceDiscoveryEvent represents a change in service topology.
 type ServiceDiscoveryEvent struct {
 	Type      ServiceDiscoveryEventType `json:"type"`
-	NodeInfo  *NodeInfo                 `json:"node_info,omitempty"`
-	PeerInfo  *PeerInfo                 `json:"peer_info,omitempty"`
-	Backend   *BackendInfo              `json:"backend_info,omitempty"`
+	Peer      *PeerInfo                 `json:"peer,omitempty"`
+	Backend   *BackendInfo              `json:"backend,omitempty"`
 	Timestamp time.Time                 `json:"timestamp"`
 }
 
@@ -529,10 +528,10 @@ type ServiceDiscoveryEvent struct {
 type ServiceDiscoveryEventType string
 
 const (
-	ServiceDiscoveryNodeJoined     ServiceDiscoveryEventType = "node_joined"
-	ServiceDiscoveryNodeLeft       ServiceDiscoveryEventType = "node_left"
-	ServiceDiscoveryNodeUpdated    ServiceDiscoveryEventType = "node_updated"
-	ServiceDiscoveryBackendAdded   ServiceDiscoveryEventType = "backend_added"
-	ServiceDiscoveryBackendRemoved ServiceDiscoveryEventType = "backend_removed"
-	ServiceDiscoveryBackendUpdated ServiceDiscoveryEventType = "backend_updated"
+	ServiceDiscoveryEventTypePeerJoined     ServiceDiscoveryEventType = "peer_joined"
+	ServiceDiscoveryEventTypePeerLeft       ServiceDiscoveryEventType = "peer_left"
+	ServiceDiscoveryEventTypePeerUpdated    ServiceDiscoveryEventType = "peer_updated"
+	ServiceDiscoveryEventTypeBackendAdded   ServiceDiscoveryEventType = "backend_added"
+	ServiceDiscoveryEventTypeBackendRemoved ServiceDiscoveryEventType = "backend_removed"
+	ServiceDiscoveryEventTypeBackendUpdated ServiceDiscoveryEventType = "backend_updated"
 )
