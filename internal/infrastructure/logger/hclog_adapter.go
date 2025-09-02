@@ -22,7 +22,7 @@ type HCLogAdapter struct {
 // NewHCLogAdapter creates a new adapter for domain.Logger to hclog.Logger.
 func NewHCLogAdapter(logger domain.Logger) hclog.Logger {
 	return &HCLogAdapter{
-		logger: logger.With(domain.Field{Key: "component", Value: "hashicorp"}),
+		logger: logger.With(domain.Field{Key: domain.LogFieldComponent, Value: "hashicorp"}),
 		level:  hclog.Info,
 		name:   "hashicorp",
 	}

@@ -108,4 +108,11 @@ const (
 	DefaultFieldsPerKeyValue      = 2
 	DefaultComponentNameMaxLength = 20
 	DefaultColonSeparatorOffset   = 2
+	
+	// Commonly used log field keys.
+	LogFieldComponent = "component"
+	LogFieldError     = "error"
+	LogFieldUserID    = "user_id"
+	LogFieldRequestID = "request_id"
+	LogFieldTenantID  = "tenant_id"
 )

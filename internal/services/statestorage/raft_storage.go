@@ -95,7 +95,7 @@ func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logge
 		nodeID:      config.NodeID,
 		watchChans:  make(map[string][]chan domain.StateEvent),
 		stopCh:      make(chan struct{}),
-		logger:      logger.With(domain.Field{Key: "component", Value: "raft.storage"}),
+		logger:      logger.With(domain.Field{Key: domain.LogFieldComponent, Value: "raft.storage"}),
 	}
 
 	// Initialize peer discovery if enabled (discovery will be set externally)
@@ -184,7 +184,7 @@ func createRaftFSM(logger domain.Logger) *raftFSM {
 	return &raftFSM{
 		data:       make(map[string]*storageItem),
 		watchChans: make(map[string][]chan domain.StateEvent),
-		logger:     logger.With(domain.Field{Key: "component", Value: "raft.fsm"}),
+		logger:     logger.With(domain.Field{Key: domain.LogFieldComponent, Value: "raft.fsm"}),
 	}
 }
 

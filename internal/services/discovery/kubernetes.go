@@ -84,7 +84,7 @@ func NewKubernetesDiscovery(config KubernetesDiscoveryConfig, logger domain.Logg
 	kd := &KubernetesDiscovery{
 		client:   client,
 		config:   config,
-		logger:   logger.With(domain.Field{Key: "component", Value: "k8s.discovery"}),
+		logger:   logger.With(domain.Field{Key: domain.LogFieldComponent, Value: "k8s.discovery"}),
 		watchCh:  make(chan domain.ServiceDiscoveryEvent, k8sDefaultWatchChannelSize),
 		stopCh:   make(chan struct{}),
 		lastSeen: make(map[string]time.Time),
