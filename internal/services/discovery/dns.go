@@ -58,7 +58,7 @@ func (d *DNSDiscovery) Start(ctx context.Context) error {
 	d.mu.Lock()
 	if d.running {
 		d.mu.Unlock()
-		return errors.New("DNS discovery already running")
+		return errors.New("dNS discovery already running")
 	}
 	d.running = true
 	d.mu.Unlock()

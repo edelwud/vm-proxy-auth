@@ -348,10 +348,10 @@ func validateViperConfig(config *ViperConfig) error {
 
 	// RS256 requires JWKS URL, HS256 requires secret
 	if config.Auth.JWT.Algorithm == string(domain.JWTAlgorithmRS256) && config.Auth.JWT.JwksURL == "" {
-		return errors.New("RS256 algorithm requires jwksUrl")
+		return errors.New("rS256 algorithm requires jwksUrl")
 	}
 	if config.Auth.JWT.Algorithm == string(domain.JWTAlgorithmHS256) && config.Auth.JWT.Secret == "" {
-		return errors.New("HS256 algorithm requires secret")
+		return errors.New("hS256 algorithm requires secret")
 	}
 
 	// Tenant filter strategy validation
