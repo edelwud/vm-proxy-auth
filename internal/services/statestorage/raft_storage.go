@@ -121,9 +121,9 @@ func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logge
 	// Create Raft instance
 	r, err := raft.NewRaft(raftConfig, fsm, logStore, stableStore, snapStore, transport)
 	if err != nil {
-		transport.Close()
-		logStore.Close()
-		stableStore.Close()
+		_ = transport.Close()
+		_ = logStore.Close()
+		_ = stableStore.Close()
 		// snapStore doesn't need explicit close
 		return nil, fmt.Errorf("failed to create raft instance: %w", err)
 	}
@@ -143,9 +143,9 @@ func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logge
 	}
 
 	// Bootstrap cluster if needed
-	if err := rs.bootstrapCluster(); err != nil {
-		rs.Close()
-		return nil, fmt.Errorf("failed to bootstrap cluster: %w", err)
+	if bootstrapErr := rs.bootstrapCluster(); bootstrapErr != nil {
+		_ = rs.Close()
+		return nil, fmt.Errorf("failed to bootstrap cluster: %w", bootstrapErr)
 	}
 
 	rs.logger.Info("Raft storage initialized",
@@ -199,11 +199,11 @@ func (rs *RaftStorage) bootstrapCluster() error {
 	if len(servers) > 0 {
 		configuration := raft.Configuration{Servers: servers}
 		future := rs.raft.BootstrapCluster(configuration)
-		if err := future.Error(); err != nil {
+		if bootstrapErr := future.Error(); bootstrapErr != nil {
 			rs.logger.Error("Failed to bootstrap cluster",
-				domain.Field{Key: "error", Value: err.Error()},
+				domain.Field{Key: "error", Value: bootstrapErr.Error()},
 				domain.Field{Key: "servers", Value: fmt.Sprintf("%+v", servers)})
-			return fmt.Errorf("failed to bootstrap cluster: %w", err)
+			return fmt.Errorf("failed to bootstrap cluster: %w", bootstrapErr)
 		}
 
 		rs.logger.Info("Successfully bootstrapped Raft cluster",
@@ -261,8 +261,8 @@ func (rs *RaftStorage) Set(_ context.Context, key string, value []byte, ttl time
 	}
 
 	future := rs.raft.Apply(data, raftApplyTimeout)
-	if err := future.Error(); err != nil {
-		return fmt.Errorf("failed to apply raft command: %w", err)
+	if applyErr := future.Error(); applyErr != nil {
+		return fmt.Errorf("failed to apply raft command: %w", applyErr)
 	}
 
 	rs.logger.Debug("Set value in Raft storage",
@@ -300,8 +300,8 @@ func (rs *RaftStorage) Delete(_ context.Context, key string) error {
 	}
 
 	future := rs.raft.Apply(data, raftApplyTimeout)
-	if err := future.Error(); err != nil {
-		return fmt.Errorf("failed to apply raft command: %w", err)
+	if applyErr := future.Error(); applyErr != nil {
+		return fmt.Errorf("failed to apply raft command: %w", applyErr)
 	}
 
 	rs.logger.Debug("Deleted key from Raft storage",
@@ -358,8 +358,8 @@ func (rs *RaftStorage) SetMultiple(_ context.Context, items map[string][]byte, t
 	}
 
 	future := rs.raft.Apply(data, raftApplyTimeoutBulk)
-	if err := future.Error(); err != nil {
-		return fmt.Errorf("failed to apply bulk raft command: %w", err)
+	if applyErr := future.Error(); applyErr != nil {
+		return fmt.Errorf("failed to apply bulk raft command: %w", applyErr)
 	}
 
 	rs.logger.Debug("Set multiple values in Raft storage",
@@ -420,9 +420,9 @@ func (rs *RaftStorage) Close() error {
 	// Shutdown Raft
 	if rs.raft != nil {
 		future := rs.raft.Shutdown()
-		if err := future.Error(); err != nil {
+		if applyErr := future.Error(); applyErr != nil {
 			rs.logger.Error("Error during Raft shutdown",
-				domain.Field{Key: "error", Value: err.Error()})
+				domain.Field{Key: "error", Value: applyErr.Error()})
 		}
 	}
 

@@ -182,7 +182,8 @@ func (kd *KubernetesDiscovery) extractNodeID(pod corev1.Pod) string {
 }
 
 // extractPodAddresses finds Raft and HTTP addresses from pod containers.
-func (kd *KubernetesDiscovery) extractPodAddresses(pod corev1.Pod) (raftAddress, httpAddress string) {
+func (kd *KubernetesDiscovery) extractPodAddresses(pod corev1.Pod) (string, string) {
+	var raftAddress, httpAddress string
 	for _, container := range pod.Spec.Containers {
 		for _, port := range container.Ports {
 			switch port.Name {
@@ -317,7 +318,9 @@ func (kd *KubernetesDiscovery) buildServiceMetadata(service corev1.Service) map[
 }
 
 // enrichBackendsWithEndpointsIfAvailable enriches backends with endpoint health if available.
-func (kd *KubernetesDiscovery) enrichBackendsWithEndpointsIfAvailable(ctx context.Context, backends []domain.BackendInfo) {
+func (kd *KubernetesDiscovery) enrichBackendsWithEndpointsIfAvailable(
+	ctx context.Context, backends []domain.BackendInfo,
+) {
 	endpoints, err := kd.client.CoreV1().Endpoints(kd.namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: kd.config.BackendLabelSelector,
 	})
@@ -369,6 +372,172 @@ func (kd *KubernetesDiscovery) Watch(ctx context.Context) (<-chan domain.Service
 	return kd.watchCh, nil
 }
 
+// mapWatchEventType converts Kubernetes watch event to service discovery event type.
+func mapWatchEventType(eventType watch.EventType) (domain.ServiceDiscoveryEventType, bool) {
+	switch eventType {
+	case watch.Added:
+		return domain.ServiceDiscoveryNodeJoined, true
+	case watch.Deleted:
+		return domain.ServiceDiscoveryNodeLeft, true
+	case watch.Modified:
+		return domain.ServiceDiscoveryNodeUpdated, true
+	case watch.Bookmark, watch.Error:
+		return "", false
+	default:
+		return "", false
+	}
+}
+
+// createPeerInfoFromPod creates PeerInfo from Kubernetes pod.
+func (kd *KubernetesDiscovery) createPeerInfoFromPod(pod *corev1.Pod) *domain.PeerInfo {
+	nodeID := pod.Name
+	if pod.Labels["node-id"] != "" {
+		nodeID = pod.Labels["node-id"]
+	}
+
+	httpAddress, raftAddress := kd.extractPodAddresses(*pod)
+
+	return &domain.PeerInfo{
+		NodeID:      nodeID,
+		Address:     httpAddress,
+		RaftAddress: raftAddress,
+		Healthy:     pod.Status.Phase == corev1.PodRunning,
+		LastSeen:    time.Now(),
+		Metadata: map[string]string{
+			"pod_name":      pod.Name,
+			"pod_namespace": pod.Namespace,
+			"pod_ip":        pod.Status.PodIP,
+		},
+	}
+}
+
+// sendDiscoveryEvent sends a discovery event through the watch channel.
+func (kd *KubernetesDiscovery) sendDiscoveryEvent(
+	eventType domain.ServiceDiscoveryEventType, peerInfo *domain.PeerInfo, podName string,
+) {
+	discoveryEvent := domain.ServiceDiscoveryEvent{
+		Type:      eventType,
+		PeerInfo:  peerInfo,
+		Timestamp: time.Now(),
+	}
+
+	select {
+	case kd.watchCh <- discoveryEvent:
+	default:
+		kd.logger.Warn("Service discovery event channel full, dropping event",
+			domain.Field{Key: "event_type", Value: string(eventType)},
+			domain.Field{Key: "pod_name", Value: podName})
+	}
+}
+
+// processPodWatchEvent processes a single pod watch event.
+func (kd *KubernetesDiscovery) processPodWatchEvent(event watch.Event) {
+	pod, ok := event.Object.(*corev1.Pod)
+	if !ok {
+		return
+	}
+
+	eventType, validEvent := mapWatchEventType(event.Type)
+	if !validEvent {
+		return
+	}
+
+	peerInfo := kd.createPeerInfoFromPod(pod)
+	kd.sendDiscoveryEvent(eventType, peerInfo, pod.Name)
+}
+
+// mapServiceWatchEventType converts Kubernetes service watch event to backend discovery event type.
+func mapServiceWatchEventType(eventType watch.EventType) (domain.ServiceDiscoveryEventType, bool) {
+	switch eventType {
+	case watch.Added:
+		return domain.ServiceDiscoveryBackendAdded, true
+	case watch.Deleted:
+		return domain.ServiceDiscoveryBackendRemoved, true
+	case watch.Modified:
+		return domain.ServiceDiscoveryBackendUpdated, true
+	case watch.Bookmark, watch.Error:
+		return "", false
+	default:
+		return "", false
+	}
+}
+
+// createBackendInfoFromService creates BackendInfo from Kubernetes service.
+func (kd *KubernetesDiscovery) createBackendInfoFromService(service *corev1.Service) *domain.BackendInfo {
+	var port int32
+	for _, svcPort := range service.Spec.Ports {
+		if svcPort.Name == kd.config.HTTPPortName || svcPort.Name == defaultHTTPPortName {
+			port = svcPort.Port
+			break
+		}
+	}
+
+	if port == 0 {
+		return nil
+	}
+
+	url := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d",
+		service.Name, service.Namespace, port)
+
+	weight := 1
+	if weightStr, exists := service.Annotations["vm-proxy-auth/weight"]; exists {
+		if w, parseErr := strconv.Atoi(weightStr); parseErr == nil && w > 0 {
+			weight = w
+		}
+	}
+
+	return &domain.BackendInfo{
+		URL:      url,
+		Weight:   weight,
+		Healthy:  true,
+		LastSeen: time.Now(),
+		Metadata: map[string]string{
+			"service_name":      service.Name,
+			"service_namespace": service.Namespace,
+			"service_type":      string(service.Spec.Type),
+		},
+	}
+}
+
+// sendBackendDiscoveryEvent sends a backend discovery event through the watch channel.
+func (kd *KubernetesDiscovery) sendBackendDiscoveryEvent(
+	eventType domain.ServiceDiscoveryEventType, backendInfo *domain.BackendInfo, serviceName string,
+) {
+	discoveryEvent := domain.ServiceDiscoveryEvent{
+		Type:      eventType,
+		Backend:   backendInfo,
+		Timestamp: time.Now(),
+	}
+
+	select {
+	case kd.watchCh <- discoveryEvent:
+	default:
+		kd.logger.Warn("Service discovery event channel full, dropping event",
+			domain.Field{Key: "event_type", Value: string(eventType)},
+			domain.Field{Key: "service_name", Value: serviceName})
+	}
+}
+
+// processServiceWatchEvent processes a single service watch event.
+func (kd *KubernetesDiscovery) processServiceWatchEvent(event watch.Event) {
+	service, ok := event.Object.(*corev1.Service)
+	if !ok {
+		return
+	}
+
+	eventType, validEvent := mapServiceWatchEventType(event.Type)
+	if !validEvent {
+		return
+	}
+
+	backendInfo := kd.createBackendInfoFromService(service)
+	if backendInfo == nil {
+		return
+	}
+
+	kd.sendBackendDiscoveryEvent(eventType, backendInfo, service.Name)
+}
+
 // watchPods watches for pod changes (peer nodes).
 func (kd *KubernetesDiscovery) watchPods(ctx context.Context) {
 	kd.logger.Info("Starting pod watcher for peer discovery")
@@ -393,71 +562,7 @@ func (kd *KubernetesDiscovery) watchPods(ctx context.Context) {
 		}
 
 		for event := range watcher.ResultChan() {
-			pod, ok := event.Object.(*corev1.Pod)
-			if !ok {
-				continue
-			}
-
-			var eventType domain.ServiceDiscoveryEventType
-			switch event.Type {
-			case watch.Added:
-				eventType = domain.ServiceDiscoveryNodeJoined
-			case watch.Deleted:
-				eventType = domain.ServiceDiscoveryNodeLeft
-			case watch.Modified:
-				eventType = domain.ServiceDiscoveryNodeUpdated
-			case watch.Bookmark, watch.Error:
-				continue
-			default:
-				continue
-			}
-
-			// Convert pod to PeerInfo
-			nodeID := pod.Name
-			if pod.Labels["node-id"] != "" {
-				nodeID = pod.Labels["node-id"]
-			}
-
-			// Find addresses
-			raftAddress := ""
-			httpAddress := ""
-			for _, container := range pod.Spec.Containers {
-				for _, port := range container.Ports {
-					if port.Name == kd.config.RaftPortName {
-						raftAddress = fmt.Sprintf("%s:%d", pod.Status.PodIP, port.ContainerPort)
-					}
-					if port.Name == kd.config.HTTPPortName {
-						httpAddress = fmt.Sprintf("%s:%d", pod.Status.PodIP, port.ContainerPort)
-					}
-				}
-			}
-
-			peerInfo := &domain.PeerInfo{
-				NodeID:      nodeID,
-				Address:     httpAddress,
-				RaftAddress: raftAddress,
-				Healthy:     pod.Status.Phase == corev1.PodRunning,
-				LastSeen:    time.Now(),
-				Metadata: map[string]string{
-					"pod_name":      pod.Name,
-					"pod_namespace": pod.Namespace,
-					"pod_ip":        pod.Status.PodIP,
-				},
-			}
-
-			discoveryEvent := domain.ServiceDiscoveryEvent{
-				Type:      eventType,
-				PeerInfo:  peerInfo,
-				Timestamp: time.Now(),
-			}
-
-			select {
-			case kd.watchCh <- discoveryEvent:
-			default:
-				kd.logger.Warn("Service discovery event channel full, dropping event",
-					domain.Field{Key: "event_type", Value: string(eventType)},
-					domain.Field{Key: "pod_name", Value: pod.Name})
-			}
+			kd.processPodWatchEvent(event)
 		}
 
 		watcher.Stop()
@@ -489,73 +594,7 @@ func (kd *KubernetesDiscovery) watchServices(ctx context.Context) {
 		}
 
 		for event := range watcher.ResultChan() {
-			service, ok := event.Object.(*corev1.Service)
-			if !ok {
-				continue
-			}
-
-			var eventType domain.ServiceDiscoveryEventType
-			switch event.Type {
-			case watch.Added:
-				eventType = domain.ServiceDiscoveryBackendAdded
-			case watch.Deleted:
-				eventType = domain.ServiceDiscoveryBackendRemoved
-			case watch.Modified:
-				eventType = domain.ServiceDiscoveryBackendUpdated
-			case watch.Bookmark, watch.Error:
-				continue
-			default:
-				continue
-			}
-
-			// Convert service to BackendInfo
-			var port int32
-			for _, svcPort := range service.Spec.Ports {
-				if svcPort.Name == kd.config.HTTPPortName || svcPort.Name == defaultHTTPPortName {
-					port = svcPort.Port
-					break
-				}
-			}
-
-			if port == 0 {
-				continue
-			}
-
-			url := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d",
-				service.Name, service.Namespace, port)
-
-			weight := 1
-			if weightStr, exists := service.Annotations["vm-proxy-auth/weight"]; exists {
-				if w, err := strconv.Atoi(weightStr); err == nil && w > 0 {
-					weight = w
-				}
-			}
-
-			backendInfo := &domain.BackendInfo{
-				URL:      url,
-				Weight:   weight,
-				Healthy:  true,
-				LastSeen: time.Now(),
-				Metadata: map[string]string{
-					"service_name":      service.Name,
-					"service_namespace": service.Namespace,
-					"cluster_ip":        service.Spec.ClusterIP,
-				},
-			}
-
-			discoveryEvent := domain.ServiceDiscoveryEvent{
-				Type:      eventType,
-				Backend:   backendInfo,
-				Timestamp: time.Now(),
-			}
-
-			select {
-			case kd.watchCh <- discoveryEvent:
-			default:
-				kd.logger.Warn("Service discovery event channel full, dropping event",
-					domain.Field{Key: "event_type", Value: string(eventType)},
-					domain.Field{Key: "service_name", Value: service.Name})
-			}
+			kd.processServiceWatchEvent(event)
 		}
 
 		watcher.Stop()

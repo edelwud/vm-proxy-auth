@@ -46,12 +46,12 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 		value := []byte("test-value")
 
 		// Test Set
-		err := storage.Set(ctx, key, value, time.Minute)
-		require.NoError(t, err)
+		setErr := storage.Set(ctx, key, value, time.Minute)
+		require.NoError(t, setErr)
 
 		// Test Get
-		retrieved, err := storage.Get(ctx, key)
-		require.NoError(t, err)
+		retrieved, getErr := storage.Get(ctx, key)
+		require.NoError(t, getErr)
 		assert.Equal(t, value, retrieved)
 
 		// Test Delete
@@ -68,12 +68,12 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 		value := []byte("expire-value")
 
 		// Set with short TTL
-		err := storage.Set(ctx, key, value, 100*time.Millisecond)
-		require.NoError(t, err)
+		setErr := storage.Set(ctx, key, value, 100*time.Millisecond)
+		require.NoError(t, setErr)
 
 		// Should be available immediately
-		retrieved, err := storage.Get(ctx, key)
-		require.NoError(t, err)
+		retrieved, getErr := storage.Get(ctx, key)
+		require.NoError(t, getErr)
 		assert.Equal(t, value, retrieved)
 
 		// Wait for expiration
@@ -92,12 +92,12 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 		}
 
 		// Test SetMultiple
-		err := storage.SetMultiple(ctx, items, time.Minute)
-		require.NoError(t, err)
+		setErr := storage.SetMultiple(ctx, items, time.Minute)
+		require.NoError(t, setErr)
 
 		// Test GetMultiple
-		retrieved, err := storage.GetMultiple(ctx, []string{"key1", "key2", "key3", "nonexistent"})
-		require.NoError(t, err)
+		retrieved, getErr := storage.GetMultiple(ctx, []string{"key1", "key2", "key3", "nonexistent"})
+		require.NoError(t, getErr)
 
 		assert.Equal(t, []byte("value1"), retrieved["key1"])
 		assert.Equal(t, []byte("value2"), retrieved["key2"])
@@ -110,8 +110,8 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 		watchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
-		events, err := storage.Watch(watchCtx, "watch:")
-		require.NoError(t, err)
+		events, watchErr := storage.Watch(watchCtx, "watch:")
+		require.NoError(t, watchErr)
 
 		// Set a key that should trigger the watcher
 		go func() {
@@ -132,8 +132,8 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 	})
 
 	t.Run("ping_health_check", func(t *testing.T) {
-		err := storage.Ping(ctx)
-		require.NoError(t, err)
+		pingErr := storage.Ping(ctx)
+		require.NoError(t, pingErr)
 	})
 }
 
@@ -205,8 +205,8 @@ func TestRaftStorage_MultiNode(t *testing.T) {
 
 		// Verify all nodes have the data
 		for i, node := range nodes {
-			retrieved, err := node.Get(ctx, key)
-			require.NoError(t, err, "Node %d should have replicated data", i)
+			retrieved, getErr := node.Get(ctx, key)
+			require.NoError(t, getErr, "Node %d should have replicated data", i)
 			assert.Equal(t, value, retrieved, "Node %d has incorrect data", i)
 		}
 	})
@@ -452,8 +452,8 @@ func TestRaftStorage_ConcurrentOperations(t *testing.T) {
 
 		// Check all writes succeeded
 		for i := range numOperations {
-			err := <-errCh
-			require.NoError(t, err, "Write %d should succeed", i)
+			resErr := <-errCh
+			require.NoError(t, resErr, "Write %d should succeed", i)
 		}
 
 		// Verify all values
@@ -461,8 +461,8 @@ func TestRaftStorage_ConcurrentOperations(t *testing.T) {
 			key := fmt.Sprintf("concurrent-key-%d", i)
 			expected := []byte(fmt.Sprintf("value-%d", i))
 
-			value, err := storage.Get(ctx, key)
-			require.NoError(t, err, "Read %d should succeed", i)
+			value, getErr := storage.Get(ctx, key)
+			require.NoError(t, getErr, "Read %d should succeed", i)
 			assert.Equal(t, expected, value, "Value %d should match", i)
 		}
 	})
@@ -504,8 +504,8 @@ func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
 
 	// Verify data is written
 	for key, expectedValue := range testData {
-		value, err := storage1.Get(ctx, key)
-		require.NoError(t, err)
+		value, getErr := storage1.Get(ctx, key)
+		require.NoError(t, getErr)
 		assert.Equal(t, expectedValue, value)
 	}
 
@@ -526,8 +526,8 @@ func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
 
 	// Verify data persisted
 	for key, expectedValue := range testData {
-		value, err := storage2.Get(ctx, key)
-		require.NoError(t, err, "Key %s should persist after restart", key)
+		value, getErr := storage2.Get(ctx, key)
+		require.NoError(t, getErr, "Key %s should persist after restart", key)
 		assert.Equal(t, expectedValue, value, "Value for %s should match after restart", key)
 	}
 
@@ -535,10 +535,10 @@ func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
 	newKey := "post-restart-key"
 	newValue := []byte("post-restart-value")
 	err = storage2.Set(ctx, newKey, newValue, time.Hour)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	retrievedNewValue, err := storage2.Get(ctx, newKey)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, newValue, retrievedNewValue)
 }
 
@@ -629,8 +629,8 @@ func TestRaftStorage_DataDir_Management(t *testing.T) {
 		// Verify Raft files are created
 		files := []string{"raft-log.db", "raft-stable.db"}
 		for _, file := range files {
-			_, err := os.Stat(filepath.Join(dataDirPath, file))
-			assert.NoError(t, err, "File %s should be created", file)
+			_, statErr := os.Stat(filepath.Join(dataDirPath, file))
+			assert.NoError(t, statErr, "File %s should be created", file)
 		}
 	})
 }
