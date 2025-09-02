@@ -60,7 +60,7 @@ func TestNewStateStorage(t *testing.T) {
 		storage, err := statestorage.NewStateStorage(nil, "raft", "test-node", logger)
 		require.Error(t, err)
 		assert.Nil(t, storage)
-		assert.Contains(t, err.Error(), "raft state storage not yet implemented")
+		assert.Contains(t, err.Error(), "invalid Raft configuration type")
 	})
 
 	t.Run("unsupported_storage_type", func(t *testing.T) {

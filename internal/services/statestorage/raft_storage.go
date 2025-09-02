@@ -534,6 +534,14 @@ func (rs *RaftStorage) isClosed() bool {
 	return rs.closed
 }
 
+// IsLeader checks if this node is the Raft leader.
+func (rs *RaftStorage) IsLeader() bool {
+	if rs.raft == nil {
+		return false
+	}
+	return rs.raft.State() == raft.Leader
+}
+
 // raftFSM implements the Raft Finite State Machine.
 type raftFSM struct {
 	data       map[string]*storageItem
@@ -740,23 +748,26 @@ func (f *raftFSM) closeAllWatchers() {
 
 // notifyWatchers notifies all relevant watchers of a state change.
 func (f *raftFSM) notifyWatchers(key string, event domain.StateEvent) {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
+	// Run notification asynchronously to avoid deadlocks
+	go func() {
+		f.mu.RLock()
+		defer f.mu.RUnlock()
 
-	for keyPrefix, watchers := range f.watchChans {
-		if strings.HasPrefix(key, keyPrefix) {
-			for _, ch := range watchers {
-				select {
-				case ch <- event:
-				default:
-					// Channel is full, skip
-					f.logger.Warn("Watcher channel full, dropping event",
-						domain.Field{Key: "key_prefix", Value: keyPrefix},
-						domain.Field{Key: "event_key", Value: key})
+		for keyPrefix, watchers := range f.watchChans {
+			if strings.HasPrefix(key, keyPrefix) {
+				for _, ch := range watchers {
+					select {
+					case ch <- event:
+					default:
+						// Channel is full, skip
+						f.logger.Warn("Watcher channel full, dropping event",
+							domain.Field{Key: "key_prefix", Value: keyPrefix},
+							domain.Field{Key: "event_key", Value: key})
+					}
 				}
 			}
 		}
-	}
+	}()
 }
 
 // raftSnapshot implements the snapshot interface.
