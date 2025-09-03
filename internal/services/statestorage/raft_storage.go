@@ -16,25 +16,23 @@ import (
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	infralogger "github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
 )
 
 // RaftStorageConfig holds Raft storage configuration.
 type RaftStorageConfig struct {
-	NodeID             string                            `json:"node_id"`
-	BindAddress        string                            `json:"bind_address"`
-	DataDir            string                            `json:"data_dir"`
-	Peers              []string                          `json:"peers"`
-	PeerDiscovery      *config.RaftPeerDiscoverySettings `json:"peer_discovery,omitempty"`
-	HeartbeatTimeout   time.Duration                     `json:"heartbeat_timeout"`
-	ElectionTimeout    time.Duration                     `json:"election_timeout"`
-	LeaderLeaseTimeout time.Duration                     `json:"leader_lease_timeout"`
-	CommitTimeout      time.Duration                     `json:"commit_timeout"`
-	SnapshotRetention  int                               `json:"snapshot_retention"`
-	SnapshotThreshold  uint64                            `json:"snapshot_threshold"`
-	TrailingLogs       uint64                            `json:"trailing_logs"`
+	NodeID             string        `json:"node_id"`
+	BindAddress        string        `json:"bind_address"`
+	DataDir            string        `json:"data_dir"`
+	Peers              []string      `json:"peers"`
+	HeartbeatTimeout   time.Duration `json:"heartbeat_timeout"`
+	ElectionTimeout    time.Duration `json:"election_timeout"`
+	LeaderLeaseTimeout time.Duration `json:"leader_lease_timeout"`
+	CommitTimeout      time.Duration `json:"commit_timeout"`
+	SnapshotRetention  int           `json:"snapshot_retention"`
+	SnapshotThreshold  uint64        `json:"snapshot_threshold"`
+	TrailingLogs       uint64        `json:"trailing_logs"`
 }
 
 // RaftStorage implements StateStorage using HashiCorp Raft consensus.
@@ -52,7 +50,6 @@ type RaftStorage struct {
 	stopCh      chan struct{}
 	wg          sync.WaitGroup
 	logger      domain.Logger
-	discovery   domain.ServiceDiscovery
 	closed      bool
 }
 
@@ -98,11 +95,7 @@ func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logge
 		logger:      logger.With(domain.Field{Key: domain.LogFieldComponent, Value: "raft.storage"}),
 	}
 
-	// Initialize peer discovery if enabled (discovery will be set externally)
-	if config.PeerDiscovery != nil && config.PeerDiscovery.Enabled {
-		rs.logger.Info("Peer discovery enabled, will be initialized externally",
-			domain.Field{Key: "discovery_type", Value: config.PeerDiscovery.Type})
-	}
+	// Peer discovery is now handled by memberlist integration
 
 	// Bootstrap cluster if needed
 	if bootstrapErr := rs.bootstrapCluster(); bootstrapErr != nil {
@@ -214,21 +207,14 @@ func (rs *RaftStorage) bootstrapCluster() error {
 
 	// Determine bootstrap strategy
 	hasPeers := len(rs.config.Peers) > 0
-	hasDiscovery := rs.config.PeerDiscovery != nil && rs.config.PeerDiscovery.Enabled
 
 	// Case 1: Static peers configuration
 	if hasPeers {
 		return rs.bootstrapWithStaticPeers()
 	}
 
-	// Case 2: Peer discovery enabled but no static peers
-	if hasDiscovery {
-		rs.logger.Info("Bootstrapping single-node cluster, peers will be discovered and added dynamically")
-		return rs.bootstrapSingleNode()
-	}
-
-	// Case 3: Single node deployment (no peers, no discovery)
-	rs.logger.Info("Bootstrapping single-node cluster for standalone deployment")
+	// Case 2: Single node deployment (memberlist will handle dynamic peer addition)
+	rs.logger.Info("Bootstrapping single-node cluster, memberlist will handle dynamic peers")
 	return rs.bootstrapSingleNode()
 }
 
@@ -629,111 +615,67 @@ func (rs *RaftStorage) IsLeader() bool {
 	return rs.raft.State() == raft.Leader
 }
 
-// SetPeerDiscovery sets the peer discovery service (called from external initialization).
-func (rs *RaftStorage) SetPeerDiscovery(discovery domain.ServiceDiscovery) {
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	rs.discovery = discovery
+// --- RaftManager interface implementation for memberlist integration ---
 
-	if discovery != nil {
-		rs.logger.Info("Peer discovery service attached to Raft storage")
-		go rs.handleDiscoveryEvents()
-	}
-}
-
-// handleDiscoveryEvents processes peer discovery events and updates Raft configuration.
-func (rs *RaftStorage) handleDiscoveryEvents() {
-	if rs.discovery == nil {
-		return
-	}
-
-	// Start discovery
-	ctx := context.Background()
-	if err := rs.discovery.Start(ctx); err != nil {
-		rs.logger.Error("Failed to start peer discovery",
-			domain.Field{Key: "error", Value: err.Error()})
-		return
-	}
-
-	// Get discovery event channel
-	events := rs.discovery.Events()
-
-	for {
-		select {
-		case <-rs.stopCh:
-			return
-		case event, ok := <-events:
-			if !ok {
-				return
-			}
-			rs.processDiscoveryEvent(event)
-		}
-	}
-}
-
-// processDiscoveryEvent processes a single discovery event.
-func (rs *RaftStorage) processDiscoveryEvent(event domain.ServiceDiscoveryEvent) {
-	switch event.Type {
-	case domain.ServiceDiscoveryEventTypePeerJoined:
-		if event.Peer != nil {
-			rs.addPeerToCluster(event.Peer)
-		}
-	case domain.ServiceDiscoveryEventTypePeerLeft:
-		if event.Peer != nil {
-			rs.removePeerFromCluster(event.Peer)
-		}
-	case domain.ServiceDiscoveryEventTypePeerUpdated:
-		// Peer updates don't affect Raft cluster membership
-	case domain.ServiceDiscoveryEventTypeBackendAdded:
-		// Backend changes don't affect Raft cluster
-	case domain.ServiceDiscoveryEventTypeBackendRemoved:
-		// Backend changes don't affect Raft cluster
-	case domain.ServiceDiscoveryEventTypeBackendUpdated:
-		// Backend changes don't affect Raft cluster
-	}
-}
-
-// addPeerToCluster adds a new peer to the Raft cluster.
-func (rs *RaftStorage) addPeerToCluster(peer *domain.PeerInfo) {
+// AddVoter adds a voting member to the Raft cluster.
+func (rs *RaftStorage) AddVoter(nodeID, address string) error {
 	if !rs.IsLeader() {
-		return // Only leader can modify cluster configuration
+		return errors.New("only leader can add voters")
 	}
 
-	serverID := raft.ServerID(peer.NodeID)
-	serverAddress := raft.ServerAddress(peer.RaftAddress)
+	serverID := raft.ServerID(nodeID)
+	serverAddress := raft.ServerAddress(address)
 
 	future := rs.raft.AddVoter(serverID, serverAddress, 0, 0)
 	if err := future.Error(); err != nil {
-		rs.logger.Error("Failed to add peer to Raft cluster",
-			domain.Field{Key: "peer_id", Value: peer.NodeID},
-			domain.Field{Key: "peer_address", Value: peer.RaftAddress},
-			domain.Field{Key: "error", Value: err.Error()})
-		return
+		return fmt.Errorf("failed to add voter: %w", err)
 	}
 
-	rs.logger.Info("Added peer to Raft cluster",
-		domain.Field{Key: "peer_id", Value: peer.NodeID},
-		domain.Field{Key: "peer_address", Value: peer.RaftAddress})
+	rs.logger.Info("Added Raft voter",
+		domain.Field{Key: "node_id", Value: nodeID},
+		domain.Field{Key: "address", Value: address})
+
+	return nil
 }
 
-// removePeerFromCluster removes a peer from the Raft cluster.
-func (rs *RaftStorage) removePeerFromCluster(peer *domain.PeerInfo) {
+// RemoveServer removes a server from the Raft cluster.
+func (rs *RaftStorage) RemoveServer(nodeID string) error {
 	if !rs.IsLeader() {
-		return // Only leader can modify cluster configuration
+		return errors.New("only leader can remove servers")
 	}
 
-	serverID := raft.ServerID(peer.NodeID)
+	serverID := raft.ServerID(nodeID)
 
 	future := rs.raft.RemoveServer(serverID, 0, 0)
 	if err := future.Error(); err != nil {
-		rs.logger.Error("Failed to remove peer from Raft cluster",
-			domain.Field{Key: "peer_id", Value: peer.NodeID},
-			domain.Field{Key: "error", Value: err.Error()})
-		return
+		return fmt.Errorf("failed to remove server: %w", err)
 	}
 
-	rs.logger.Info("Removed peer from Raft cluster",
-		domain.Field{Key: "peer_id", Value: peer.NodeID})
+	rs.logger.Info("Removed Raft server",
+		domain.Field{Key: "node_id", Value: nodeID})
+
+	return nil
+}
+
+// GetLeader returns the current leader's node ID and address.
+func (rs *RaftStorage) GetLeader() (string, string) {
+	leaderAddr, leaderID := rs.raft.LeaderWithID()
+	return string(leaderID), string(leaderAddr)
+}
+
+// GetPeers returns the list of peer node IDs in the Raft cluster.
+func (rs *RaftStorage) GetPeers() ([]string, error) {
+	future := rs.raft.GetConfiguration()
+	if err := future.Error(); err != nil {
+		return nil, fmt.Errorf("failed to get raft configuration: %w", err)
+	}
+
+	var peers []string
+	for _, server := range future.Configuration().Servers {
+		peers = append(peers, string(server.ID))
+	}
+
+	return peers, nil
 }
 
 // raftFSM implements the Raft Finite State Machine.

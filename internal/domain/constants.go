@@ -96,6 +96,17 @@ const (
 	DefaultTestCount   = 3
 	DefaultBenchCount  = 10
 
+	// Memberlist defaults.
+	DefaultMemberlistBindPort       = 7946
+	DefaultMemberlistGossipNodes    = 3
+	DefaultMemberlistProbeTimeout   = 500 * time.Millisecond
+	DefaultMemberlistProbeInterval  = 1 * time.Second
+	DefaultMemberlistGossipInterval = 200 * time.Millisecond
+	DefaultLeaveTimeout             = 5 * time.Second
+
+	// Encryption constants.
+	AESKeySize = 32
+
 	// HTTP status codes.
 	StatusInternalServerError = 500
 	StatusBadRequest          = 400

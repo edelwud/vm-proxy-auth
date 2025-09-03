@@ -53,6 +53,24 @@ stateStorage:
     minRetryBackoff: "100ms"
     maxRetryBackoff: "1s"
 
+# Memberlist for production cluster coordination
+memberlist:
+  bindAddress: "0.0.0.0"
+  bindPort: 7946
+  advertiseAddress: "${NODE_IP}"
+  advertisePort: 7946
+  joinNodes: "${MEMBERLIST_JOIN_NODES}"  # Comma-separated list from environment
+  gossipInterval: "200ms"
+  gossipNodes: 3
+  probeInterval: "1s"
+  probeTimeout: "500ms"
+  encryptionKey: "${MEMBERLIST_ENCRYPTION_KEY}"  # Base64 encoded 32-byte key
+  metadata:
+    role: "gateway"
+    environment: "production"
+    region: "${REGION}"
+    zone: "${AVAILABILITY_ZONE}"
+
 # Production JWT with JWKS
 auth:
   jwt:

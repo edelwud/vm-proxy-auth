@@ -58,10 +58,9 @@ func NewStateStorage(
 		// Convert config.RaftSettings to RaftStorageConfig with defaults
 		storageConfigRaft := RaftStorageConfig{
 			NodeID:             raftConfig.NodeID,
-			BindAddress:        "127.0.0.1:9000", // Default bind address
+			BindAddress:        raftConfig.BindAddress,
 			DataDir:            raftConfig.DataDir,
 			Peers:              raftConfig.Peers,
-			PeerDiscovery:      &raftConfig.PeerDiscovery,
 			HeartbeatTimeout:   1 * time.Second,
 			ElectionTimeout:    1 * time.Second,
 			LeaderLeaseTimeout: domain.DefaultLeaderLeaseTimeout,

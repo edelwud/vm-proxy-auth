@@ -36,6 +36,15 @@ retryBackoff: "100ms"
 stateStorage:
   type: "local"
 
+# Memberlist configuration (disabled for local development)
+memberlist:
+  bindAddress: "127.0.0.1"
+  bindPort: 7946
+  joinNodes: []  # Empty for single-node setup
+  metadata:
+    role: "gateway"
+    environment: "development"
+
 # JWT authentication with shared secret
 auth:
   jwt:

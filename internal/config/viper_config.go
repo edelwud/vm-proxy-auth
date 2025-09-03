@@ -30,6 +30,7 @@ type ViperConfig struct {
 	TenantFilter  TenantFilterSettings  `mapstructure:"tenantFilter"`
 	Metrics       MetricsSettings       `mapstructure:"metrics"`
 	Logging       LoggingSettings       `mapstructure:"logging"`
+	Memberlist    MemberlistSettings    `mapstructure:"memberlist"`
 }
 
 type ServerSettings struct {
@@ -95,50 +96,25 @@ type RedisSettings struct {
 
 // RaftSettings configures Raft consensus state storage.
 type RaftSettings struct {
-	NodeID        string                    `mapstructure:"nodeId"`
-	Peers         []string                  `mapstructure:"peers"`
-	DataDir       string                    `mapstructure:"dataDir"`
-	PeerDiscovery RaftPeerDiscoverySettings `mapstructure:"peerDiscovery"`
+	NodeID      string   `mapstructure:"nodeId"`
+	BindAddress string   `mapstructure:"bindAddress"`
+	Peers       []string `mapstructure:"peers"`
+	DataDir     string   `mapstructure:"dataDir"`
 }
 
-// RaftPeerDiscoverySettings configures dynamic peer discovery for Raft.
-type RaftPeerDiscoverySettings struct {
-	Enabled    bool                      `mapstructure:"enabled"`
-	Type       string                    `mapstructure:"type"` // kubernetes, dns, mdns
-	Kubernetes KubernetesDiscoveryConfig `mapstructure:"kubernetes"`
-	DNS        DNSDiscoveryConfig        `mapstructure:"dns"`
-	MDNS       MDNSDiscoveryConfig       `mapstructure:"mdns"`
-}
-
-// KubernetesDiscoveryConfig configures Kubernetes-based peer discovery.
-type KubernetesDiscoveryConfig struct {
-	Namespace            string        `mapstructure:"namespace"`
-	PeerLabelSelector    string        `mapstructure:"peerLabelSelector"`
-	BackendLabelSelector string        `mapstructure:"backendLabelSelector"`
-	HTTPPortName         string        `mapstructure:"httpPortName"`
-	RaftPortName         string        `mapstructure:"raftPortName"`
-	WatchTimeout         time.Duration `mapstructure:"watchTimeout"`
-}
-
-// DNSDiscoveryConfig configures DNS-based peer discovery.
-type DNSDiscoveryConfig struct {
-	Domain         string        `mapstructure:"domain"`
-	Port           int           `mapstructure:"port"`
-	RaftPort       int           `mapstructure:"raftPort"`
-	UpdateInterval time.Duration `mapstructure:"updateInterval"`
-	UseSRVRecords  bool          `mapstructure:"useSrvRecords"`
-	SRVService     string        `mapstructure:"srvService"`
-	SRVProtocol    string        `mapstructure:"srvProtocol"`
-}
-
-// MDNSDiscoveryConfig configures mDNS-based peer discovery.
-type MDNSDiscoveryConfig struct {
-	ServiceType    string        `mapstructure:"serviceType"`
-	ServiceDomain  string        `mapstructure:"serviceDomain"`
-	Port           int           `mapstructure:"port"`
-	RaftPort       int           `mapstructure:"raftPort"`
-	UpdateInterval time.Duration `mapstructure:"updateInterval"`
-	DisableIPv6    bool          `mapstructure:"disableIpv6"`
+// MemberlistSettings configures memberlist for cluster membership.
+type MemberlistSettings struct {
+	BindAddress      string            `mapstructure:"bindAddress"`
+	BindPort         int               `mapstructure:"bindPort"`
+	AdvertiseAddress string            `mapstructure:"advertiseAddress"`
+	AdvertisePort    int               `mapstructure:"advertisePort"`
+	JoinNodes        []string          `mapstructure:"joinNodes"`
+	GossipInterval   time.Duration     `mapstructure:"gossipInterval"`
+	GossipNodes      int               `mapstructure:"gossipNodes"`
+	ProbeInterval    time.Duration     `mapstructure:"probeInterval"`
+	ProbeTimeout     time.Duration     `mapstructure:"probeTimeout"`
+	EncryptionKey    string            `mapstructure:"encryptionKey"`
+	Metadata         map[string]string `mapstructure:"metadata"`
 }
 
 type AuthSettings struct {
@@ -295,13 +271,17 @@ func setViperDefaults(v *viper.Viper) {
 	v.SetDefault("stateStorage.redis.minRetryBackoff", domain.DefaultRedisMinRetryBackoff.String())
 	v.SetDefault("stateStorage.redis.maxRetryBackoff", domain.DefaultRedisMaxRetryBackoff.String())
 
-	// mDNS discovery defaults
-	v.SetDefault("stateStorage.raft.peerDiscovery.mdns.serviceType", domain.DefaultMDNSServiceType)
-	v.SetDefault("stateStorage.raft.peerDiscovery.mdns.serviceDomain", domain.DefaultMDNSServiceDomain)
-	v.SetDefault("stateStorage.raft.peerDiscovery.mdns.port", domain.DefaultDNSPort)
-	v.SetDefault("stateStorage.raft.peerDiscovery.mdns.raftPort", domain.DefaultDNSRaftPort)
-	v.SetDefault("stateStorage.raft.peerDiscovery.mdns.updateInterval", domain.DefaultMDNSUpdateInterval.String())
-	v.SetDefault("stateStorage.raft.peerDiscovery.mdns.disableIpv6", true) // Avoid IPv6 multicast issues
+	// Raft defaults
+	v.SetDefault("stateStorage.raft.bindAddress", "127.0.0.1:9000")
+
+	// Memberlist defaults
+	v.SetDefault("memberlist.bindAddress", "0.0.0.0")
+	v.SetDefault("memberlist.bindPort", domain.DefaultMemberlistBindPort)
+	v.SetDefault("memberlist.advertisePort", domain.DefaultMemberlistBindPort)
+	v.SetDefault("memberlist.gossipInterval", domain.DefaultMemberlistGossipInterval.String())
+	v.SetDefault("memberlist.gossipNodes", domain.DefaultMemberlistGossipNodes)
+	v.SetDefault("memberlist.probeInterval", domain.DefaultMemberlistProbeInterval.String())
+	v.SetDefault("memberlist.probeTimeout", domain.DefaultMemberlistProbeTimeout.String())
 
 	// Auth defaults
 	v.SetDefault("auth.jwt.algorithm", string(domain.JWTAlgorithmRS256))
@@ -504,66 +484,14 @@ func (c *ViperConfig) validateRaftConfig() error {
 		return errors.New("raft node ID is required when using Raft state storage")
 	}
 
-	// Peers can be empty if peer discovery is enabled
-	if len(raft.Peers) == 0 && !raft.PeerDiscovery.Enabled {
-		return errors.New("raft peers list cannot be empty when peer discovery is disabled")
+	// Peers can be empty for single-node deployments (memberlist handles dynamic peers)
+
+	if raft.BindAddress == "" {
+		return errors.New("raft bind address is required when using Raft state storage")
 	}
 
 	if raft.DataDir == "" {
 		return errors.New("raft data directory is required when using Raft state storage")
-	}
-
-	// Validate peer discovery configuration if enabled
-	if raft.PeerDiscovery.Enabled {
-		if err := c.validateRaftPeerDiscovery(&raft.PeerDiscovery); err != nil {
-			return fmt.Errorf("raft peer discovery validation failed: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// validateRaftPeerDiscovery validates Raft peer discovery configuration.
-func (c *ViperConfig) validateRaftPeerDiscovery(discovery *RaftPeerDiscoverySettings) error {
-	if discovery.Type == "" {
-		return errors.New("peer discovery type is required when discovery is enabled")
-	}
-
-	validTypes := []string{"kubernetes", "dns", "mdns"}
-	if !slices.Contains(validTypes, discovery.Type) {
-		return fmt.Errorf("invalid peer discovery type: %s. Valid types: %v", discovery.Type, validTypes)
-	}
-
-	switch discovery.Type {
-	case "kubernetes":
-		k8s := discovery.Kubernetes
-		if k8s.Namespace == "" {
-			return errors.New("kubernetes namespace is required for Kubernetes peer discovery")
-		}
-		if k8s.PeerLabelSelector == "" {
-			return errors.New("peer label selector is required for Kubernetes peer discovery")
-		}
-		if k8s.HTTPPortName == "" && k8s.RaftPortName == "" {
-			return errors.New("at least one port name (HTTP or Raft) is required for Kubernetes discovery")
-		}
-
-	case "dns":
-		dns := discovery.DNS
-		if dns.Domain == "" {
-			return errors.New("domain is required for DNS peer discovery")
-		}
-		if dns.Port <= 0 && dns.RaftPort <= 0 {
-			return errors.New("at least one valid port (HTTP or Raft) is required for DNS discovery")
-		}
-
-	case "mdns":
-		mdns := discovery.MDNS
-		if mdns.ServiceType == "" {
-			return errors.New("service type is required for mDNS peer discovery")
-		}
-		if mdns.Port <= 0 && mdns.RaftPort <= 0 {
-			return errors.New("at least one valid port (HTTP or Raft) is required for mDNS discovery")
-		}
 	}
 
 	return nil

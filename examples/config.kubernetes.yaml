@@ -37,18 +37,27 @@ stateStorage:
   type: "raft"
   raft:
     nodeId: "${HOSTNAME}"
-    peers: []  # Populated via service discovery
+    peers: []  # Empty - memberlist handles peer discovery
     dataDir: "/data/raft"
-    peerDiscovery:
-      enabled: true
-      type: "kubernetes"
-      kubernetes:
-        namespace: "vm-proxy-auth"
-        peerLabelSelector: "app=vm-proxy-auth,component=gateway"
-        backendLabelSelector: "app=victoriametrics"
-        httpPortName: "http"
-        raftPortName: "raft"
-        watchTimeout: "30s"
+
+# Memberlist for automatic peer discovery in Kubernetes
+memberlist:
+  bindAddress: "0.0.0.0"
+  bindPort: 7946
+  advertiseAddress: "${POD_IP}"
+  advertisePort: 7946
+  joinNodes:
+    - "vm-proxy-auth-0.vm-proxy-auth-headless:7946"
+    - "vm-proxy-auth-1.vm-proxy-auth-headless:7946"
+    - "vm-proxy-auth-2.vm-proxy-auth-headless:7946"
+  gossipInterval: "200ms"
+  gossipNodes: 3
+  probeInterval: "1s" 
+  probeTimeout: "500ms"
+  metadata:
+    role: "gateway"
+    environment: "kubernetes"
+    namespace: "${NAMESPACE}"
 
 # Kubernetes-compatible JWT
 auth:

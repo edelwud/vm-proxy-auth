@@ -18,7 +18,7 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
 	"github.com/edelwud/vm-proxy-auth/internal/services/access"
 	"github.com/edelwud/vm-proxy-auth/internal/services/auth"
-	"github.com/edelwud/vm-proxy-auth/internal/services/discovery"
+	"github.com/edelwud/vm-proxy-auth/internal/services/memberlist"
 	"github.com/edelwud/vm-proxy-auth/internal/services/metrics"
 	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/services/statestorage"
@@ -32,7 +32,7 @@ var (
 	gitCommit = "unknown"
 )
 
-//nolint:funlen,gocognit
+//nolint:funlen
 func main() {
 	var (
 		configPath     = flag.String("config", "", "Path to configuration file")
@@ -120,31 +120,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create service discovery if configured
 	ctx := context.Background()
-	var serviceDiscovery domain.ServiceDiscovery
-	if storageType == string(domain.StateStorageTypeRaft) && cfg.StateStorage.Raft.PeerDiscovery.Enabled {
-		discoveryType := cfg.StateStorage.Raft.PeerDiscovery.Type
-		serviceDiscovery, err = createServiceDiscovery(
-			discoveryType,
-			cfg.StateStorage.Raft.PeerDiscovery.Kubernetes,
-			cfg.StateStorage.Raft.PeerDiscovery.DNS,
-			cfg.StateStorage.Raft.PeerDiscovery.MDNS,
-			appLogger,
-		)
-		if err != nil {
-			appLogger.Error("Failed to create service discovery",
-				domain.Field{Key: "type", Value: discoveryType},
-				domain.Field{Key: "error", Value: err.Error()})
-			os.Exit(1)
-		}
 
-		// Start service discovery
-		if startErr := serviceDiscovery.Start(ctx); startErr != nil {
-			appLogger.Error("Failed to start service discovery",
-				domain.Field{Key: "error", Value: startErr.Error()})
-			os.Exit(1)
-		}
+	// Initialize memberlist for Raft cluster if using Raft storage
+	if storageType == string(domain.StateStorageTypeRaft) {
+		initializeMemberlist(ctx, cfg, stateStorage, appLogger)
 	}
 
 	proxyService, err := proxy.NewEnhancedService(enhancedConfig, appLogger, metricsService, stateStorage)
@@ -247,16 +227,6 @@ func createStateStorage(
 	return statestorage.NewStateStorage(storageConfig, storageType, nodeID, logger)
 }
 
-func createServiceDiscovery(
-	discoveryType string,
-	kubeConfig config.KubernetesDiscoveryConfig,
-	dnsConfig config.DNSDiscoveryConfig,
-	mdnsConfig config.MDNSDiscoveryConfig,
-	logger domain.Logger,
-) (domain.ServiceDiscovery, error) {
-	return discovery.NewServiceDiscovery(discoveryType, kubeConfig, dnsConfig, mdnsConfig, logger)
-}
-
 // showVersionInfo displays version information to stdout.
 // This function is allowed to use fmt.Printf for CLI utility purposes.
 //
@@ -274,4 +244,59 @@ func showVersionInfo() {
 //nolint:forbidigo // We are using fmt.Println for CLI utility purposes.
 func showValidationSuccess() {
 	fmt.Println("Configuration is valid")
+}
+
+// initializeMemberlist initializes memberlist service for Raft cluster.
+func initializeMemberlist(
+	ctx context.Context,
+	cfg *config.ViperConfig,
+	stateStorage domain.StateStorage,
+	logger domain.Logger,
+) {
+	// Create memberlist service
+	mlService, mlErr := memberlist.NewMemberlistService(cfg.Memberlist, logger)
+	if mlErr != nil {
+		logger.Error("Failed to create memberlist service",
+			domain.Field{Key: "error", Value: mlErr.Error()})
+		os.Exit(1)
+	}
+
+	// Integrate with Raft storage
+	if raftStorage, ok := stateStorage.(*statestorage.RaftStorage); ok {
+		mlService.SetRaftManager(raftStorage)
+
+		// Create node metadata for this instance
+		nodeMetadata, metaErr := memberlist.CreateNodeMetadata(
+			"gateway-node",
+			cfg.Server.Address,
+			cfg.StateStorage.Raft.BindAddress,
+			cfg.Memberlist.Metadata,
+		)
+		if metaErr != nil {
+			logger.Error("Failed to create node metadata",
+				domain.Field{Key: "error", Value: metaErr.Error()})
+			os.Exit(1)
+		}
+
+		mlService.GetDelegate().SetNodeMetadata(nodeMetadata)
+	}
+
+	// Start memberlist
+	if startErr := mlService.Start(ctx); startErr != nil {
+		logger.Error("Failed to start memberlist service",
+			domain.Field{Key: "error", Value: startErr.Error()})
+		os.Exit(1)
+	}
+
+	// Join cluster if nodes are configured
+	if len(cfg.Memberlist.JoinNodes) > 0 {
+		if joinErr := mlService.Join(cfg.Memberlist.JoinNodes); joinErr != nil {
+			logger.Warn("Failed to join memberlist cluster",
+				domain.Field{Key: "error", Value: joinErr.Error()},
+				domain.Field{Key: "join_nodes", Value: cfg.Memberlist.JoinNodes})
+		}
+	}
+
+	logger.Info("Memberlist service initialized",
+		domain.Field{Key: "cluster_size", Value: mlService.GetClusterSize()})
 }

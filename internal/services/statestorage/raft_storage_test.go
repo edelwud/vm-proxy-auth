@@ -165,10 +165,14 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	tempDir := t.TempDir()
 
+	port, err := getFreePort()
+	require.NoError(t, err)
+
 	raftConfig := config.RaftSettings{
-		NodeID:  "test-node-1",
-		DataDir: tempDir,
-		Peers:   []string{}, // Single node cluster
+		NodeID:      "test-node-1",
+		BindAddress: fmt.Sprintf("127.0.0.1:%d", port),
+		DataDir:     tempDir,
+		Peers:       []string{}, // Single node cluster
 	}
 
 	storage, err := statestorage.NewStateStorage(raftConfig, "raft", "test-node-1", logger)
@@ -332,8 +336,9 @@ func TestRaftStorage_MultiNode(t *testing.T) {
 		logger := testutils.NewMockLogger()
 
 		raftConfig := config.RaftSettings{
-			NodeID:  fmt.Sprintf("node-%d", i),
-			DataDir: tempDirs[i],
+			NodeID:      fmt.Sprintf("node-%d", i),
+			BindAddress: fmt.Sprintf("127.0.0.1:%d", ports[i]),
+			DataDir:     tempDirs[i],
 			Peers: []string{
 				fmt.Sprintf("node-0:127.0.0.1:%d", ports[0]),
 				fmt.Sprintf("node-1:127.0.0.1:%d", ports[1]),
@@ -428,10 +433,14 @@ func TestRaftStorage_ErrorCases(t *testing.T) {
 	logger := testutils.NewMockLogger()
 
 	t.Run("invalid_data_directory", func(t *testing.T) {
+		port, err := getFreePort()
+		require.NoError(t, err)
+
 		raftConfig := config.RaftSettings{
-			NodeID:  "test-node",
-			DataDir: "/invalid/readonly/path",
-			Peers:   []string{},
+			NodeID:      "test-node",
+			BindAddress: fmt.Sprintf("127.0.0.1:%d", port),
+			DataDir:     "/invalid/readonly/path",
+			Peers:       []string{},
 		}
 
 		storage, err := statestorage.NewStateStorage(raftConfig, "raft", "test-node", logger)
@@ -442,10 +451,14 @@ func TestRaftStorage_ErrorCases(t *testing.T) {
 
 	t.Run("operations_on_closed_storage", func(t *testing.T) {
 		tempDir := t.TempDir()
+		port, err := getFreePort()
+		require.NoError(t, err)
+
 		raftConfig := config.RaftSettings{
-			NodeID:  "test-node",
-			DataDir: tempDir,
-			Peers:   []string{},
+			NodeID:      "test-node",
+			BindAddress: fmt.Sprintf("127.0.0.1:%d", port),
+			DataDir:     tempDir,
+			Peers:       []string{},
 		}
 
 		storage, err := statestorage.NewStateStorage(raftConfig, "raft", "test-node", logger)
@@ -499,9 +512,10 @@ func TestRaftStorage_Watch_MultipleWatchers(t *testing.T) {
 	require.NoError(t, err)
 
 	raftConfig := config.RaftSettings{
-		NodeID:  "watch-test-node",
-		DataDir: tempDir,
-		Peers:   []string{},
+		NodeID:      "watch-test-node",
+		BindAddress: fmt.Sprintf("127.0.0.1:%d", port),
+		DataDir:     tempDir,
+		Peers:       []string{},
 	}
 
 	storage, err := createRaftStorageWithAddress(raftConfig, fmt.Sprintf("127.0.0.1:%d", port), logger)
@@ -610,9 +624,10 @@ func TestRaftStorage_ConcurrentOperations(t *testing.T) {
 	require.NoError(t, err)
 
 	raftConfig := config.RaftSettings{
-		NodeID:  "concurrent-test-node",
-		DataDir: tempDir,
-		Peers:   []string{},
+		NodeID:      "concurrent-test-node",
+		BindAddress: fmt.Sprintf("127.0.0.1:%d", port),
+		DataDir:     tempDir,
+		Peers:       []string{},
 	}
 
 	storage, err := createRaftStorageWithAddress(raftConfig, fmt.Sprintf("127.0.0.1:%d", port), logger)
@@ -672,9 +687,10 @@ func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
 	require.NoError(t, err)
 
 	raftConfig := config.RaftSettings{
-		NodeID:  "persistence-test-node",
-		DataDir: tempDir,
-		Peers:   []string{},
+		NodeID:      "persistence-test-node",
+		BindAddress: fmt.Sprintf("127.0.0.1:%d", port),
+		DataDir:     tempDir,
+		Peers:       []string{},
 	}
 
 	// First instance - write data with production configuration
@@ -715,8 +731,6 @@ func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
 
 	// Wait for port to be released and get new port for second instance
 	time.Sleep(2 * time.Second)
-	port2, err := getFreePort()
-	require.NoError(t, err)
 
 	// Create new data directory and copy Raft data files for persistence test
 	tempDir2 := t.TempDir()
@@ -731,10 +745,14 @@ func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
 		}
 	}
 
+	port2, err2 := getFreePort()
+	require.NoError(t, err2)
+
 	raftConfig2 := config.RaftSettings{
-		NodeID:  "persistence-test-node",
-		DataDir: tempDir2, // Different data directory with copied data
-		Peers:   []string{},
+		NodeID:      "persistence-test-node",
+		BindAddress: fmt.Sprintf("127.0.0.1:%d", port2),
+		DataDir:     tempDir2, // Different data directory with copied data
+		Peers:       []string{},
 	}
 
 	// Create second instance with different port and copied data directory
@@ -782,10 +800,14 @@ func TestRaftStorage_Factory_Integration(t *testing.T) {
 
 	t.Run("raft_storage_creation", func(t *testing.T) {
 		tempDir := t.TempDir()
+		port, err := getFreePort()
+		require.NoError(t, err)
+
 		raftConfig := config.RaftSettings{
-			NodeID:  "factory-test-node",
-			DataDir: tempDir,
-			Peers:   []string{},
+			NodeID:      "factory-test-node",
+			BindAddress: fmt.Sprintf("127.0.0.1:%d", port),
+			DataDir:     tempDir,
+			Peers:       []string{},
 		}
 
 		storage, err := statestorage.NewStateStorage(raftConfig, "raft", "factory-test-node", logger)
@@ -829,11 +851,14 @@ func TestRaftStorage_DataDir_Management(t *testing.T) {
 	t.Run("creates_missing_data_directory", func(t *testing.T) {
 		tempDir := t.TempDir()
 		dataDirPath := filepath.Join(tempDir, "missing", "nested", "path")
+		port, err := getFreePort()
+		require.NoError(t, err)
 
 		raftConfig := config.RaftSettings{
-			NodeID:  "datadir-test-node",
-			DataDir: dataDirPath,
-			Peers:   []string{},
+			NodeID:      "datadir-test-node",
+			BindAddress: fmt.Sprintf("127.0.0.1:%d", port),
+			DataDir:     dataDirPath,
+			Peers:       []string{},
 		}
 
 		// Should create missing directories
@@ -868,9 +893,10 @@ func BenchmarkRaftStorage_WriteOperations(b *testing.B) {
 	require.NoError(b, err)
 
 	raftConfig := config.RaftSettings{
-		NodeID:  "bench-node",
-		DataDir: tempDir,
-		Peers:   []string{},
+		NodeID:      "bench-node",
+		BindAddress: fmt.Sprintf("127.0.0.1:%d", port),
+		DataDir:     tempDir,
+		Peers:       []string{},
 	}
 
 	storage, err := createRaftStorageWithAddress(raftConfig, fmt.Sprintf("127.0.0.1:%d", port), logger)
@@ -909,9 +935,10 @@ func BenchmarkRaftStorage_ReadOperations(b *testing.B) {
 	require.NoError(b, err)
 
 	raftConfig := config.RaftSettings{
-		NodeID:  "bench-node",
-		DataDir: tempDir,
-		Peers:   []string{},
+		NodeID:      "bench-node",
+		BindAddress: fmt.Sprintf("127.0.0.1:%d", port),
+		DataDir:     tempDir,
+		Peers:       []string{},
 	}
 
 	storage, err := createRaftStorageWithAddress(raftConfig, fmt.Sprintf("127.0.0.1:%d", port), logger)
