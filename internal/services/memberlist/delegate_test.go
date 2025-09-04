@@ -43,10 +43,8 @@ func TestRaftDelegate_SetRaftManager(t *testing.T) {
 
 	delegate := memberlistpkg.NewRaftDelegate(service, logger)
 
-	mockRaft := &mockRaftManager{
-		isLeader: true,
-		leaderID: "test-leader",
-	}
+	mockRaft := testutils.NewMockRaftManager()
+	mockRaft.LeaderID = "test-leader"
 
 	delegate.SetRaftManager(mockRaft)
 	// Cannot test private field, but the method should not panic
@@ -191,9 +189,7 @@ func TestRaftDelegate_NotifyEvents(t *testing.T) {
 	delegate := memberlistpkg.NewRaftDelegate(service, logger)
 
 	// Create mock Raft manager
-	mockRaft := &mockRaftManager{
-		isLeader: true,
-	}
+	mockRaft := testutils.NewMockRaftManager()
 	delegate.SetRaftManager(mockRaft)
 
 	// Create test node with metadata

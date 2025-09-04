@@ -248,6 +248,29 @@ const (
 	JWTAlgorithmRS256 JWTAlgorithm = "RS256"
 )
 
+// DiscoveryProvider defines the interface for peer discovery implementations.
+type DiscoveryProvider interface {
+	// Discover finds available peer addresses
+	Discover(ctx context.Context) ([]string, error)
+
+	// Start starts the discovery provider (for active providers like mDNS server)
+	Start(ctx context.Context) error
+
+	// Stop stops the discovery provider
+	Stop() error
+
+	// GetProviderType returns the provider type name
+	GetProviderType() string
+}
+
+// PeerInfo represents discovered peer information.
+type PeerInfo struct {
+	Address  string
+	Port     int
+	NodeID   string
+	Metadata map[string]string
+}
+
 // TenantFilterConfig contains configuration for tenant filtering strategy.
 type TenantFilterConfig struct {
 	Strategy TenantFilterStrategy `yaml:"strategy" default:"or_conditions"`
@@ -506,16 +529,6 @@ type ServiceDiscovery interface {
 	DiscoverBackends(ctx context.Context) ([]*BackendInfo, error)
 }
 
-// PeerInfo represents a discovered peer node.
-type PeerInfo struct {
-	NodeID      string            `json:"node_id"`
-	HTTPAddress string            `json:"http_address"`
-	RaftAddress string            `json:"raft_address"`
-	Healthy     bool              `json:"healthy"`
-	LastSeen    time.Time         `json:"last_seen"`
-	Metadata    map[string]string `json:"metadata"`
-}
-
 // BackendInfo represents a discovered backend service.
 type BackendInfo struct {
 	URL      string            `json:"url"`
@@ -553,4 +566,53 @@ const (
 	ServiceDiscoveryEventTypeBackendAdded   ServiceDiscoveryEventType = "backend_added"
 	ServiceDiscoveryEventTypeBackendRemoved ServiceDiscoveryEventType = "backend_removed"
 	ServiceDiscoveryEventTypeBackendUpdated ServiceDiscoveryEventType = "backend_updated"
+)
+
+// HealthStatus represents the health status of a component.
+type HealthStatus string
+
+const (
+	// HealthStatusHealthy indicates the component is functioning normally.
+	HealthStatusHealthy HealthStatus = "healthy"
+	// HealthStatusDegraded indicates the component has degraded performance.
+	HealthStatusDegraded HealthStatus = "degraded"
+)
+
+// RaftManager defines the interface for managing Raft cluster membership.
+type RaftManager interface {
+	AddVoter(nodeID, address string) error
+	RemoveServer(nodeID string) error
+	GetLeader() (string, string)
+	GetPeers() ([]string, error)
+	IsLeader() bool
+	TryDelayedBootstrap(discoveredPeers []string) error // Consul pattern support
+	ForceRecoverCluster(nodeID, address string) error   // Emergency recovery for split-brain
+}
+
+// MemberlistDiscoveryService defines interface for auto-discovery integration.
+type MemberlistDiscoveryService interface {
+	SetPeerJoiner(joiner interface{})
+	Start(ctx context.Context) error
+	Stop() error
+}
+
+// PeerJoiner defines interface for joining discovered peers.
+type PeerJoiner interface {
+	Join(peers []string) error
+	GetLocalNode() interface{} // Using interface{} to avoid importing memberlist
+	GetMembers() interface{}   // Using interface{} to avoid importing memberlist
+}
+
+// PeerDiscovery defines interface for discovering cluster peers before bootstrap.
+type PeerDiscovery interface {
+	GetDiscoveredPeers() []string
+	HasExistingRaftPeers() (bool, error)
+}
+
+// ContextKey defines custom type for context keys to avoid collisions.
+type ContextKey string
+
+const (
+	// RequestIDKey is the context key for request ID.
+	RequestIDKey ContextKey = "request_id"
 )

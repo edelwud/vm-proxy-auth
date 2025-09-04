@@ -18,11 +18,13 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
 	"github.com/edelwud/vm-proxy-auth/internal/services/access"
 	"github.com/edelwud/vm-proxy-auth/internal/services/auth"
+	"github.com/edelwud/vm-proxy-auth/internal/services/discovery"
 	"github.com/edelwud/vm-proxy-auth/internal/services/memberlist"
 	"github.com/edelwud/vm-proxy-auth/internal/services/metrics"
 	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/services/statestorage"
 	"github.com/edelwud/vm-proxy-auth/internal/services/tenant"
+	netutils "github.com/edelwud/vm-proxy-auth/pkg/utils"
 )
 
 //nolint:gochecknoglobals // We are using global variables for version information.
@@ -112,7 +114,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	stateStorage, err := createStateStorage(stateStorageConfig, storageType, "gateway-node", appLogger)
+	stateStorage, err := statestorage.NewStateStorage(stateStorageConfig, storageType, "gateway-node", appLogger)
 	if err != nil {
 		appLogger.Error("Failed to create state storage",
 			domain.Field{Key: "type", Value: storageType},
@@ -217,16 +219,6 @@ func main() {
 	appLogger.Info("Server stopped gracefully")
 }
 
-// createStateStorage creates a state storage instance based on configuration.
-func createStateStorage(
-	storageConfig interface{},
-	storageType string,
-	nodeID string,
-	logger domain.Logger,
-) (domain.StateStorage, error) {
-	return statestorage.NewStateStorage(storageConfig, storageType, nodeID, logger)
-}
-
 // showVersionInfo displays version information to stdout.
 // This function is allowed to use fmt.Printf for CLI utility purposes.
 //
@@ -253,23 +245,30 @@ func initializeMemberlist(
 	stateStorage domain.StateStorage,
 	logger domain.Logger,
 ) {
-	// Create memberlist service
-	mlService, mlErr := memberlist.NewMemberlistService(cfg.Memberlist, logger)
-	if mlErr != nil {
-		logger.Error("Failed to create memberlist service",
-			domain.Field{Key: "error", Value: mlErr.Error()})
-		os.Exit(1)
-	}
+	// Integrate with Raft storage and prepare memberlist
+	var nodeMetadata *memberlist.NodeMetadata
+	var raftStorage *statestorage.RaftStorage
+	logger.Debug("Checking state storage type for Raft integration",
+		domain.Field{Key: "storage_type", Value: fmt.Sprintf("%T", stateStorage)})
+	if rs, ok := stateStorage.(*statestorage.RaftStorage); ok {
+		logger.Info("State storage is RaftStorage, preparing memberlist integration")
+		raftStorage = rs
 
-	// Integrate with Raft storage
-	if raftStorage, ok := stateStorage.(*statestorage.RaftStorage); ok {
-		mlService.SetRaftManager(raftStorage)
+		// Create node metadata for this instance BEFORE creating memberlist
+		// Convert bind address to advertise address for peer communication
+		raftAdvertiseAddr, addrErr := netutils.ConvertBindToAdvertiseAddress(cfg.StateStorage.Raft.BindAddress)
+		if addrErr != nil {
+			logger.Error("Failed to convert Raft bind address to advertise address",
+				domain.Field{Key: "bind_address", Value: cfg.StateStorage.Raft.BindAddress},
+				domain.Field{Key: "error", Value: addrErr.Error()})
+			os.Exit(1)
+		}
 
-		// Create node metadata for this instance
-		nodeMetadata, metaErr := memberlist.CreateNodeMetadata(
-			"gateway-node",
+		var metaErr error
+		nodeMetadata, metaErr = memberlist.CreateNodeMetadata(
+			cfg.StateStorage.Raft.NodeID,
 			cfg.Server.Address,
-			cfg.StateStorage.Raft.BindAddress,
+			raftAdvertiseAddr,
 			cfg.Memberlist.Metadata,
 		)
 		if metaErr != nil {
@@ -278,18 +277,47 @@ func initializeMemberlist(
 			os.Exit(1)
 		}
 
-		mlService.GetDelegate().SetNodeMetadata(nodeMetadata)
+		logger.Info("Created node metadata for memberlist",
+			domain.Field{Key: "node_id", Value: nodeMetadata.NodeID},
+			domain.Field{Key: "role", Value: nodeMetadata.Role},
+			domain.Field{Key: "http_address", Value: nodeMetadata.HTTPAddress},
+			domain.Field{Key: "raft_address", Value: nodeMetadata.RaftAddress})
 	}
 
-	// Start memberlist
+	// Create memberlist service with metadata and Raft manager
+	mlService, mlErr := memberlist.NewMemberlistServiceWithMetadata(cfg.Memberlist, logger, nodeMetadata, raftStorage)
+	if mlErr != nil {
+		logger.Error("Failed to create memberlist service",
+			domain.Field{Key: "error", Value: mlErr.Error()})
+		os.Exit(1)
+	}
+
+	// Create discovery service if enabled
+	if cfg.Discovery.Enabled {
+		discoveryService := discovery.NewService(cfg.Discovery, logger)
+		mlService.SetDiscoveryService(discoveryService)
+
+		// Connect discovery service to Raft manager for delayed bootstrap
+		if raftStorage != nil {
+			discoveryService.SetRaftManager(raftStorage)
+			logger.Info("Discovery service connected to Raft manager for delayed bootstrap")
+		}
+
+		logger.Info("Discovery service configured",
+			domain.Field{Key: "providers", Value: cfg.Discovery.Providers})
+	}
+
+	// Start memberlist (this will also start discovery if configured)
 	if startErr := mlService.Start(ctx); startErr != nil {
 		logger.Error("Failed to start memberlist service",
 			domain.Field{Key: "error", Value: startErr.Error()})
 		os.Exit(1)
 	}
 
-	// Join cluster if nodes are configured
+	// Join cluster if nodes are explicitly configured (fallback)
 	if len(cfg.Memberlist.JoinNodes) > 0 {
+		logger.Info("Using manual join nodes as fallback",
+			domain.Field{Key: "join_nodes", Value: cfg.Memberlist.JoinNodes})
 		if joinErr := mlService.Join(cfg.Memberlist.JoinNodes); joinErr != nil {
 			logger.Warn("Failed to join memberlist cluster",
 				domain.Field{Key: "error", Value: joinErr.Error()},

@@ -1,0 +1,108 @@
+# Auto-Discovery Configuration - Node 2
+# Uses mDNS for automatic peer discovery in local networks
+
+server:
+  address: "0.0.0.0:8084" # Different HTTP port
+  timeouts:
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    idleTimeout: "60s"
+
+backends:
+  - url: "http://localhost:8428"
+    weight: 1
+
+loadBalancing:
+  strategy: "round-robin"
+
+healthCheck:
+  checkInterval: "20s"
+  timeout: "8s"
+  healthyThreshold: 2
+  unhealthyThreshold: 2
+  healthEndpoint: "/health"
+
+queue:
+  enabled: true
+  maxSize: 1000
+  timeout: "8s"
+
+timeout: "30s"
+maxRetries: 3
+retryBackoff: "100ms"
+
+# Raft consensus with auto-discovery - Node 2
+stateStorage:
+  type: "raft"
+  raft:
+    nodeId: "node-3" # Different node ID
+    bindAddress: "127.0.0.1:9014"
+    peers: [] # Empty - discovery handles this
+    dataDir: "./data/raft-node-3" # Different data directory
+    bootstrapExpected: 2 # Expect 2 nodes before bootstrapping cluster
+
+# Auto-discovery configuration - Node 2
+discovery:
+  enabled: true
+  providers: ["mdns", "static"]
+  interval: "15s"
+  mdns:
+    serviceName: "_vm-proxy-auth._tcp" # Same service name for discovery
+    domain: "local."
+    hostname: "127.0.0.1"
+    port: 7950
+  static:
+    peers: [] # Fallback if mDNS fails
+
+# Memberlist configuration - Node 2
+memberlist:
+  bindAddress: "127.0.0.1"
+  bindPort: 7950 # Different port on localhost
+  advertiseAddress: "127.0.0.1"
+  advertisePort: 7950
+  # joinNodes: []  # Removed - discovery handles this automatically!
+  gossipInterval: "200ms"
+  gossipNodes: 3
+  probeInterval: "1s"
+  probeTimeout: "500ms"
+  metadata:
+    node_name: "vm-proxy-auth-3"
+    role: "peer"
+    environment: "development"
+    region: "local"
+
+# Simple authentication for testing
+auth:
+  jwt:
+    algorithm: "HS256"
+    secret: "test-secret-key-at-least-32-chars-long-for-hs256"
+    tokenTtl: "1h"
+    validation:
+      validateAudience: false
+      validateIssuer: false
+
+# Test tenant mapping
+tenantMapping:
+  - groups: ["admin"]
+    vmTenants:
+      - accountId: "0"
+    readOnly: false
+  - groups: ["user"]
+    vmTenants:
+      - accountId: "1000"
+    readOnly: true
+
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: false
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+logging:
+  level: "debug"
+  format: "pretty"

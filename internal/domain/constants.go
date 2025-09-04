@@ -81,6 +81,10 @@ const (
 	DefaultMDNSQueryTimeout     = 5 * time.Second
 	DefaultMDNSEntryChannelSize = 32
 
+	// Memberlist integration defaults.
+	DefaultMemberlistProcessDelay  = 2 * time.Second
+	DefaultLeadershipCheckInterval = 5 * time.Second
+
 	// Queue defaults.
 	DefaultQueuePercentageMultiplier        = 100
 	DefaultQueueHealthyUtilizationThreshold = 90
@@ -104,16 +108,20 @@ const (
 	DefaultMemberlistGossipInterval = 200 * time.Millisecond
 	DefaultLeaveTimeout             = 5 * time.Second
 
+	// Discovery defaults.
+	DefaultDiscoveryInterval   = 30 * time.Second
+	DefaultMDNSServiceName     = "_vm-proxy-auth._tcp"
+	DefaultMDNSDomain          = "local."
+	DefaultMDNSHostname        = "vm-proxy-auth"
+	DefaultMDNSLookupTimeout   = 5 * time.Second
+	DefaultDiscoveryBufferSize = 10
+
 	// Encryption constants.
 	AESKeySize = 32
 
 	// HTTP status codes.
 	StatusInternalServerError = 500
 	StatusBadRequest          = 400
-
-	// Health status constants.
-	HealthStatusDegraded = "degraded"
-	HealthStatusHealthy  = "healthy"
 
 	// Log parsing constants.
 	DefaultFieldsPerKeyValue      = 2
@@ -126,4 +134,7 @@ const (
 	LogFieldUserID    = "user_id"
 	LogFieldRequestID = "request_id"
 	LogFieldTenantID  = "tenant_id"
+
+	// Memberlist roles.
+	PeerRole = "peer"
 )

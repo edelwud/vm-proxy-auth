@@ -61,6 +61,7 @@ func NewStateStorage(
 			BindAddress:        raftConfig.BindAddress,
 			DataDir:            raftConfig.DataDir,
 			Peers:              raftConfig.Peers,
+			BootstrapExpected:  raftConfig.BootstrapExpected,
 			HeartbeatTimeout:   1 * time.Second,
 			ElectionTimeout:    1 * time.Second,
 			LeaderLeaseTimeout: domain.DefaultLeaderLeaseTimeout,

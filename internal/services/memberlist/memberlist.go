@@ -6,37 +6,42 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/hashicorp/memberlist"
 
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
+	infralogger "github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
 )
-
-// RaftManager defines the interface for managing Raft cluster membership.
-type RaftManager interface {
-	AddVoter(nodeID, address string) error
-	RemoveServer(nodeID string) error
-	GetLeader() (string, string)
-	GetPeers() ([]string, error)
-	IsLeader() bool
-}
 
 // Service implements cluster membership using HashiCorp's memberlist.
 type Service struct {
-	list     *memberlist.Memberlist
-	config   config.MemberlistSettings
-	delegate *RaftDelegate
-	logger   domain.Logger
+	list      *memberlist.Memberlist
+	config    config.MemberlistSettings
+	delegate  *RaftDelegate
+	logger    domain.Logger
+	discovery domain.MemberlistDiscoveryService
 
-	raftMgr RaftManager
-	stopCh  chan struct{}
-	mu      sync.RWMutex
-	running bool
+	raftMgr   domain.RaftManager
+	stopCh    chan struct{}
+	mu        sync.RWMutex
+	running   bool
+	wasLeader bool // Track previous leadership state
 }
 
 // NewMemberlistService creates a new memberlist service instance.
 func NewMemberlistService(config config.MemberlistSettings, logger domain.Logger) (*Service, error) {
+	return NewMemberlistServiceWithMetadata(config, logger, nil, nil)
+}
+
+// NewMemberlistServiceWithMetadata creates a new memberlist service instance with optional node metadata and Raft manager.
+func NewMemberlistServiceWithMetadata(
+	config config.MemberlistSettings,
+	logger domain.Logger,
+	nodeMetadata *NodeMetadata,
+	raftManager domain.RaftManager,
+) (*Service, error) {
 	ms := &Service{
 		config: config,
 		logger: logger.With(domain.Field{Key: domain.LogFieldComponent, Value: "memberlist"}),
@@ -45,6 +50,21 @@ func NewMemberlistService(config config.MemberlistSettings, logger domain.Logger
 
 	// Create delegate for Raft integration
 	ms.delegate = NewRaftDelegate(ms, logger)
+
+	// Set metadata if provided
+	if nodeMetadata != nil {
+		ms.delegate.SetNodeMetadata(nodeMetadata)
+		logger.Info("Pre-set node metadata on delegate",
+			domain.Field{Key: "node_id", Value: nodeMetadata.NodeID},
+			domain.Field{Key: "role", Value: nodeMetadata.Role})
+	}
+
+	// Set Raft manager if provided
+	if raftManager != nil {
+		ms.raftMgr = raftManager
+		ms.delegate.SetRaftManager(raftManager)
+		logger.Info("Pre-set Raft manager on delegate")
+	}
 
 	// Create memberlist configuration
 	mlConfig := memberlist.DefaultWANConfig()
@@ -58,6 +78,10 @@ func NewMemberlistService(config config.MemberlistSettings, logger domain.Logger
 	mlConfig.Delegate = ms.delegate
 	mlConfig.Events = ms.delegate
 
+	// Set logger adapter for HashiCorp memberlist
+	hclogAdapter := infralogger.NewHCLogAdapter(ms.logger)
+	mlConfig.Logger = hclogAdapter.StandardLogger(nil)
+
 	// Create memberlist instance
 	list, err := memberlist.Create(mlConfig)
 	if err != nil {
@@ -66,10 +90,13 @@ func NewMemberlistService(config config.MemberlistSettings, logger domain.Logger
 
 	ms.list = list
 
-	ms.logger.Info("Memberlist service created",
+	// Cache local node name in delegate to avoid deadlock
+	ms.delegate.SetLocalNodeName(list.LocalNode().Name)
+
+	ms.logger.Debug("Memberlist service created",
 		domain.Field{Key: "bind_address", Value: mlConfig.BindAddr},
 		domain.Field{Key: "bind_port", Value: mlConfig.BindPort},
-		domain.Field{Key: "node_name", Value: mlConfig.Name})
+		domain.Field{Key: "node_name", Value: list.LocalNode().Name})
 
 	return ms, nil
 }
@@ -119,15 +146,25 @@ func (ms *Service) applyConfig(mlConfig *memberlist.Config) error {
 }
 
 // SetRaftManager sets the Raft manager for cluster coordination.
-func (ms *Service) SetRaftManager(raftMgr RaftManager) {
+func (ms *Service) SetRaftManager(raftMgr domain.RaftManager) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	ms.raftMgr = raftMgr
 	ms.delegate.SetRaftManager(raftMgr)
 }
 
+// SetDiscoveryService sets the discovery service for auto peer discovery.
+func (ms *Service) SetDiscoveryService(discovery domain.MemberlistDiscoveryService) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	ms.discovery = discovery
+	if discovery != nil {
+		discovery.SetPeerJoiner(ms)
+	}
+}
+
 // Start starts the memberlist service.
-func (ms *Service) Start(_ context.Context) error {
+func (ms *Service) Start(ctx context.Context) error {
 	ms.mu.Lock()
 	if ms.running {
 		ms.mu.Unlock()
@@ -136,27 +173,55 @@ func (ms *Service) Start(_ context.Context) error {
 	ms.running = true
 	ms.mu.Unlock()
 
-	ms.logger.Info("Starting memberlist service")
+	ms.logger.Debug("Starting memberlist service")
+
+	// Start discovery service if configured
+	if ms.discovery != nil {
+		if err := ms.discovery.Start(ctx); err != nil {
+			ms.logger.Warn("Failed to start discovery service",
+				domain.Field{Key: "error", Value: err.Error()})
+		}
+	}
+
+	// Start leadership monitoring if Raft manager is available
+	if ms.raftMgr != nil {
+		go ms.monitorLeadership(ctx)
+	}
+
 	return nil
 }
 
 // Join joins the cluster using the configured join nodes.
 func (ms *Service) Join(joinNodes []string) error {
 	if len(joinNodes) == 0 {
-		ms.logger.Info("No join nodes configured, starting as first node")
+		ms.logger.Debug("No join nodes configured, starting as first node")
 		return nil
 	}
 
-	ms.logger.Info("Joining memberlist cluster",
-		domain.Field{Key: "join_nodes", Value: joinNodes})
+	ms.logger.Debug("Joining memberlist cluster",
+		domain.Field{Key: "join_nodes_count", Value: len(joinNodes)},
+		domain.Field{Key: "cluster_size", Value: ms.list.NumMembers()})
 
 	joined, err := ms.list.Join(joinNodes)
 	if err != nil {
 		return fmt.Errorf("failed to join cluster: %w", err)
 	}
 
-	ms.logger.Info("Successfully joined memberlist cluster",
-		domain.Field{Key: "nodes_contacted", Value: joined})
+	ms.logger.Info("Joined memberlist cluster",
+		domain.Field{Key: "nodes_contacted", Value: joined},
+		domain.Field{Key: "cluster_size", Value: ms.list.NumMembers()})
+
+	// Log cluster state after join
+	members := ms.list.Members()
+	ms.logger.Debug("Cluster state after join",
+		domain.Field{Key: "members_count", Value: len(members)})
+
+	// Process existing cluster members for Raft integration
+	// Add slight delay to allow memberlist gossip to propagate
+	go func() {
+		time.Sleep(domain.DefaultMemberlistProcessDelay)
+		ms.processExistingMembers()
+	}()
 
 	return nil
 }
@@ -168,6 +233,14 @@ func (ms *Service) Stop() error {
 
 	if !ms.running {
 		return nil
+	}
+
+	// Stop discovery service first
+	if ms.discovery != nil {
+		if err := ms.discovery.Stop(); err != nil {
+			ms.logger.Warn("Failed to stop discovery service",
+				domain.Field{Key: "error", Value: err.Error()})
+		}
 	}
 
 	close(ms.stopCh)
@@ -230,6 +303,99 @@ func (ms *Service) GetClusterSize() int {
 // GetDelegate returns the Raft delegate for configuration.
 func (ms *Service) GetDelegate() *RaftDelegate {
 	return ms.delegate
+}
+
+// processExistingMembers processes all current members for Raft integration.
+func (ms *Service) processExistingMembers() {
+	if ms.list == nil {
+		ms.logger.Debug("Memberlist not available for processing members")
+		return
+	}
+
+	members := ms.list.Members()
+	localNode := ms.list.LocalNode()
+
+	ms.logger.Info("Processing existing cluster members for Raft integration",
+		domain.Field{Key: "total_members", Value: len(members)},
+		domain.Field{Key: "local_node", Value: localNode.Name})
+
+	// Debug: Print all member details
+	for i, member := range members {
+		ms.logger.Debug("Member details",
+			domain.Field{Key: "index", Value: i},
+			domain.Field{Key: "name", Value: member.Name},
+			domain.Field{Key: "addr", Value: member.Addr.String()},
+			domain.Field{Key: "port", Value: member.Port},
+			domain.Field{Key: "meta_size", Value: len(member.Meta)})
+	}
+
+	processed := 0
+	for _, member := range members {
+		// Skip self
+		if member.Name == localNode.Name {
+			ms.logger.Debug("Skipping local node",
+				domain.Field{Key: "local_node", Value: member.Name})
+			continue
+		}
+
+		ms.logger.Debug("Processing cluster member",
+			domain.Field{Key: "member_name", Value: member.Name},
+			domain.Field{Key: "address", Value: fmt.Sprintf("%s:%d", member.Addr.String(), member.Port)})
+
+		// Process this member as if it just joined
+		ms.delegate.NotifyJoin(member)
+		processed++
+	}
+
+	ms.logger.Debug("Processed existing cluster members",
+		domain.Field{Key: "members_processed", Value: processed})
+}
+
+// monitorLeadership monitors Raft leadership changes and processes pending peers.
+func (ms *Service) monitorLeadership(ctx context.Context) {
+	ticker := time.NewTicker(domain.DefaultLeadershipCheckInterval)
+	defer ticker.Stop()
+
+	ms.logger.Debug("Started leadership monitoring")
+
+	for {
+		select {
+		case <-ctx.Done():
+			ms.logger.Debug("Leadership monitoring stopped due to context cancellation")
+			return
+		case <-ms.stopCh:
+			ms.logger.Debug("Leadership monitoring stopped due to service shutdown")
+			return
+		case <-ticker.C:
+			ms.checkLeadershipChange()
+		}
+	}
+}
+
+// checkLeadershipChange checks for leadership state changes and processes pending peers.
+func (ms *Service) checkLeadershipChange() {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
+	if ms.raftMgr == nil {
+		return
+	}
+
+	isLeader := ms.raftMgr.IsLeader()
+
+	// Check if leadership state changed from follower to leader
+	if isLeader && !ms.wasLeader {
+		ms.logger.Info("Leadership state changed: became leader")
+		ms.wasLeader = true
+
+		// Process pending peers when becoming leader
+		if ms.delegate != nil {
+			go ms.delegate.ProcessPendingPeers()
+		}
+	} else if !isLeader && ms.wasLeader {
+		ms.logger.Info("Leadership state changed: became follower")
+		ms.wasLeader = false
+	}
 }
 
 // NodeMetadata represents node metadata stored in memberlist.

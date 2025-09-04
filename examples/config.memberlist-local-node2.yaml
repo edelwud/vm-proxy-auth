@@ -1,0 +1,96 @@
+# Local Memberlist Testing Configuration - Node 2
+# Copy of config.memberlist-local.yaml with different ports and node ID
+
+server:
+  address: "0.0.0.0:8081"  # Different HTTP port
+  timeouts:
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    idleTimeout: "60s"
+
+backends:
+  - url: "http://localhost:8428"
+    weight: 1
+
+loadBalancing:
+  strategy: "round-robin"
+
+healthCheck:
+  checkInterval: "20s"
+  timeout: "8s"
+  healthyThreshold: 2
+  unhealthyThreshold: 2
+  healthEndpoint: "/health"
+
+queue:
+  enabled: true
+  maxSize: 1000
+  timeout: "8s"
+
+timeout: "30s"
+maxRetries: 3
+retryBackoff: "100ms"
+
+# Raft consensus with memberlist discovery - Node 2
+stateStorage:
+  type: "raft"
+  raft:
+    nodeId: "node-2"  # Different node ID
+    bindAddress: "127.0.0.1:9001"  # Different Raft port
+    peers: []  # Empty - memberlist handles peer discovery
+    dataDir: "./data/raft-node-2"  # Different data directory
+
+# Memberlist configuration for local testing - Node 2
+memberlist:
+  bindAddress: "127.0.0.1"
+  bindPort: 7947  # Different memberlist port
+  advertiseAddress: "127.0.0.1"
+  advertisePort: 7947
+  joinNodes:
+    - "127.0.0.1:7946"  # First node (seed)
+    - "127.0.0.1:7947"  # Second node (self)
+    - "127.0.0.1:7948"  # Third node
+  gossipInterval: "200ms"
+  gossipNodes: 3
+  probeInterval: "1s"
+  probeTimeout: "500ms"
+  metadata:
+    role: "gateway"
+    environment: "local"
+    region: "local"
+
+# Simple authentication for testing
+auth:
+  jwt:
+    algorithm: "HS256"
+    secret: "test-secret-key-at-least-32-chars-long-for-hs256"
+    tokenTtl: "1h"
+    validation:
+      validateAudience: false
+      validateIssuer: false
+
+# Test tenant mapping
+tenantMapping:
+  - groups: ["admin"]
+    vmTenants:
+      - accountId: "0"
+    readOnly: false
+  - groups: ["user"]
+    vmTenants:
+      - accountId: "1000"
+    readOnly: true
+
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: false
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+logging:
+  level: "debug"
+  format: "console"

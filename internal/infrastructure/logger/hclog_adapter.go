@@ -213,6 +213,12 @@ func (w *logWriter) Write(p []byte) (int, error) {
 		logger = w.logger.With(domain.Field{Key: "hashicorp_component", Value: component})
 	}
 
+	// Apply message-specific log level downgrades
+	if w.shouldDowngradeMessage(component, cleanMsg) {
+		logger.Debug(cleanMsg)
+		return len(p), nil
+	}
+
 	switch level {
 	case "TRACE", "DEBUG":
 		logger.Debug(cleanMsg)
@@ -262,4 +268,24 @@ func (w *logWriter) parseLogMessage(msg string) (string, string, string) {
 	}
 
 	return level, component, cleanMsg
+}
+
+// shouldDowngradeMessage determines if a log message should be downgraded to DEBUG level.
+// This prevents noisy HashiCorp library messages from cluttering logs at higher levels.
+func (w *logWriter) shouldDowngradeMessage(component, msg string) bool {
+	// Downgrade specific mDNS messages to DEBUG level
+	if component == "mdns" {
+		noisyMessages := []string{
+			"Closing client",
+			"Failed to listen to both unicast and multicast on IPv6",
+		}
+		for _, noisyMsg := range noisyMessages {
+			if strings.Contains(msg, noisyMsg) {
+				return true
+			}
+		}
+	}
+
+	// Add other component-specific downgrades here as needed
+	return false
 }

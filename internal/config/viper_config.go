@@ -31,6 +31,7 @@ type ViperConfig struct {
 	Metrics       MetricsSettings       `mapstructure:"metrics"`
 	Logging       LoggingSettings       `mapstructure:"logging"`
 	Memberlist    MemberlistSettings    `mapstructure:"memberlist"`
+	Discovery     DiscoverySettings     `mapstructure:"discovery"`
 }
 
 type ServerSettings struct {
@@ -96,10 +97,11 @@ type RedisSettings struct {
 
 // RaftSettings configures Raft consensus state storage.
 type RaftSettings struct {
-	NodeID      string   `mapstructure:"nodeId"`
-	BindAddress string   `mapstructure:"bindAddress"`
-	Peers       []string `mapstructure:"peers"`
-	DataDir     string   `mapstructure:"dataDir"`
+	NodeID            string   `mapstructure:"nodeId"`
+	BindAddress       string   `mapstructure:"bindAddress"`
+	Peers             []string `mapstructure:"peers"`
+	DataDir           string   `mapstructure:"dataDir"`
+	BootstrapExpected int      `mapstructure:"bootstrapExpected"`
 }
 
 // MemberlistSettings configures memberlist for cluster membership.
@@ -115,6 +117,29 @@ type MemberlistSettings struct {
 	ProbeTimeout     time.Duration     `mapstructure:"probeTimeout"`
 	EncryptionKey    string            `mapstructure:"encryptionKey"`
 	Metadata         map[string]string `mapstructure:"metadata"`
+}
+
+// DiscoverySettings configures automatic peer discovery.
+type DiscoverySettings struct {
+	Enabled   bool                  `mapstructure:"enabled"`
+	Providers []string              `mapstructure:"providers"`
+	Interval  time.Duration         `mapstructure:"interval"`
+	Static    StaticDiscoveryConfig `mapstructure:"static"`
+	MDNS      MDNSDiscoveryConfig   `mapstructure:"mdns"`
+}
+
+// StaticDiscoveryConfig configures static peer discovery.
+type StaticDiscoveryConfig struct {
+	Peers []string `mapstructure:"peers"`
+}
+
+// MDNSDiscoveryConfig configures mDNS peer discovery.
+type MDNSDiscoveryConfig struct {
+	ServiceName string            `mapstructure:"serviceName"`
+	Domain      string            `mapstructure:"domain"`
+	Hostname    string            `mapstructure:"hostname"`
+	Port        int               `mapstructure:"port"`
+	TXTRecords  map[string]string `mapstructure:"txtRecords"`
 }
 
 type AuthSettings struct {
@@ -232,33 +257,42 @@ func LoadViperConfig(configPath string) (*ViperConfig, error) {
 
 // setViperDefaults sets all default values.
 func setViperDefaults(v *viper.Viper) {
-	// Server defaults
+	setServerDefaults(v)
+	setProxyDefaults(v)
+	setStateStorageDefaults(v)
+	setMemberlistDefaults(v)
+	setAuthDefaults(v)
+	setTenantFilterDefaults(v)
+	setMetricsDefaults(v)
+	setLoggingDefaults(v)
+	setDiscoveryDefaults(v)
+}
+
+func setServerDefaults(v *viper.Viper) {
 	v.SetDefault("server.address", "0.0.0.0:8080")
 	v.SetDefault("server.timeouts.readTimeout", domain.DefaultReadTimeout.String())
 	v.SetDefault("server.timeouts.writeTimeout", domain.DefaultWriteTimeout.String())
 	v.SetDefault("server.timeouts.idleTimeout", domain.DefaultIdleTimeout.String())
+}
 
-	// Upstream defaults (flattened)
+func setProxyDefaults(v *viper.Viper) {
 	v.SetDefault("timeout", domain.DefaultTimeout.String())
 	v.SetDefault("maxRetries", domain.DefaultProxyMaxRetries)
 	v.SetDefault("retryBackoff", (domain.DefaultRetryBackoffMs * time.Millisecond).String())
-
-	// Load balancing defaults
 	v.SetDefault("loadBalancing.strategy", string(domain.LoadBalancingStrategyRoundRobin))
 
-	// Health check defaults
 	v.SetDefault("healthCheck.checkInterval", "30s")
 	v.SetDefault("healthCheck.timeout", "10s")
 	v.SetDefault("healthCheck.healthyThreshold", domain.DefaultHealthyThreshold)
 	v.SetDefault("healthCheck.unhealthyThreshold", domain.DefaultUnhealthyThreshold)
 	v.SetDefault("healthCheck.healthEndpoint", "/health")
 
-	// Queue defaults
 	v.SetDefault("queue.enabled", true)
 	v.SetDefault("queue.maxSize", domain.DefaultQueueMaxSize)
 	v.SetDefault("queue.timeout", (domain.DefaultQueueTimeoutSeconds * time.Second).String())
+}
 
-	// StateStorage defaults
+func setStateStorageDefaults(v *viper.Viper) {
 	v.SetDefault("stateStorage.type", string(domain.StateStorageTypeLocal))
 	v.SetDefault("stateStorage.redis.database", domain.DefaultRedisDatabase)
 	v.SetDefault("stateStorage.redis.keyPrefix", domain.DefaultRedisKeyPrefix)
@@ -270,11 +304,10 @@ func setViperDefaults(v *viper.Viper) {
 	v.SetDefault("stateStorage.redis.maxRetries", domain.DefaultRedisMaxRetries)
 	v.SetDefault("stateStorage.redis.minRetryBackoff", domain.DefaultRedisMinRetryBackoff.String())
 	v.SetDefault("stateStorage.redis.maxRetryBackoff", domain.DefaultRedisMaxRetryBackoff.String())
-
-	// Raft defaults
 	v.SetDefault("stateStorage.raft.bindAddress", "127.0.0.1:9000")
+}
 
-	// Memberlist defaults
+func setMemberlistDefaults(v *viper.Viper) {
 	v.SetDefault("memberlist.bindAddress", "0.0.0.0")
 	v.SetDefault("memberlist.bindPort", domain.DefaultMemberlistBindPort)
 	v.SetDefault("memberlist.advertisePort", domain.DefaultMemberlistBindPort)
@@ -282,28 +315,44 @@ func setViperDefaults(v *viper.Viper) {
 	v.SetDefault("memberlist.gossipNodes", domain.DefaultMemberlistGossipNodes)
 	v.SetDefault("memberlist.probeInterval", domain.DefaultMemberlistProbeInterval.String())
 	v.SetDefault("memberlist.probeTimeout", domain.DefaultMemberlistProbeTimeout.String())
+}
 
-	// Auth defaults
+func setAuthDefaults(v *viper.Viper) {
 	v.SetDefault("auth.jwt.algorithm", string(domain.JWTAlgorithmRS256))
 	v.SetDefault("auth.jwt.validation.validateAudience", false)
 	v.SetDefault("auth.jwt.validation.validateIssuer", false)
 	v.SetDefault("auth.jwt.claims.userGroupsClaim", "groups")
 	v.SetDefault("auth.jwt.tokenTtl", domain.DefaultTokenTTL.String())
 	v.SetDefault("auth.jwt.cacheTtl", domain.DefaultCacheTTL.String())
+}
 
-	// Tenant filter defaults
+func setTenantFilterDefaults(v *viper.Viper) {
 	v.SetDefault("tenantFilter.strategy", string(domain.TenantFilterStrategyOrConditions))
 	v.SetDefault("tenantFilter.labels.accountLabel", "vm_account_id")
 	v.SetDefault("tenantFilter.labels.projectLabel", "vm_project_id")
 	v.SetDefault("tenantFilter.labels.useProjectId", true)
+}
 
-	// Metrics defaults
+func setMetricsDefaults(v *viper.Viper) {
 	v.SetDefault("metrics.enabled", true)
 	v.SetDefault("metrics.path", "/metrics")
+}
 
-	// Logging defaults
+func setLoggingDefaults(v *viper.Viper) {
 	v.SetDefault("logging.level", "info")
 	v.SetDefault("logging.format", "json")
+}
+
+func setDiscoveryDefaults(v *viper.Viper) {
+	v.SetDefault("discovery.enabled", false)
+	v.SetDefault("discovery.interval", domain.DefaultDiscoveryInterval.String())
+
+	v.SetDefault("discovery.mdns.serviceName", domain.DefaultMDNSServiceName)
+	v.SetDefault("discovery.mdns.domain", domain.DefaultMDNSDomain)
+	v.SetDefault("discovery.mdns.hostname", domain.DefaultMDNSHostname)
+	v.SetDefault("discovery.mdns.port", domain.DefaultMemberlistBindPort)
+	v.SetDefault("discovery.mdns.txtRecords.version", "1.0")
+	v.SetDefault("discovery.mdns.txtRecords.role", "gateway")
 }
 
 // validateViperConfig validates the loaded configuration.
@@ -492,6 +541,14 @@ func (c *ViperConfig) validateRaftConfig() error {
 
 	if raft.DataDir == "" {
 		return errors.New("raft data directory is required when using Raft state storage")
+	}
+
+	if raft.BootstrapExpected < 0 {
+		return fmt.Errorf("raft bootstrap expected must be non-negative, got %d", raft.BootstrapExpected)
+	}
+
+	if raft.BootstrapExpected > 0 && len(raft.Peers) > 0 {
+		return errors.New("cannot specify both bootstrap expected and static peers for raft")
 	}
 
 	return nil

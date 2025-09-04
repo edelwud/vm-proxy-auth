@@ -2,7 +2,6 @@ package memberlist_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -345,55 +344,6 @@ func TestDecodeEncryptionKey(t *testing.T) {
 	}
 }
 
-// Mock RaftManager for testing.
-type mockRaftManager struct {
-	isLeader    bool
-	addVoterErr error
-	removeErr   error
-	peers       []string
-	leaderID    string
-	leaderAddr  string
-}
-
-func (m *mockRaftManager) AddVoter(_, _ string) error {
-	if !m.isLeader {
-		return errors.New("not leader")
-	}
-	return m.addVoterErr
-}
-
-func (m *mockRaftManager) RemoveServer(_ string) error {
-	if !m.isLeader {
-		return errors.New("not leader")
-	}
-	return m.removeErr
-}
-
-func (m *mockRaftManager) GetLeader() (string, string) {
-	return m.leaderID, m.leaderAddr
-}
-
-func (m *mockRaftManager) GetLeaderID() string {
-	return m.leaderID
-}
-
-func (m *mockRaftManager) GetStats() map[string]interface{} {
-	return map[string]interface{}{
-		"state":  "Leader",
-		"term":   1,
-		"peers":  m.peers,
-		"leader": m.leaderID,
-	}
-}
-
-func (m *mockRaftManager) GetPeers() ([]string, error) {
-	return m.peers, nil
-}
-
-func (m *mockRaftManager) IsLeader() bool {
-	return m.isLeader
-}
-
 func TestMemberlistService_RaftIntegration(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	config := config.MemberlistSettings{
@@ -408,12 +358,10 @@ func TestMemberlistService_RaftIntegration(t *testing.T) {
 	defer service.Stop()
 
 	// Create mock Raft manager
-	mockRaft := &mockRaftManager{
-		isLeader:   true,
-		leaderID:   "test-leader",
-		leaderAddr: "127.0.0.1:9000",
-		peers:      []string{"test-leader"},
-	}
+	mockRaft := testutils.NewMockRaftManager()
+	mockRaft.LeaderID = "test-leader"
+	mockRaft.LeaderAddr = "127.0.0.1:9000"
+	mockRaft.Peers = []string{"test-leader"}
 
 	// Set Raft manager
 	service.SetRaftManager(mockRaft)

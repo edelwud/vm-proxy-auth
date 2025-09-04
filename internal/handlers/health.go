@@ -59,7 +59,7 @@ func (h *HealthHandler) Readiness(w http.ResponseWriter, _ *http.Request) {
 func (h *HealthHandler) checkBackendHealth(checks map[string]string) (string, int) {
 	if h.proxyService == nil {
 		checks["backends"] = "proxy service not configured"
-		return domain.HealthStatusDegraded, http.StatusServiceUnavailable
+		return string(domain.HealthStatusDegraded), http.StatusServiceUnavailable
 	}
 
 	backendStatuses := h.proxyService.GetBackendsStatus()
@@ -69,10 +69,10 @@ func (h *HealthHandler) checkBackendHealth(checks map[string]string) (string, in
 	switch {
 	case totalBackends == 0:
 		checks["backends"] = "no backends configured"
-		return domain.HealthStatusDegraded, http.StatusServiceUnavailable
+		return string(domain.HealthStatusDegraded), http.StatusServiceUnavailable
 	case healthyBackends == 0:
 		checks["backends"] = "all backends unhealthy"
-		return domain.HealthStatusDegraded, http.StatusServiceUnavailable
+		return string(domain.HealthStatusDegraded), http.StatusServiceUnavailable
 	case healthyBackends < totalBackends:
 		checks["backends"] = fmt.Sprintf("%d/%d backends healthy", healthyBackends, totalBackends)
 		return "ready", http.StatusOK

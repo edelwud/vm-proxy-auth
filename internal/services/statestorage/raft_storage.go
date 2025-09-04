@@ -33,6 +33,7 @@ type RaftStorageConfig struct {
 	SnapshotRetention  int           `json:"snapshot_retention"`
 	SnapshotThreshold  uint64        `json:"snapshot_threshold"`
 	TrailingLogs       uint64        `json:"trailing_logs"`
+	BootstrapExpected  int           `json:"bootstrap_expected"` // Number of expected servers for bootstrap
 }
 
 // RaftStorage implements StateStorage using HashiCorp Raft consensus.
@@ -51,29 +52,41 @@ type RaftStorage struct {
 	wg          sync.WaitGroup
 	logger      domain.Logger
 	closed      bool
+
+	// Delayed bootstrap support for auto-discovery (Consul pattern)
+	bootstrapDeferred bool
 }
 
 // NewRaftStorage creates a new Raft-based state storage.
 func NewRaftStorage(config RaftStorageConfig, nodeID string, logger domain.Logger) (*RaftStorage, error) {
+	logger.Info("Creating Raft storage",
+		domain.Field{Key: "node_id", Value: config.NodeID},
+		domain.Field{Key: "bind_address", Value: config.BindAddress})
+
 	if err := os.MkdirAll(config.DataDir, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create data directory: %w", err)
 	}
 
+	logger.Debug("Creating Raft configuration")
 	raftConfig := createRaftConfig(config, logger)
 
+	logger.Debug("Creating Raft transport")
 	transport, err := createRaftTransport(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create transport: %w", err)
 	}
 
+	logger.Debug("Creating Raft stores")
 	logStore, stableStore, snapStore, err := createRaftStores(config, transport)
 	if err != nil {
 		_ = transport.Close()
 		return nil, err
 	}
 
+	logger.Debug("Creating Raft FSM")
 	fsm := createRaftFSM(logger)
 
+	logger.Debug("Creating Raft instance")
 	// Create Raft instance
 	r, err := raft.NewRaft(raftConfig, fsm, logStore, stableStore, snapStore, transport)
 	if err != nil {
@@ -192,9 +205,9 @@ func cleanupStores(transport *raft.NetworkTransport, logStore raft.LogStore, sta
 	}
 }
 
-// bootstrapCluster handles cluster initialization and joining.
+// bootstrapCluster handles cluster initialization and joining using Consul-style logic.
 func (rs *RaftStorage) bootstrapCluster() error {
-	// Check if we have existing state
+	// Check if we have existing state (Consul pattern)
 	hasState, err := raft.HasExistingState(rs.logStore, rs.stableStore, rs.snapStore)
 	if err != nil {
 		return fmt.Errorf("failed to check existing state: %w", err)
@@ -213,9 +226,63 @@ func (rs *RaftStorage) bootstrapCluster() error {
 		return rs.bootstrapWithStaticPeers()
 	}
 
-	// Case 2: Single node deployment (memberlist will handle dynamic peer addition)
-	rs.logger.Info("Bootstrapping single-node cluster, memberlist will handle dynamic peers")
+	// Case 2: Dynamic discovery - use maybeBootstrap pattern from Consul
+	if rs.config.BootstrapExpected > 0 {
+		return rs.maybeBootstrap()
+	}
+
+	// Case 3: Single node deployment (immediate bootstrap)
+	rs.logger.Info("No bootstrap-expect configured, bootstrapping single-node cluster")
 	return rs.bootstrapSingleNode()
+}
+
+// maybeBootstrap implements Consul-style conditional bootstrap logic.
+// Only bootstrap if we have enough peers and no existing Raft state in the cluster.
+func (rs *RaftStorage) maybeBootstrap() error {
+	rs.logger.Info("Using maybeBootstrap pattern for cluster formation",
+		domain.Field{Key: "bootstrap_expected", Value: rs.config.BootstrapExpected})
+
+	// Defer bootstrap until memberlist discovery completes
+	rs.bootstrapDeferred = true
+
+	rs.logger.Info("Bootstrap deferred - waiting for memberlist peer discovery",
+		domain.Field{Key: "bootstrap_expected", Value: rs.config.BootstrapExpected})
+
+	// Return without bootstrapping - memberlist will call TryDelayedBootstrap later
+	return nil
+}
+
+// TryDelayedBootstrap attempts bootstrap after peer discovery (Consul pattern).
+func (rs *RaftStorage) TryDelayedBootstrap(discoveredPeers []string) error {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+
+	if !rs.bootstrapDeferred {
+		rs.logger.Debug("Bootstrap not deferred, skipping delayed bootstrap")
+		return nil
+	}
+
+	rs.logger.Info("Attempting delayed bootstrap after peer discovery",
+		domain.Field{Key: "discovered_peers", Value: len(discoveredPeers)},
+		domain.Field{Key: "bootstrap_expected", Value: rs.config.BootstrapExpected})
+
+	// Check if we have enough peers (including self)
+	totalPeers := len(discoveredPeers) + 1 // +1 for self
+	if totalPeers < rs.config.BootstrapExpected {
+		rs.logger.Info("Not enough peers for bootstrap, continuing to wait",
+			domain.Field{Key: "current_peers", Value: totalPeers},
+			domain.Field{Key: "bootstrap_expected", Value: rs.config.BootstrapExpected})
+		return nil
+	}
+
+	// TODO: Query discovered peers for existing Raft state (Consul pattern)
+	// For now, proceed with bootstrap
+	rs.logger.Info("Enough peers discovered, proceeding with delayed bootstrap")
+
+	rs.bootstrapDeferred = false
+
+	// Bootstrap the cluster with all discovered peers
+	return rs.bootstrapWithDiscoveredPeers(discoveredPeers)
 }
 
 // bootstrapWithStaticPeers bootstraps cluster with statically configured peers.
@@ -261,6 +328,38 @@ func (rs *RaftStorage) bootstrapWithStaticPeers() error {
 		domain.Field{Key: "servers_count", Value: len(servers)},
 		domain.Field{Key: "node_id", Value: rs.config.NodeID})
 
+	return nil
+}
+
+// bootstrapWithDiscoveredPeers bootstraps cluster with peers discovered via memberlist.
+func (rs *RaftStorage) bootstrapWithDiscoveredPeers(discoveredPeers []string) error {
+	servers := make([]raft.Server, 0, len(discoveredPeers)+1)
+
+	// Add self as server
+	servers = append(servers, raft.Server{
+		ID:      raft.ServerID(rs.config.NodeID),
+		Address: raft.ServerAddress(rs.config.BindAddress),
+	})
+
+	rs.logger.Info("Bootstrapping cluster with discovered peers",
+		domain.Field{Key: "total_servers_expected", Value: len(servers) + len(discoveredPeers)},
+		domain.Field{Key: "self_node", Value: rs.config.NodeID},
+		domain.Field{Key: "self_address", Value: rs.config.BindAddress})
+
+	// Note: discoveredPeers are memberlist addresses, not Raft addresses
+	// For proper Raft integration, we need to get Raft addresses from node metadata
+	// For this initial implementation, we'll defer to memberlist to handle peer addition
+	// The actual Raft peer addition will happen through the memberlist delegate
+
+	// Bootstrap with just self for now - peers will be added via memberlist
+	configuration := raft.Configuration{Servers: servers}
+	future := rs.raft.BootstrapCluster(configuration)
+	if err := future.Error(); err != nil {
+		return fmt.Errorf("failed to bootstrap cluster: %w", err)
+	}
+
+	rs.logger.Info("Successfully bootstrapped Raft cluster - peers will join via memberlist",
+		domain.Field{Key: "discovered_peers_count", Value: len(discoveredPeers)})
 	return nil
 }
 
@@ -626,14 +725,57 @@ func (rs *RaftStorage) AddVoter(nodeID, address string) error {
 	serverID := raft.ServerID(nodeID)
 	serverAddress := raft.ServerAddress(address)
 
+	rs.logger.Info("Attempting to add Raft voter",
+		domain.Field{Key: "node_id", Value: nodeID},
+		domain.Field{Key: "address", Value: address},
+		domain.Field{Key: "leader_id", Value: string(rs.raft.Leader())})
+
+	// Check current cluster configuration before adding
+	configFuture := rs.raft.GetConfiguration()
+	if configFuture.Error() != nil {
+		rs.logger.Error("Failed to get current configuration",
+			domain.Field{Key: "error", Value: configFuture.Error().Error()})
+	} else {
+		servers := configFuture.Configuration().Servers
+		rs.logger.Debug("Current Raft configuration before AddVoter",
+			domain.Field{Key: "servers_count", Value: len(servers)})
+		for i, server := range servers {
+			rs.logger.Debug("Existing server",
+				domain.Field{Key: "index", Value: i},
+				domain.Field{Key: "id", Value: string(server.ID)},
+				domain.Field{Key: "address", Value: string(server.Address)})
+		}
+	}
+
 	future := rs.raft.AddVoter(serverID, serverAddress, 0, 0)
 	if err := future.Error(); err != nil {
+		rs.logger.Error("AddVoter failed",
+			domain.Field{Key: "node_id", Value: nodeID},
+			domain.Field{Key: "address", Value: address},
+			domain.Field{Key: "error", Value: err.Error()})
 		return fmt.Errorf("failed to add voter: %w", err)
 	}
 
-	rs.logger.Info("Added Raft voter",
+	rs.logger.Info("Added Raft voter successfully",
 		domain.Field{Key: "node_id", Value: nodeID},
 		domain.Field{Key: "address", Value: address})
+
+	// Check configuration after adding
+	configFuture = rs.raft.GetConfiguration()
+	if configFuture.Error() != nil {
+		rs.logger.Error("Failed to get configuration after AddVoter",
+			domain.Field{Key: "error", Value: configFuture.Error().Error()})
+	} else {
+		servers := configFuture.Configuration().Servers
+		rs.logger.Info("Raft configuration after AddVoter",
+			domain.Field{Key: "servers_count", Value: len(servers)})
+		for i, server := range servers {
+			rs.logger.Info("Server in cluster",
+				domain.Field{Key: "index", Value: i},
+				domain.Field{Key: "id", Value: string(server.ID)},
+				domain.Field{Key: "address", Value: string(server.Address)})
+		}
+	}
 
 	return nil
 }
@@ -676,6 +818,39 @@ func (rs *RaftStorage) GetPeers() ([]string, error) {
 	}
 
 	return peers, nil
+}
+
+// ForceRecoverCluster performs emergency cluster recovery for split-brain scenarios.
+// WARNING: This should only be used when quorum is lost and manual intervention is required.
+func (rs *RaftStorage) ForceRecoverCluster(nodeID, address string) error {
+	rs.logger.Warn("Attempting emergency cluster recovery",
+		domain.Field{Key: "node_id", Value: nodeID},
+		domain.Field{Key: "address", Value: address})
+
+	// Create new configuration with only the surviving node
+	newConfig := raft.Configuration{
+		Servers: []raft.Server{
+			{
+				ID:       raft.ServerID(nodeID),
+				Address:  raft.ServerAddress(address),
+				Suffrage: raft.Voter,
+			},
+		},
+	}
+
+	// Convert RaftStorageConfig to raft.Config for RecoverCluster
+	raftConfig := createRaftConfig(rs.config, rs.logger)
+
+	// Use RecoverCluster to force the new configuration
+	if err := raft.RecoverCluster(raftConfig, rs.fsm, rs.logStore, rs.stableStore, rs.snapStore, rs.transport, newConfig); err != nil {
+		return fmt.Errorf("emergency cluster recovery failed: %w", err)
+	}
+
+	rs.logger.Info("Emergency cluster recovery completed successfully",
+		domain.Field{Key: "node_id", Value: nodeID},
+		domain.Field{Key: "servers_count", Value: len(newConfig.Servers)})
+
+	return nil
 }
 
 // raftFSM implements the Raft Finite State Machine.
