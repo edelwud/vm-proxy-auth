@@ -125,7 +125,7 @@ func createRaftStorageWithAddress(
 }
 
 func TestRaftStorage_SingleNode(t *testing.T) {
-	t.Parallel()
+	// Note: No t.Parallel() for Raft tests due to distributed consensus requirements
 
 	if testing.Short() {
 		t.Skip("Skipping Raft integration test in short mode")
@@ -156,7 +156,7 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 	require.True(t, waitForLeadership(raftStorage), "Node failed to become leader")
 
 	t.Run("basic_operations", func(t *testing.T) {
-		t.Parallel()
+		// Note: No t.Parallel() for Raft tests due to shared storage resource
 		key := fmt.Sprintf("test-key-%d", time.Now().UnixNano())
 		value := []byte("test-value")
 
@@ -185,7 +185,7 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 	})
 
 	t.Run("ttl_expiration", func(t *testing.T) {
-		t.Parallel()
+		// Note: No t.Parallel() for Raft tests due to shared storage resource
 		key := fmt.Sprintf("expire-key-%d", time.Now().UnixNano())
 		value := []byte("expire-value")
 
@@ -211,7 +211,7 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 	})
 
 	t.Run("multiple_operations", func(t *testing.T) {
-		t.Parallel()
+		// Note: No t.Parallel() for Raft tests due to shared storage resource
 		items := map[string][]byte{
 			"key1": []byte("value1"),
 			"key2": []byte("value2"),
@@ -241,7 +241,7 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 			t.Skip("Skipping watch test in short mode")
 		}
 
-		t.Parallel()
+		// Note: No t.Parallel() for Raft tests due to shared storage resource
 
 		// Create watcher with production timeout
 		watchCtx, cancel := context.WithTimeout(ctx, operationTimeout)
@@ -280,7 +280,7 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 	})
 
 	t.Run("ping_health_check", func(t *testing.T) {
-		t.Parallel()
+		// Note: No t.Parallel() for Raft tests due to shared storage resource
 		pingCtx, cancel := context.WithTimeout(ctx, operationTimeout)
 		t.Cleanup(cancel)
 		pingErr := storage.Ping(pingCtx)
@@ -405,12 +405,12 @@ func TestRaftStorage_MultiNode(t *testing.T) {
 }
 
 func TestRaftStorage_ErrorCases(t *testing.T) {
-	t.Parallel()
+	// Note: No t.Parallel() for Raft tests due to distributed consensus requirements
 
 	logger := testutils.NewMockLogger()
 
 	t.Run("invalid_data_directory", func(t *testing.T) {
-		t.Parallel()
+		// Note: No t.Parallel() for Raft tests due to shared storage resource
 		port, err := testutils.GetFreePort()
 		require.NoError(t, err)
 
@@ -428,7 +428,7 @@ func TestRaftStorage_ErrorCases(t *testing.T) {
 	})
 
 	t.Run("operations_on_closed_storage", func(t *testing.T) {
-		t.Parallel()
+		// Note: No t.Parallel() for Raft tests due to shared storage resource
 		tempDir := t.TempDir()
 		port, err := testutils.GetFreePort()
 		require.NoError(t, err)
@@ -471,7 +471,7 @@ func TestRaftStorage_ErrorCases(t *testing.T) {
 
 		for _, op := range operations {
 			t.Run(op.name, func(t *testing.T) {
-				t.Parallel()
+				// Note: No t.Parallel() for Raft tests due to shared storage resource
 				opErr := op.op()
 				assert.Equal(t, domain.ErrStorageClosed, opErr, "Operation %s should return ErrStorageClosed", op.name)
 			})
@@ -480,7 +480,7 @@ func TestRaftStorage_ErrorCases(t *testing.T) {
 }
 
 func TestRaftStorage_Watch_MultipleWatchers(t *testing.T) {
-	t.Parallel()
+	// Note: No t.Parallel() for Raft tests due to distributed consensus requirements
 
 	if testing.Short() {
 		t.Skip("Skipping Raft watch test in short mode")
@@ -594,7 +594,7 @@ func TestRaftStorage_Watch_MultipleWatchers(t *testing.T) {
 }
 
 func TestRaftStorage_ConcurrentOperations(t *testing.T) {
-	t.Parallel()
+	// Note: No t.Parallel() for Raft tests due to distributed consensus requirements
 
 	if testing.Short() {
 		t.Skip("Skipping concurrent operations test in short mode")
@@ -625,7 +625,7 @@ func TestRaftStorage_ConcurrentOperations(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("concurrent_writes", func(t *testing.T) {
-		t.Parallel()
+		// Note: No t.Parallel() for Raft tests due to shared storage resource
 		errCh := make(chan error, numOperations)
 
 		// Concurrent writes with individual timeouts
@@ -660,7 +660,7 @@ func TestRaftStorage_ConcurrentOperations(t *testing.T) {
 }
 
 func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
-	t.Parallel()
+	// Note: No t.Parallel() for Raft tests due to distributed consensus requirements
 
 	if testing.Short() {
 		t.Skip("Skipping persistence test in short mode")
@@ -779,7 +779,7 @@ func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
 }
 
 func TestRaftStorage_Factory_Integration(t *testing.T) {
-	t.Parallel()
+	// Note: No t.Parallel() for Raft tests due to distributed consensus requirements
 
 	if testing.Short() {
 		t.Skip("Skipping factory integration test in short mode")
@@ -788,7 +788,7 @@ func TestRaftStorage_Factory_Integration(t *testing.T) {
 	logger := testutils.NewMockLogger()
 
 	t.Run("raft_storage_creation", func(t *testing.T) {
-		t.Parallel()
+		// Note: No t.Parallel() for Raft tests due to shared storage resource
 		tempDir := t.TempDir()
 		port, err := testutils.GetFreePort()
 		require.NoError(t, err)
@@ -824,7 +824,7 @@ func TestRaftStorage_Factory_Integration(t *testing.T) {
 	})
 
 	t.Run("invalid_raft_config_type", func(t *testing.T) {
-		t.Parallel()
+		// Note: No t.Parallel() for Raft tests due to shared storage resource
 		invalidConfig := "not-a-raft-config"
 		storage, err := statestorage.NewStateStorage(invalidConfig, "raft", "test-node", logger)
 		require.Error(t, err)
@@ -834,7 +834,7 @@ func TestRaftStorage_Factory_Integration(t *testing.T) {
 }
 
 func TestRaftStorage_DataDir_Management(t *testing.T) {
-	t.Parallel()
+	// Note: No t.Parallel() for Raft tests due to distributed consensus requirements
 
 	if testing.Short() {
 		t.Skip("Skipping data dir management test in short mode")
@@ -843,7 +843,7 @@ func TestRaftStorage_DataDir_Management(t *testing.T) {
 	logger := testutils.NewMockLogger()
 
 	t.Run("creates_missing_data_directory", func(t *testing.T) {
-		t.Parallel()
+		// Note: No t.Parallel() for Raft tests due to shared storage resource
 		tempDir := t.TempDir()
 		dataDirPath := filepath.Join(tempDir, "missing", "nested", "path")
 		port, err := testutils.GetFreePort()
