@@ -14,6 +14,8 @@ import (
 )
 
 func TestJWTVerifier_HS256_ValidToken(t *testing.T) {
+	t.Parallel()
+
 	secret := []byte("test-secret-key")
 	verifier := auth.NewJWTVerifier(nil, secret, "HS256")
 
@@ -35,6 +37,8 @@ func TestJWTVerifier_HS256_ValidToken(t *testing.T) {
 }
 
 func TestJWTVerifier_HS256_ExpiredToken(t *testing.T) {
+	t.Parallel()
+
 	secret := []byte("test-secret-key")
 	verifier := auth.NewJWTVerifier(nil, secret, "HS256")
 
@@ -56,6 +60,8 @@ func TestJWTVerifier_HS256_ExpiredToken(t *testing.T) {
 }
 
 func TestJWTVerifier_HS256_InvalidSignature(t *testing.T) {
+	t.Parallel()
+
 	secret := []byte("test-secret-key")
 	wrongSecret := []byte("wrong-secret-key")
 	verifier := auth.NewJWTVerifier(nil, secret, "HS256")
@@ -78,6 +84,8 @@ func TestJWTVerifier_HS256_InvalidSignature(t *testing.T) {
 }
 
 func TestJWTVerifier_RS256_ValidToken(t *testing.T) {
+	t.Parallel()
+
 	// Generate RSA key pair
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -104,6 +112,8 @@ func TestJWTVerifier_RS256_ValidToken(t *testing.T) {
 }
 
 func TestJWTVerifier_RS256_InvalidPublicKey(t *testing.T) {
+	t.Parallel()
+
 	// Generate two different RSA key pairs
 	privateKey1, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -132,6 +142,8 @@ func TestJWTVerifier_RS256_InvalidPublicKey(t *testing.T) {
 }
 
 func TestJWTVerifier_UnsupportedAlgorithm(t *testing.T) {
+	t.Parallel()
+
 	secret := []byte("test-secret-key")
 
 	// Create verifier with unsupported algorithm - should still create but fail on verification
@@ -155,6 +167,8 @@ func TestJWTVerifier_UnsupportedAlgorithm(t *testing.T) {
 }
 
 func TestJWTVerifier_MalformedTokens(t *testing.T) {
+	t.Parallel()
+
 	secret := []byte("test-secret-key")
 	verifier := auth.NewJWTVerifier(nil, secret, "HS256")
 
@@ -186,6 +200,7 @@ func TestJWTVerifier_MalformedTokens(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := verifier.VerifyToken(tt.token)
 			require.Error(t, err)
 		})
@@ -193,6 +208,8 @@ func TestJWTVerifier_MalformedTokens(t *testing.T) {
 }
 
 func TestJWTVerifier_MissingRequiredClaims(t *testing.T) {
+	t.Parallel()
+
 	secret := []byte("test-secret-key")
 	verifier := auth.NewJWTVerifier(nil, secret, "HS256")
 
@@ -228,6 +245,7 @@ func TestJWTVerifier_MissingRequiredClaims(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			token := jwt.NewWithClaims(jwt.SigningMethodHS256, tt.claims)
 			tokenString, err := token.SignedString(secret)
 			require.NoError(t, err)
@@ -239,6 +257,8 @@ func TestJWTVerifier_MissingRequiredClaims(t *testing.T) {
 }
 
 func TestJWTVerifier_TokenTiming(t *testing.T) {
+	t.Parallel()
+
 	secret := []byte("test-secret-key")
 	verifier := auth.NewJWTVerifier(nil, secret, "HS256")
 
@@ -281,6 +301,7 @@ func TestJWTVerifier_TokenTiming(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			claims := jwt.MapClaims{
 				"sub": "user@example.com",
 				"iat": tt.iat,
@@ -303,6 +324,8 @@ func TestJWTVerifier_TokenTiming(t *testing.T) {
 }
 
 func TestJWTVerifier_CorrectClaimsExtraction(t *testing.T) {
+	t.Parallel()
+
 	secret := []byte("test-secret-key")
 	verifier := auth.NewJWTVerifier(nil, secret, "HS256")
 

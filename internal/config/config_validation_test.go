@@ -11,22 +11,25 @@ import (
 )
 
 func TestAllViperConfigs_Validation(t *testing.T) {
+	t.Parallel()
+
 	configFiles := []string{
-		"../../examples/config.example.yaml",
-		"../../examples/config.rs256.example.yaml",
-		"../../examples/config.hs256.example.yaml",
-		"../../examples/config.vm-multitenancy.yaml",
-		"../../examples/config.test.yaml",
-		"../../examples/config.viper.example.yaml",
+		"../../examples/config.basic.yaml",
+		"../../examples/config.production.yaml",
+		"../../examples/config.kubernetes.yaml",
+		"../../examples/config.development.yaml",
+		"../../examples/config.high-availability.yaml",
 	}
 
 	for _, configFile := range configFiles {
 		t.Run(filepath.Base(configFile), func(t *testing.T) {
+			t.Parallel()
+
 			viperConfig, err := config.LoadViperConfig(configFile)
 			require.NoError(t, err, "Config %s should be valid", configFile)
 
 			// Basic validation checks
-			assert.NotEmpty(t, viperConfig.Upstream.URL, "Upstream URL should not be empty")
+			assert.NotEmpty(t, viperConfig.Backends, "At least one backend should be configured")
 
 			// JWT configuration should be valid
 			switch viperConfig.Auth.JWT.Algorithm {
@@ -37,28 +40,27 @@ func TestAllViperConfigs_Validation(t *testing.T) {
 			}
 
 			// Tenant filter strategy should be valid
-			assert.Contains(t, []string{"orConditions", "regex"}, viperConfig.TenantFilter.Strategy)
+			assert.Contains(t, []string{"orConditions", "andConditions"}, viperConfig.TenantFilter.Strategy)
 
 			// Logging configuration should be valid
 			assert.Contains(t, []string{"debug", "info", "warn", "error", "fatal"}, viperConfig.Logging.Level)
-			assert.Contains(t, []string{"json", "text"}, viperConfig.Logging.Format)
+			assert.Contains(t, []string{"json", "text", "logfmt", "pretty", "console"}, viperConfig.Logging.Format)
 		})
 	}
 }
 
 func TestViperConfig_StructureConsistency(t *testing.T) {
 	// Test that all configs have consistent structure
-	configFile := "../../examples/config.example.yaml"
+	configFile := "../../examples/config.basic.yaml"
 	viperConfig, err := config.LoadViperConfig(configFile)
 	require.NoError(t, err)
 
 	// Test nested structures exist
-	assert.NotNil(t, viperConfig.Server.Timeouts)
-	assert.NotNil(t, viperConfig.Upstream.Retry)
-	assert.NotNil(t, viperConfig.Auth.JWT)
-	assert.NotNil(t, viperConfig.Auth.JWT.Validation)
-	assert.NotNil(t, viperConfig.Auth.JWT.Claims)
-	assert.NotNil(t, viperConfig.TenantFilter.Labels)
+	require.NotNil(t, viperConfig.Server.Timeouts)
+	require.NotNil(t, viperConfig.Auth.JWT)
+	require.NotNil(t, viperConfig.Auth.JWT.Validation)
+	require.NotNil(t, viperConfig.Auth.JWT.Claims)
+	require.NotNil(t, viperConfig.TenantFilter.Labels)
 
 	// Test that durations are positive
 	assert.Positive(t, viperConfig.Server.Timeouts.ReadTimeout)

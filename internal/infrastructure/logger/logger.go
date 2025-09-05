@@ -204,7 +204,7 @@ func NewEnhancedStructuredLogger(level, format string) *EnhancedStructuredLogger
 
 // WithComponent creates a logger with pre-configured component context.
 func (e *EnhancedStructuredLogger) WithComponent(component string) domain.Logger {
-	return e.Logger.With(domain.Field{Key: "component", Value: component})
+	return e.Logger.With(domain.Field{Key: domain.LogFieldComponent, Value: component})
 }
 
 // WithRequestID creates a logger with request ID context.

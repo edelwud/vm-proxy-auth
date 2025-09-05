@@ -16,6 +16,8 @@ import (
 )
 
 func TestRoundRobinBalancer_BasicDistribution(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendHealthy},
@@ -24,7 +26,7 @@ func TestRoundRobinBalancer_BasicDistribution(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -44,6 +46,8 @@ func TestRoundRobinBalancer_BasicDistribution(t *testing.T) {
 }
 
 func TestRoundRobinBalancer_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendHealthy},
@@ -51,7 +55,7 @@ func TestRoundRobinBalancer_ConcurrentAccess(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 	const numGoroutines = 100
@@ -110,9 +114,11 @@ func TestRoundRobinBalancer_ConcurrentAccess(t *testing.T) {
 }
 
 func TestRoundRobinBalancer_NoBackends(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewRoundRobinBalancer([]domain.Backend{}, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 	backend, err := balancer.NextBackend(ctx)
@@ -121,13 +127,15 @@ func TestRoundRobinBalancer_NoBackends(t *testing.T) {
 }
 
 func TestRoundRobinBalancer_SingleBackend(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://only-backend.com", Weight: 1, State: domain.BackendHealthy},
 	}
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -140,6 +148,8 @@ func TestRoundRobinBalancer_SingleBackend(t *testing.T) {
 }
 
 func TestRoundRobinBalancer_OnlyUnhealthyBackends(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendUnhealthy},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendMaintenance},
@@ -147,7 +157,7 @@ func TestRoundRobinBalancer_OnlyUnhealthyBackends(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 	backend, err := balancer.NextBackend(ctx)
@@ -156,6 +166,8 @@ func TestRoundRobinBalancer_OnlyUnhealthyBackends(t *testing.T) {
 }
 
 func TestRoundRobinBalancer_MixedHealthyUnhealthy(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendUnhealthy},
@@ -164,7 +176,7 @@ func TestRoundRobinBalancer_MixedHealthyUnhealthy(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -186,6 +198,8 @@ func TestRoundRobinBalancer_MixedHealthyUnhealthy(t *testing.T) {
 }
 
 func TestRoundRobinBalancer_WithRateLimitedFallback(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendRateLimited},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendUnhealthy},
@@ -193,7 +207,7 @@ func TestRoundRobinBalancer_WithRateLimitedFallback(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -204,13 +218,15 @@ func TestRoundRobinBalancer_WithRateLimitedFallback(t *testing.T) {
 }
 
 func TestRoundRobinBalancer_ReportResult(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 	}
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 	backend, err := balancer.NextBackend(ctx)
@@ -227,6 +243,8 @@ func TestRoundRobinBalancer_ReportResult(t *testing.T) {
 }
 
 func TestRoundRobinBalancer_BackendsStatus(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 2, State: domain.BackendUnhealthy},
@@ -234,7 +252,7 @@ func TestRoundRobinBalancer_BackendsStatus(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	status := balancer.BackendsStatus()
 	require.Len(t, status, 2)
@@ -263,13 +281,15 @@ func TestRoundRobinBalancer_BackendsStatus(t *testing.T) {
 }
 
 func TestRoundRobinBalancer_ContextCancellation(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 	}
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -281,6 +301,8 @@ func TestRoundRobinBalancer_ContextCancellation(t *testing.T) {
 }
 
 func TestRoundRobinBalancer_Close(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 	}
@@ -298,6 +320,8 @@ func TestRoundRobinBalancer_Close(t *testing.T) {
 }
 
 func TestRoundRobinBalancer_UpdateBackendStates(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendHealthy},
@@ -305,7 +329,7 @@ func TestRoundRobinBalancer_UpdateBackendStates(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -335,7 +359,7 @@ func BenchmarkRoundRobinBalancer_NextBackend(b *testing.B) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	b.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -366,7 +390,7 @@ func BenchmarkRoundRobinBalancer_NextBackendWithSomeUnhealthy(b *testing.B) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	b.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 

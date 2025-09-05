@@ -1,0 +1,132 @@
+# High Availability Configuration
+# For production deployments with maximum reliability
+
+server:
+  address: "0.0.0.0:8080"
+  timeouts:
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    idleTimeout: "120s"
+
+# Multiple VictoriaMetrics clusters
+backends:
+  - url: "http://vm-cluster-1.primary.local:8428"
+    weight: 10
+  - url: "http://vm-cluster-2.primary.local:8428"
+    weight: 10
+  - url: "http://vm-cluster-1.secondary.local:8428"
+    weight: 5
+  - url: "http://vm-cluster-2.secondary.local:8428"
+    weight: 5
+
+loadBalancing:
+  strategy: "least-connections"
+
+healthCheck:
+  checkInterval: "15s"
+  timeout: "5s"
+  healthyThreshold: 3
+  unhealthyThreshold: 2
+  healthEndpoint: "/health"
+
+queue:
+  enabled: true
+  maxSize: 10000
+  timeout: "30s"
+
+timeout: "120s"
+maxRetries: 10
+retryBackoff: "500ms"
+
+# Redis cluster for HA state storage
+stateStorage:
+  type: "redis"
+  redis:
+    address: "redis-cluster.infrastructure.local:6379"
+    password: "${REDIS_PASSWORD}"
+    database: 0
+    keyPrefix: "vm-proxy-auth:ha:"
+    connectTimeout: "10s"
+    readTimeout: "5s"
+    writeTimeout: "5s"
+    poolSize: 50
+    minIdleConns: 20
+    maxRetries: 5
+    minRetryBackoff: "200ms"
+    maxRetryBackoff: "2s"
+
+# Enterprise-grade JWT
+auth:
+  jwt:
+    algorithm: "RS256"
+    jwksUrl: "https://auth.company.com/.well-known/jwks.json"
+    tokenTtl: "8h"
+    cacheTtl: "30m"
+    validation:
+      validateAudience: true
+      validateIssuer: true
+      requiredIssuer: "https://auth.company.com"
+      requiredAudience: ["vm-proxy-auth", "monitoring-platform"]
+    claims:
+      userGroupsClaim: "groups"
+
+# Enterprise tenant mapping
+tenantMapping:
+  - groups: ["platform-admins", "sre-team"]
+    vmTenants:
+      - accountId: "0"
+        projectId: "infrastructure"
+    readOnly: false
+  - groups: ["team-backend"]
+    vmTenants:
+      - accountId: "1000"
+        projectId: "backend-services"
+    readOnly: false
+  - groups: ["team-frontend"]
+    vmTenants:
+      - accountId: "2000"
+        projectId: "frontend-apps"
+    readOnly: false
+  - groups: ["team-data"]
+    vmTenants:
+      - accountId: "3000"
+        projectId: "data-platform"
+    readOnly: false
+  - groups: ["team-mobile"]
+    vmTenants:
+      - accountId: "4000"
+        projectId: "mobile-apps"
+    readOnly: false
+  - groups: ["security-team"]
+    vmTenants:
+      - accountId: "0"
+        projectId: "infrastructure"
+      - accountId: "1000"
+        projectId: "backend-services"
+      - accountId: "2000"
+        projectId: "frontend-apps"
+      - accountId: "3000"
+        projectId: "data-platform"
+      - accountId: "4000"
+        projectId: "mobile-apps"
+    readOnly: true
+  - groups: ["external-contractors"]
+    vmTenants:
+      - accountId: "9000"
+        projectId: "sandbox"
+    readOnly: true
+
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: true
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+logging:
+  level: "info"
+  format: "json"

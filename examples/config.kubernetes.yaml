@@ -1,0 +1,115 @@
+# Kubernetes Deployment with Raft State Storage and Service Discovery
+# For distributed deployments with automatic peer discovery
+
+server:
+  address: "0.0.0.0:8080"
+  timeouts:
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    idleTimeout: "60s"
+
+# Kubernetes service backends (discovered dynamically)
+backends:
+  - url: "http://vm-service.monitoring.svc.cluster.local:8428"
+    weight: 1
+
+loadBalancing:
+  strategy: "round-robin"
+
+healthCheck:
+  checkInterval: "30s"
+  timeout: "10s"
+  healthyThreshold: 2
+  unhealthyThreshold: 3
+  healthEndpoint: "/health"
+
+queue:
+  enabled: true
+  maxSize: 2000
+  timeout: "8s"
+
+timeout: "45s"
+maxRetries: 4
+retryBackoff: "150ms"
+
+# Raft consensus for distributed state
+stateStorage:
+  type: "raft"
+  raft:
+    nodeId: "${HOSTNAME}"
+    peers: []  # Empty - memberlist handles peer discovery
+    dataDir: "/data/raft"
+
+# Memberlist for automatic peer discovery in Kubernetes
+memberlist:
+  bindAddress: "0.0.0.0"
+  bindPort: 7946
+  advertiseAddress: "${POD_IP}"
+  advertisePort: 7946
+  joinNodes:
+    - "vm-proxy-auth-0.vm-proxy-auth-headless:7946"
+    - "vm-proxy-auth-1.vm-proxy-auth-headless:7946"
+    - "vm-proxy-auth-2.vm-proxy-auth-headless:7946"
+  gossipInterval: "200ms"
+  gossipNodes: 3
+  probeInterval: "1s" 
+  probeTimeout: "500ms"
+  metadata:
+    role: "gateway"
+    environment: "kubernetes"
+    namespace: "${NAMESPACE}"
+
+# Kubernetes-compatible JWT
+auth:
+  jwt:
+    algorithm: "RS256"
+    jwksUrl: "https://kubernetes.default.svc/openid/v1/jwks"
+    tokenTtl: "1h"
+    cacheTtl: "10m"
+    validation:
+      validateAudience: true
+      validateIssuer: true
+      requiredIssuer: "https://kubernetes.default.svc"
+      requiredAudience: ["vm-proxy-auth"]
+    claims:
+      userGroupsClaim: "groups"
+
+# Kubernetes RBAC-based tenant mapping
+tenantMapping:
+  - groups: ["system:masters", "cluster-admins"]
+    vmTenants:
+      - accountId: "0"
+        projectId: "system"
+    readOnly: false
+  - groups: ["monitoring:admin"]
+    vmTenants:
+      - accountId: "100"
+        projectId: "monitoring"
+    readOnly: false
+  - groups: ["developers"]
+    vmTenants:
+      - accountId: "200"
+        projectId: "dev"
+    readOnly: false
+  - groups: ["monitoring:readonly"]
+    vmTenants:
+      - accountId: "100"
+        projectId: "monitoring"
+      - accountId: "200"
+        projectId: "dev"
+    readOnly: true
+
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: true
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+logging:
+  level: "info"
+  format: "json"

@@ -1,0 +1,90 @@
+# Basic HS256 JWT Configuration
+# This is the simplest production-ready configuration for vm-proxy-auth
+
+server:
+  address: "0.0.0.0:8080"
+  timeouts:
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    idleTimeout: "60s"
+
+# Backends configuration (flattened structure)
+backends:
+  - url: "http://victoriametrics:8428"
+    weight: 1
+
+loadBalancing:
+  strategy: "round-robin"
+
+healthCheck:
+  checkInterval: "30s"
+  timeout: "10s"
+  healthyThreshold: 2
+  unhealthyThreshold: 3
+  healthEndpoint: "/health"
+
+queue:
+  enabled: true
+  maxSize: 1000
+  timeout: "5s"
+
+timeout: "30s"
+maxRetries: 3
+retryBackoff: "100ms"
+
+# State storage (local for single instance)
+stateStorage:
+  type: "local"
+
+# Memberlist configuration (disabled for local development)
+memberlist:
+  bindAddress: "127.0.0.1"
+  bindPort: 7946
+  joinNodes: []  # Empty for single-node setup
+  metadata:
+    role: "gateway"
+    environment: "development"
+
+# JWT authentication with shared secret
+auth:
+  jwt:
+    algorithm: "HS256"
+    secret: "your-secret-key-here"
+    tokenTtl: "1h"
+    cacheTtl: "5m"
+    validation:
+      validateAudience: false
+      validateIssuer: false
+    claims:
+      userGroupsClaim: "groups"
+
+# Tenant mapping for VictoriaMetrics
+tenantMapping:
+  - groups: ["admin", "ops"]
+    vmTenants:
+      - accountId: "100"
+        projectId: "main"
+    readOnly: false
+  - groups: ["readonly"]
+    vmTenants:
+      - accountId: "100"
+        projectId: "main"
+    readOnly: true
+
+# Tenant filtering strategy
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: true
+
+# Metrics collection
+metrics:
+  enabled: true
+  path: "/metrics"
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "json"

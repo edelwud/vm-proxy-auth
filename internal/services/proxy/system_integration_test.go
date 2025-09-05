@@ -66,7 +66,7 @@ func TestCompleteSystemIntegration(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
 	}))
-	defer backend1.Close()
+	t.Cleanup(func() { backend1.Close() })
 
 	backend2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
@@ -104,7 +104,7 @@ func TestCompleteSystemIntegration(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
 	}))
-	defer backend2.Close()
+	t.Cleanup(func() { backend2.Close() })
 
 	backend3 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
@@ -142,7 +142,7 @@ func TestCompleteSystemIntegration(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
 	}))
-	defer backend3.Close()
+	t.Cleanup(func() { backend3.Close() })
 
 	// Create comprehensive enhanced service configuration
 	config := proxy.EnhancedServiceConfig{
@@ -152,7 +152,7 @@ func TestCompleteSystemIntegration(t *testing.T) {
 			{URL: backend3.URL, Weight: 1}, // Tertiary backend
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingWeightedRoundRobin,
+			Strategy: domain.LoadBalancingStrategyWeighted,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval:      100 * time.Millisecond, // Fast for testing
@@ -172,12 +172,12 @@ func TestCompleteSystemIntegration(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	metrics := &MockEnhancedMetricsService{}
+	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
 	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	ctx := context.Background()
 	err = service.Start(ctx)

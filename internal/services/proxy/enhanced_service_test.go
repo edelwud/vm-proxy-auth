@@ -58,14 +58,14 @@ func TestEnhancedService_BasicForwarding(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"success"}`))
 	}))
-	defer backend.Close()
+	t.Cleanup(func() { backend.Close() })
 
 	config := proxy.EnhancedServiceConfig{
 		Backends: []proxy.BackendConfig{
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval: -1, // Explicitly disable health checking
@@ -74,12 +74,12 @@ func TestEnhancedService_BasicForwarding(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	metrics := &MockEnhancedMetricsService{}
+	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
 	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	ctx := context.Background()
 	err = service.Start(ctx)
@@ -119,7 +119,7 @@ func TestEnhancedService_LoadBalancing_RoundRobin(t *testing.T) {
 			{URL: backends[2].URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval: -1, // Explicitly disable health checking
@@ -127,12 +127,12 @@ func TestEnhancedService_LoadBalancing_RoundRobin(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	metrics := &MockEnhancedMetricsService{}
+	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
 	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	ctx := context.Background()
 	err = service.Start(ctx)
@@ -172,7 +172,7 @@ func TestEnhancedService_LoadBalancing_WeightedRoundRobin(t *testing.T) {
 			{URL: backends[1].URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingWeightedRoundRobin,
+			Strategy: domain.LoadBalancingStrategyWeighted,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval: -1, // Explicitly disable health checking
@@ -180,12 +180,12 @@ func TestEnhancedService_LoadBalancing_WeightedRoundRobin(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	metrics := &MockEnhancedMetricsService{}
+	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
 	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	ctx := context.Background()
 	err = service.Start(ctx)
@@ -222,14 +222,14 @@ func TestEnhancedService_RetryOnFailure(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"success"}`))
 	}))
-	defer backend.Close()
+	t.Cleanup(func() { backend.Close() })
 
 	config := proxy.EnhancedServiceConfig{
 		Backends: []proxy.BackendConfig{
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		MaxRetries:   3,
 		RetryBackoff: 10 * time.Millisecond,
@@ -239,12 +239,12 @@ func TestEnhancedService_RetryOnFailure(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	metrics := &MockEnhancedMetricsService{}
+	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
 	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	ctx := context.Background()
 	err = service.Start(ctx)
@@ -269,14 +269,14 @@ func TestEnhancedService_MaxRetriesExceeded(t *testing.T) {
 		// Always fail
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
-	defer backend.Close()
+	t.Cleanup(func() { backend.Close() })
 
 	config := proxy.EnhancedServiceConfig{
 		Backends: []proxy.BackendConfig{
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		MaxRetries:   2,
 		RetryBackoff: 1 * time.Millisecond,
@@ -286,12 +286,12 @@ func TestEnhancedService_MaxRetriesExceeded(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	metrics := &MockEnhancedMetricsService{}
+	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
 	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	ctx := context.Background()
 	err = service.Start(ctx)
@@ -311,7 +311,7 @@ func TestEnhancedService_NoHealthyBackends(t *testing.T) {
 			{URL: "http://localhost:99999", Weight: 1}, // Non-existent backend
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval:      50 * time.Millisecond,
@@ -321,12 +321,12 @@ func TestEnhancedService_NoHealthyBackends(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	metrics := &MockEnhancedMetricsService{}
+	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
 	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	ctx := context.Background()
 	err = service.Start(ctx)
@@ -347,14 +347,14 @@ func TestEnhancedService_MaintenanceMode(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"success"}`))
 	}))
-	defer backend.Close()
+	t.Cleanup(func() { backend.Close() })
 
 	config := proxy.EnhancedServiceConfig{
 		Backends: []proxy.BackendConfig{
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval: -1, // Explicitly disable health checking
@@ -362,12 +362,12 @@ func TestEnhancedService_MaintenanceMode(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	metrics := &MockEnhancedMetricsService{}
+	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
 	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	ctx := context.Background()
 	err = service.Start(ctx)
@@ -397,14 +397,14 @@ func TestEnhancedService_BackendsStatus(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	defer backend.Close()
+	t.Cleanup(func() { backend.Close() })
 
 	config := proxy.EnhancedServiceConfig{
 		Backends: []proxy.BackendConfig{
 			{URL: backend.URL, Weight: 2},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval: -1, // Explicitly disable health checking
@@ -412,12 +412,12 @@ func TestEnhancedService_BackendsStatus(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	metrics := &MockEnhancedMetricsService{}
+	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
 	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	status := service.GetBackendsStatus()
 	require.Len(t, status, 1)
@@ -436,14 +436,14 @@ func TestEnhancedService_ConcurrentRequests(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"success"}`))
 	}))
-	defer backend.Close()
+	t.Cleanup(func() { backend.Close() })
 
 	config := proxy.EnhancedServiceConfig{
 		Backends: []proxy.BackendConfig{
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval: -1, // Explicitly disable health checking
@@ -451,12 +451,12 @@ func TestEnhancedService_ConcurrentRequests(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	metrics := &MockEnhancedMetricsService{}
+	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
 	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	ctx := context.Background()
 	err = service.Start(ctx)
@@ -497,14 +497,14 @@ func TestEnhancedService_ContextCancellation(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 	}))
-	defer backend.Close()
+	t.Cleanup(func() { backend.Close() })
 
 	config := proxy.EnhancedServiceConfig{
 		Backends: []proxy.BackendConfig{
 			{URL: backend.URL, Weight: 1},
 		},
 		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingRoundRobin,
+			Strategy: domain.LoadBalancingStrategyRoundRobin,
 		},
 		HealthCheck: health.CheckerConfig{
 			CheckInterval: -1, // Explicitly disable health checking
@@ -512,16 +512,16 @@ func TestEnhancedService_ContextCancellation(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	metrics := &MockEnhancedMetricsService{}
+	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
 	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	// Create context with short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	err = service.Start(context.Background()) // Use different context for startup
 	require.NoError(t, err)
@@ -532,88 +532,4 @@ func TestEnhancedService_ContextCancellation(t *testing.T) {
 	_, err = service.Forward(ctx, req)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "context deadline exceeded")
-}
-
-// MockEnhancedMetricsService implements domain.MetricsService for testing enhanced proxy.
-type MockEnhancedMetricsService struct {
-	mu                          sync.Mutex
-	backendStateChangeCallCount int
-	loadBalancerSelectionCount  int
-	upstreamBackendCallCount    int
-}
-
-// Add all the required methods for domain.MetricsService.
-func (m *MockEnhancedMetricsService) RecordRequest(
-	context.Context,
-	string,
-	string,
-	string,
-	time.Duration,
-	*domain.User,
-) {
-}
-
-func (m *MockEnhancedMetricsService) RecordUpstream(context.Context, string, string, string, time.Duration, []string) {
-}
-
-func (m *MockEnhancedMetricsService) RecordQueryFilter(context.Context, string, int, bool, time.Duration) {
-}
-func (m *MockEnhancedMetricsService) RecordAuthAttempt(context.Context, string, string)        {}
-func (m *MockEnhancedMetricsService) RecordTenantAccess(context.Context, string, string, bool) {}
-
-func (m *MockEnhancedMetricsService) RecordUpstreamBackend(
-	context.Context,
-	string,
-	string,
-	string,
-	string,
-	time.Duration,
-	[]string,
-) {
-	m.mu.Lock()
-	m.upstreamBackendCallCount++
-	m.mu.Unlock()
-}
-
-func (m *MockEnhancedMetricsService) RecordHealthCheck(context.Context, string, bool, time.Duration) {
-}
-
-func (m *MockEnhancedMetricsService) RecordBackendStateChange(
-	context.Context,
-	string,
-	domain.BackendState,
-	domain.BackendState,
-) {
-	m.mu.Lock()
-	m.backendStateChangeCallCount++
-	m.mu.Unlock()
-}
-
-func (m *MockEnhancedMetricsService) RecordCircuitBreakerStateChange(
-	context.Context,
-	string,
-	domain.CircuitBreakerState,
-) {
-}
-
-func (m *MockEnhancedMetricsService) RecordQueueOperation(context.Context, string, time.Duration, int) {
-}
-
-func (m *MockEnhancedMetricsService) RecordLoadBalancerSelection(
-	context.Context,
-	domain.LoadBalancingStrategy,
-	string,
-	time.Duration,
-) {
-	m.mu.Lock()
-	m.loadBalancerSelectionCount++
-	m.mu.Unlock()
-}
-
-func (m *MockEnhancedMetricsService) Handler() http.Handler { return nil }
-
-func (m *MockEnhancedMetricsService) GetCallCounts() (int, int, int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.backendStateChangeCallCount, m.loadBalancerSelectionCount, m.upstreamBackendCallCount
 }

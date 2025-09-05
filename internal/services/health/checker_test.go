@@ -17,13 +17,15 @@ import (
 )
 
 func TestChecker_CheckHealth_Success(t *testing.T) {
+	t.Parallel()
+
 	// Create mock health endpoint
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/health", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"healthy"}`))
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	backends := []domain.Backend{
 		{URL: server.URL, Weight: 1, State: domain.BackendHealthy},
@@ -62,12 +64,14 @@ func TestChecker_CheckHealth_Success(t *testing.T) {
 }
 
 func TestChecker_CheckHealth_Failure(t *testing.T) {
+	t.Parallel()
+
 	// Create mock health endpoint that returns error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		w.Write([]byte(`{"status":"unhealthy"}`))
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	backends := []domain.Backend{
 		{URL: server.URL, Weight: 1, State: domain.BackendHealthy},
@@ -100,6 +104,8 @@ func TestChecker_CheckHealth_Failure(t *testing.T) {
 }
 
 func TestChecker_StateTransitions(t *testing.T) {
+	t.Parallel()
+
 	// Create controllable mock server
 	var healthyResponse bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -109,7 +115,7 @@ func TestChecker_StateTransitions(t *testing.T) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	backends := []domain.Backend{
 		{URL: server.URL, Weight: 1, State: domain.BackendHealthy},
@@ -164,10 +170,12 @@ func TestChecker_StateTransitions(t *testing.T) {
 }
 
 func TestChecker_MaintenanceMode(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable) // Would normally be unhealthy
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	backends := []domain.Backend{
 		{URL: server.URL, Weight: 1, State: domain.BackendMaintenance},
@@ -196,6 +204,8 @@ func TestChecker_MaintenanceMode(t *testing.T) {
 }
 
 func TestChecker_ConcurrentChecks(t *testing.T) {
+	t.Parallel()
+
 	// Create multiple mock servers
 	servers := make([]*httptest.Server, 5)
 	backends := make([]domain.Backend, 5)
@@ -257,10 +267,12 @@ func TestChecker_ConcurrentChecks(t *testing.T) {
 }
 
 func TestChecker_StartStopMonitoring(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	backends := []domain.Backend{
 		{URL: server.URL, Weight: 1, State: domain.BackendHealthy},
@@ -307,12 +319,14 @@ func TestChecker_StartStopMonitoring(t *testing.T) {
 }
 
 func TestChecker_ContextCancellation(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Add delay to allow context cancellation
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	backends := []domain.Backend{
 		{URL: server.URL, Weight: 1, State: domain.BackendHealthy},
@@ -331,7 +345,7 @@ func TestChecker_ContextCancellation(t *testing.T) {
 
 	// Create context with short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	// Health check should be cancelled
 	err := checker.CheckHealth(ctx, &backends[0])
@@ -340,11 +354,13 @@ func TestChecker_ContextCancellation(t *testing.T) {
 }
 
 func TestChecker_DefaultConfig(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/health", r.URL.Path) // Default endpoint
 		w.WriteHeader(http.StatusOK)
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	backends := []domain.Backend{
 		{URL: server.URL, Weight: 1, State: domain.BackendHealthy},
@@ -363,11 +379,13 @@ func TestChecker_DefaultConfig(t *testing.T) {
 }
 
 func TestChecker_CustomHealthEndpoint(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/custom/healthz", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	backends := []domain.Backend{
 		{URL: server.URL, Weight: 1, State: domain.BackendHealthy},
@@ -398,7 +416,7 @@ func BenchmarkChecker_CheckHealth(b *testing.B) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	defer server.Close()
+	b.Cleanup(func() { server.Close() })
 
 	backends := []domain.Backend{
 		{URL: server.URL, Weight: 1, State: domain.BackendHealthy},

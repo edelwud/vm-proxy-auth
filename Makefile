@@ -23,7 +23,7 @@ BINARY_PATH := ./bin/$(APP_NAME)
 CMD_PATH := ./cmd/gateway
 CONFIG_PATH := ./config.example.yaml
 
-.PHONY: all build clean test coverage deps fmt lint vet docker docker-build docker-push run dev help
+.PHONY: all build clean test coverage deps fmt lint vet security vuln-check quality docker docker-build docker-push run dev help
 
 # Default target
 all: clean deps test build
@@ -60,7 +60,7 @@ clean:
 # Run tests
 test:
 	@echo "Running tests..."
-	$(GOTEST) -v ./...
+	$(GOTEST) -v ./... -parallel=8
 
 # Run tests with coverage
 coverage:
@@ -203,6 +203,18 @@ vuln-check:
 		echo "govulncheck not installed. Install with: go install golang.org/x/vuln/cmd/govulncheck@latest"; \
 	fi
 
+# Comprehensive quality check - ALWAYS run before commit
+quality: fmt lint vet security vuln-check test
+	@echo "✅ All quality checks passed! Ready to commit."
+
+# Enhanced clean - remove all generated files
+clean-all: clean
+	@echo "Deep cleaning..."
+	rm -rf coverage.out coverage.html lint_output.json
+	rm -rf .air_tmp_*
+	find . -name "*.test" -delete
+	find . -name "*.prof" -delete
+
 # Help
 help:
 	@echo "Available targets:"
@@ -228,4 +240,6 @@ help:
 	@echo "  install-tools  - Install development tools"
 	@echo "  release        - Create release artifacts"
 	@echo "  vuln-check     - Check for vulnerabilities"
+	@echo "  quality        - ⭐ COMPREHENSIVE quality check (fmt+lint+test+security)"
+	@echo "  clean-all      - Deep clean (removes all generated files)"
 	@echo "  help           - Show this help"

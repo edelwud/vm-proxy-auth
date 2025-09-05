@@ -1,0 +1,122 @@
+# Raft Consensus with Memberlist Discovery
+# High-availability configuration using Raft for state storage and memberlist for peer discovery
+
+server:
+  address: "0.0.0.0:8080"
+  timeouts:
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    idleTimeout: "60s"
+
+# Multiple backends for high availability
+backends:
+  - url: "http://vm-backend-1:8428"
+    weight: 2
+  - url: "http://vm-backend-2:8428"
+    weight: 2
+  - url: "http://vm-backend-3:8428"
+    weight: 1
+
+loadBalancing:
+  strategy: "weighted-round-robin"
+
+healthCheck:
+  checkInterval: "20s"
+  timeout: "8s"
+  healthyThreshold: 2
+  unhealthyThreshold: 2
+  healthEndpoint: "/health"
+
+queue:
+  enabled: true
+  maxSize: 2000
+  timeout: "8s"
+
+timeout: "45s"
+maxRetries: 4
+retryBackoff: "150ms"
+
+# Raft consensus with distributed state storage
+stateStorage:
+  type: "raft"
+  raft:
+    nodeId: "${HOSTNAME}"
+    peers: []  # Empty - memberlist handles peer discovery automatically
+    dataDir: "/data/raft"
+
+# Memberlist for automatic cluster formation and peer discovery
+memberlist:
+  bindAddress: "0.0.0.0"
+  bindPort: 7946
+  advertiseAddress: "${NODE_IP}"
+  advertisePort: 7946
+  joinNodes:
+    - "${SEED_NODE_1}:7946"
+    - "${SEED_NODE_2}:7946"
+    - "${SEED_NODE_3}:7946"
+  gossipInterval: "200ms"
+  gossipNodes: 3
+  probeInterval: "1s"
+  probeTimeout: "500ms"
+  encryptionKey: "${MEMBERLIST_ENCRYPTION_KEY}"  # Secure cluster communication
+  metadata:
+    role: "gateway"
+    environment: "production"
+    region: "${REGION}"
+    zone: "${AVAILABILITY_ZONE}"
+    version: "${VERSION}"
+
+# Production JWT authentication
+auth:
+  jwt:
+    algorithm: "RS256"
+    jwksUrl: "https://auth.company.com/.well-known/jwks.json"
+    tokenTtl: "1h"
+    cacheTtl: "15m"
+    validation:
+      validateAudience: true
+      validateIssuer: true
+      requiredIssuer: "https://auth.company.com"
+      requiredAudience: ["vm-proxy-auth", "monitoring"]
+    claims:
+      userGroupsClaim: "groups"
+
+# Enterprise tenant mapping
+tenantMapping:
+  - groups: ["platform-admins"]
+    vmTenants:
+      - accountId: "0"
+        projectId: "platform"
+    readOnly: false
+  - groups: ["team-backend"]
+    vmTenants:
+      - accountId: "1000"
+        projectId: "backend"
+    readOnly: false
+  - groups: ["team-frontend"]
+    vmTenants:
+      - accountId: "2000"
+        projectId: "frontend"
+    readOnly: false
+  - groups: ["readonly-users"]
+    vmTenants:
+      - accountId: "1000"
+        projectId: "backend"
+      - accountId: "2000"
+        projectId: "frontend"
+    readOnly: true
+
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: true
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+logging:
+  level: "info"
+  format: "json"

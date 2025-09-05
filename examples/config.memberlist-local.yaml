@@ -1,0 +1,96 @@
+# Local Memberlist Testing Configuration
+# Use this for testing memberlist discovery on localhost
+
+server:
+  address: "0.0.0.0:8080"
+  timeouts:
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    idleTimeout: "60s"
+
+backends:
+  - url: "http://localhost:8428"
+    weight: 1
+
+loadBalancing:
+  strategy: "round-robin"
+
+healthCheck:
+  checkInterval: "20s"
+  timeout: "8s"
+  healthyThreshold: 2
+  unhealthyThreshold: 2
+  healthEndpoint: "/health"
+
+queue:
+  enabled: true
+  maxSize: 1000
+  timeout: "8s"
+
+timeout: "30s"
+maxRetries: 3
+retryBackoff: "100ms"
+
+# Raft consensus with memberlist discovery
+stateStorage:
+  type: "raft"
+  raft:
+    nodeId: "node-1"  # Change this for each instance: node-1, node-2, node-3
+    bindAddress: "127.0.0.1:9000"  # Change port for each instance: 9000, 9001, 9002
+    peers: []  # Empty - memberlist handles peer discovery
+    dataDir: "./data/raft-node-1"  # Change for each instance
+
+# Memberlist configuration for local testing
+memberlist:
+  bindAddress: "127.0.0.1"
+  bindPort: 7946  # Change for each instance: 7946, 7947, 7948
+  advertiseAddress: "127.0.0.1"
+  advertisePort: 7946  # Same as bindPort
+  joinNodes:
+    - "127.0.0.1:7946"  # First node (seed)
+    - "127.0.0.1:7947"  # Second node  
+    - "127.0.0.1:7948"  # Third node
+  gossipInterval: "200ms"
+  gossipNodes: 3
+  probeInterval: "1s"
+  probeTimeout: "500ms"
+  metadata:
+    role: "gateway"
+    environment: "local"
+    region: "local"
+
+# Simple authentication for testing
+auth:
+  jwt:
+    algorithm: "HS256"
+    secret: "test-secret-key-at-least-32-chars-long-for-hs256"
+    tokenTtl: "1h"
+    validation:
+      validateAudience: false
+      validateIssuer: false
+
+# Test tenant mapping
+tenantMapping:
+  - groups: ["admin"]
+    vmTenants:
+      - accountId: "0"
+    readOnly: false
+  - groups: ["user"]
+    vmTenants:
+      - accountId: "1000"
+    readOnly: true
+
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: false
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+logging:
+  level: "debug"
+  format: "console"

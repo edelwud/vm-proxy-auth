@@ -12,9 +12,8 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/services/tenant/filterstrategies"
 )
 
-// Service implements domain.TenantService using secure OR-based tenant filtering.
+// Service implements domain.TenantService using secure tenant filtering.
 type Service struct {
-	upstreamConfig config.UpstreamSettings
 	tenantConfig   config.TenantFilterSettings
 	logger         domain.Logger
 	orQueryBuilder *filterstrategies.ORQueryBuilder
@@ -23,15 +22,13 @@ type Service struct {
 
 // NewService creates a new tenant service.
 func NewService(
-	upstreamCfg *config.UpstreamSettings,
 	tenantCfg *config.TenantFilterSettings,
 	logger domain.Logger,
 	metrics domain.MetricsService,
 ) domain.TenantService {
 	return &Service{
-		upstreamConfig: *upstreamCfg,
-		tenantConfig:   *tenantCfg,
-		logger:         logger.With(domain.Field{Key: "component", Value: "tenant"}),
+		tenantConfig: *tenantCfg,
+		logger:       logger.With(domain.Field{Key: "component", Value: "tenant"}),
 		orQueryBuilder: filterstrategies.NewORQueryBuilder(
 			logger.With(domain.Field{Key: "component", Value: "tenant.or_query"}),
 		),
@@ -39,7 +36,7 @@ func NewService(
 	}
 }
 
-// FilterQuery adds tenant filtering to PromQL query for VictoriaMetrics using secure OR-based filtering.
+// FilterQuery adds tenant filtering to PromQL query for VictoriaMetrics.
 func (s *Service) FilterQuery(
 	ctx context.Context,
 	user *domain.User,
@@ -47,12 +44,12 @@ func (s *Service) FilterQuery(
 ) (string, error) {
 	startTime := time.Now()
 
-	// Only support VM tenants
+	// Support VM tenants
 	if len(user.VMTenants) == 0 {
 		return "", domain.ErrNoVMTenants
 	}
 
-	s.logger.Info("SECURE TENANT FILTER",
+	s.logger.Info("Tenant filtering",
 		domain.Field{Key: "user_id", Value: user.ID},
 		domain.Field{Key: "original_query", Value: query},
 		domain.Field{Key: "vm_tenants", Value: fmt.Sprintf("%v", user.VMTenants)},
@@ -65,24 +62,24 @@ func (s *Service) FilterQuery(
 	if !strategy.IsValid() {
 		s.logger.Error("Invalid tenant filter strategy configured",
 			domain.Field{Key: "configured_strategy", Value: s.tenantConfig.Strategy},
-			domain.Field{Key: "valid_strategies", Value: "or_conditions"})
+			domain.Field{Key: "valid_strategies", Value: string(domain.TenantFilterStrategyOrConditions)})
 		return "", fmt.Errorf(
-			"invalid tenant filter strategy: %s (only 'or_conditions' is supported)",
-			s.tenantConfig.Strategy,
+			"invalid tenant filter strategy: %s (only '%s' is supported)",
+			s.tenantConfig.Strategy, domain.TenantFilterStrategyOrConditions,
 		)
 	}
 
 	var filteredQuery string
 	var err error
 
-	filteredQuery, err = s.orQueryBuilder.BuildSecureQuery(query, user.VMTenants, &s.upstreamConfig, &s.tenantConfig)
+	filteredQuery, err = s.orQueryBuilder.BuildSecureQuery(query, user.VMTenants, &s.tenantConfig)
 	duration := time.Since(startTime)
 
 	if err != nil {
 		// Record failed query filtering
 		s.metrics.RecordQueryFilter(ctx, user.ID, len(user.VMTenants), false, duration)
 
-		s.logger.Error("Secure PromQL filtering failed",
+		s.logger.Error("PromQL filtering failed",
 			domain.Field{Key: "error", Value: err.Error()},
 			domain.Field{Key: "original_query", Value: query})
 
@@ -94,12 +91,12 @@ func (s *Service) FilterQuery(
 	// Record successful query filtering metrics
 	s.metrics.RecordQueryFilter(ctx, user.ID, len(user.VMTenants), filterApplied, duration)
 
-	s.logger.Info("SECURE TENANT FILTER RESULT",
+	s.logger.Info("Tenant filtering result",
 		domain.Field{Key: "user_id", Value: user.ID},
 		domain.Field{Key: "original_query", Value: query},
 		domain.Field{Key: "filtered_query", Value: filteredQuery},
 		domain.Field{Key: "filter_applied", Value: filterApplied},
-		domain.Field{Key: "secure_strategy", Value: "or_conditions"},
+		domain.Field{Key: "strategy", Value: string(domain.TenantFilterStrategyOrConditions)},
 		domain.Field{Key: "duration_ms", Value: duration.Milliseconds()},
 	)
 
@@ -108,7 +105,7 @@ func (s *Service) FilterQuery(
 
 // CanAccessTenant checks if user can access a specific tenant.
 func (s *Service) CanAccessTenant(ctx context.Context, user *domain.User, tenantID string) bool {
-	// Only check VM tenants
+	// Check VM tenants
 	for _, vmTenant := range user.VMTenants {
 		if vmTenant.AccountID == tenantID || vmTenant.String() == tenantID {
 			// Record successful tenant access
@@ -130,7 +127,7 @@ func (s *Service) DetermineTargetTenant(
 	user *domain.User,
 	r *http.Request,
 ) (string, error) {
-	// Only support VM tenants
+	// Support VM tenants
 	if len(user.VMTenants) == 0 {
 		return "", domain.ErrNoVMTenants
 	}

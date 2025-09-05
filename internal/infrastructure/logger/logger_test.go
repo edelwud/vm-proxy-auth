@@ -11,6 +11,8 @@ import (
 )
 
 func TestNewStructuredLogger(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		level        string
@@ -51,6 +53,8 @@ func TestNewStructuredLogger(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			logger := NewStructuredLogger(tt.level, tt.format)
 
 			if logger == nil {
@@ -76,6 +80,8 @@ func TestNewStructuredLogger(t *testing.T) {
 }
 
 func TestNewEnhancedStructuredLogger(t *testing.T) {
+	t.Parallel()
+
 	logger := NewEnhancedStructuredLogger("info", "json")
 
 	if logger == nil {
@@ -88,6 +94,8 @@ func TestNewEnhancedStructuredLogger(t *testing.T) {
 }
 
 func TestStructuredLogger_LogLevels(t *testing.T) {
+	t.Parallel()
+
 	// Capture log output
 	var buf bytes.Buffer
 	logger := logrus.New()
@@ -139,10 +147,35 @@ func TestStructuredLogger_LogLevels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			buf.Reset()
-			tt.logFunc(tt.message, tt.fields...)
+			t.Parallel()
 
-			output := buf.String()
+			// Each subtest gets its own buffer and logger to avoid race conditions
+			var testBuf bytes.Buffer
+			testLogger := logrus.New()
+			testLogger.SetOutput(&testBuf)
+			testLogger.SetFormatter(&logrus.JSONFormatter{})
+			testLogger.SetLevel(logrus.DebugLevel)
+
+			testStructLogger := &StructuredLogger{
+				logger: testLogger,
+				fields: make(logrus.Fields),
+			}
+
+			// Execute the log function using the test-specific logger
+			switch tt.name {
+			case "debug level":
+				testStructLogger.Debug(tt.message, tt.fields...)
+			case "info level":
+				testStructLogger.Info(tt.message, tt.fields...)
+			case "warn level":
+				testStructLogger.Warn(tt.message, tt.fields...)
+			case "error level":
+				testStructLogger.Error(tt.message, tt.fields...)
+			default:
+				tt.logFunc(tt.message, tt.fields...)
+			}
+
+			output := testBuf.String()
 			if !strings.Contains(output, tt.expected) {
 				t.Errorf("Expected output to contain %q, but got: %s", tt.expected, output)
 			}
@@ -158,6 +191,8 @@ func TestStructuredLogger_LogLevels(t *testing.T) {
 }
 
 func TestStructuredLogger_With(t *testing.T) {
+	t.Parallel()
+
 	// Capture log output
 	var buf bytes.Buffer
 	logger := logrus.New()
@@ -195,6 +230,8 @@ func TestStructuredLogger_With(t *testing.T) {
 }
 
 func TestStructuredLogger_WithChaining(t *testing.T) {
+	t.Parallel()
+
 	// Capture log output
 	var buf bytes.Buffer
 	logger := logrus.New()
@@ -226,6 +263,8 @@ func TestStructuredLogger_WithChaining(t *testing.T) {
 }
 
 func TestFieldHelpers(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		helper   func() domain.Field
@@ -291,6 +330,8 @@ func TestFieldHelpers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			result := tt.helper()
 			if result.Key != tt.expected.Key {
 				t.Errorf("Expected key %q, got %q", tt.expected.Key, result.Key)
@@ -303,6 +344,8 @@ func TestFieldHelpers(t *testing.T) {
 }
 
 func TestErrorHelper(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		err      error
@@ -322,6 +365,7 @@ func TestErrorHelper(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := Error(tt.err)
 			if result.Key != tt.expected.Key {
 				t.Errorf("Expected key %q, got %q", tt.expected.Key, result.Key)
@@ -334,48 +378,25 @@ func TestErrorHelper(t *testing.T) {
 }
 
 func TestEnhancedStructuredLogger_ContextMethods(t *testing.T) {
-	// Capture log output
-	var buf bytes.Buffer
-	logger := logrus.New()
-	logger.SetOutput(&buf)
-	logger.SetFormatter(&logrus.JSONFormatter{})
-
-	baseLogger := &StructuredLogger{
-		logger: logger,
-		fields: make(logrus.Fields),
-	}
-
-	enhancedLogger := &EnhancedStructuredLogger{
-		Logger: baseLogger,
-	}
+	t.Parallel()
 
 	tests := []struct {
 		name          string
-		setupFunc     func() domain.Logger
 		expectedField string
 		expectedValue string
 	}{
 		{
-			name: "WithComponent",
-			setupFunc: func() domain.Logger {
-				return enhancedLogger.WithComponent("auth")
-			},
+			name:          "WithComponent",
 			expectedField: "component",
 			expectedValue: "auth",
 		},
 		{
-			name: "WithRequestID",
-			setupFunc: func() domain.Logger {
-				return enhancedLogger.WithRequestID("req-123")
-			},
+			name:          "WithRequestID",
 			expectedField: "request_id",
 			expectedValue: "req-123",
 		},
 		{
-			name: "WithUser",
-			setupFunc: func() domain.Logger {
-				return enhancedLogger.WithUser("user456")
-			},
+			name:          "WithUser",
 			expectedField: "user_id",
 			expectedValue: "user456",
 		},
@@ -383,11 +404,34 @@ func TestEnhancedStructuredLogger_ContextMethods(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			buf.Reset()
-			contextualLogger := tt.setupFunc()
+			t.Parallel()
+
+			// Each subtest gets its own buffer to avoid race conditions
+			var testBuf bytes.Buffer
+			testLogger := logrus.New()
+			testLogger.SetOutput(&testBuf)
+			testLogger.SetFormatter(&logrus.JSONFormatter{})
+
+			testBaseLogger := &StructuredLogger{
+				logger: testLogger,
+				fields: make(logrus.Fields),
+			}
+			testEnhancedLogger := &EnhancedStructuredLogger{Logger: testBaseLogger}
+
+			// Execute setup function with test-specific logger
+			var contextualLogger domain.Logger
+			switch tt.name {
+			case "WithRequestID":
+				contextualLogger = testEnhancedLogger.WithRequestID("req-123")
+			case "WithUser":
+				contextualLogger = testEnhancedLogger.WithUser("user456")
+			case "WithComponent":
+				contextualLogger = testEnhancedLogger.WithComponent("auth")
+			}
+
 			contextualLogger.Info("test message")
 
-			output := buf.String()
+			output := testBuf.String()
 
 			if !strings.Contains(output, tt.expectedField) {
 				t.Errorf("Expected output to contain field %q, but got: %s", tt.expectedField, output)
@@ -402,20 +446,13 @@ func TestEnhancedStructuredLogger_ContextMethods(t *testing.T) {
 
 //nolint:gocognit // Test function with comprehensive test cases
 func TestEnhancedStructuredLogger_WithTenant(t *testing.T) {
+	t.Parallel()
+
 	// Capture log output
 	var buf bytes.Buffer
 	logger := logrus.New()
 	logger.SetOutput(&buf)
 	logger.SetFormatter(&logrus.JSONFormatter{})
-
-	baseLogger := &StructuredLogger{
-		logger: logger,
-		fields: make(logrus.Fields),
-	}
-
-	enhancedLogger := &EnhancedStructuredLogger{
-		Logger: baseLogger,
-	}
 
 	tests := []struct {
 		name           string
@@ -442,11 +479,24 @@ func TestEnhancedStructuredLogger_WithTenant(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			buf.Reset()
-			tenantLogger := enhancedLogger.WithTenant(tt.accountID, tt.projectID)
+			t.Parallel()
+
+			// Each subtest gets its own buffer to avoid race conditions
+			var testBuf bytes.Buffer
+			testLogger := logrus.New()
+			testLogger.SetOutput(&testBuf)
+			testLogger.SetFormatter(&logrus.JSONFormatter{})
+
+			testBaseLogger := &StructuredLogger{
+				logger: testLogger,
+				fields: make(logrus.Fields),
+			}
+			testEnhancedLogger := &EnhancedStructuredLogger{Logger: testBaseLogger}
+
+			tenantLogger := testEnhancedLogger.WithTenant(tt.accountID, tt.projectID)
 			tenantLogger.Info("tenant test")
 
-			output := buf.String()
+			output := testBuf.String()
 
 			if tt.expectsAccount {
 				if !strings.Contains(output, "tenant_account") {

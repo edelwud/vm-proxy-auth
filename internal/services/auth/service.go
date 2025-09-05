@@ -49,7 +49,7 @@ func NewService(
 		verifier = NewJWKSVerifier(cfg.JWT.JwksURL, cfg.JWT.Algorithm, cfg.JWT.CacheTTL)
 	default:
 		// Error: must have either secret or JWKS URL
-		return nil, errors.New("JWT authentication requires either jwt_secret or jwks_url to be configured")
+		return nil, errors.New("jWT authentication requires either jwt_secret or jwks_url to be configured")
 	}
 
 	return &Service{
@@ -168,7 +168,7 @@ func (s *Service) determineUserPermissions(
 	for _, mapping := range s.tenantMaps {
 		if s.hasGroupMatch(userGroups, mapping.Groups) {
 			hasMatchingGroups = true
-			// Add VictoriaMetrics tenants from mapping (legacy tenants removed)
+			// Add VictoriaMetrics tenants from mapping
 
 			// Add VictoriaMetrics tenants if specified
 			for _, vmMapping := range mapping.VMTenants {

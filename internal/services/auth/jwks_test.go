@@ -18,6 +18,8 @@ import (
 )
 
 func TestJWKSFetcher_ValidJWKS(t *testing.T) {
+	t.Parallel()
+
 	// Generate test RSA key pair
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -30,7 +32,7 @@ func TestJWKSFetcher_ValidJWKS(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(jwks)
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	// Create JWKS fetcher
 	fetcher := auth.NewJWKSFetcher(server.URL, 5*time.Minute)
@@ -46,6 +48,8 @@ func TestJWKSFetcher_ValidJWKS(t *testing.T) {
 }
 
 func TestJWKSFetcher_KeyNotFound(t *testing.T) {
+	t.Parallel()
+
 	// Create mock JWKS with different key ID
 	jwks := map[string]any{
 		"keys": []map[string]any{
@@ -64,7 +68,7 @@ func TestJWKSFetcher_KeyNotFound(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(jwks)
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	// Create JWKS fetcher
 	fetcher := auth.NewJWKSFetcher(server.URL, 5*time.Minute)
@@ -77,6 +81,8 @@ func TestJWKSFetcher_KeyNotFound(t *testing.T) {
 }
 
 func TestJWKSFetcher_InvalidJWKSResponse(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		responseBody any
@@ -106,6 +112,7 @@ func TestJWKSFetcher_InvalidJWKSResponse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create test server with error response
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tt.statusCode)
@@ -117,7 +124,7 @@ func TestJWKSFetcher_InvalidJWKSResponse(t *testing.T) {
 					}
 				}
 			}))
-			defer server.Close()
+			t.Cleanup(func() { server.Close() })
 
 			// Create JWKS fetcher
 			fetcher := auth.NewJWKSFetcher(server.URL, 5*time.Minute)
@@ -131,6 +138,8 @@ func TestJWKSFetcher_InvalidJWKSResponse(t *testing.T) {
 }
 
 func TestJWKSFetcher_Caching(t *testing.T) {
+	t.Parallel()
+
 	// Generate test RSA key pair
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -144,7 +153,7 @@ func TestJWKSFetcher_Caching(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(jwks)
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	// Create JWKS fetcher with short cache TTL
 	fetcher := auth.NewJWKSFetcher(server.URL, 100*time.Millisecond)
@@ -172,6 +181,8 @@ func TestJWKSFetcher_Caching(t *testing.T) {
 }
 
 func TestJWKSFetcher_InvalidRSAKey(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		jwk  map[string]any
@@ -220,6 +231,7 @@ func TestJWKSFetcher_InvalidRSAKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			jwks := map[string]any{
 				"keys": []any{tt.jwk},
 			}
@@ -229,7 +241,7 @@ func TestJWKSFetcher_InvalidRSAKey(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(jwks)
 			}))
-			defer server.Close()
+			t.Cleanup(func() { server.Close() })
 
 			// Create JWKS fetcher
 			fetcher := auth.NewJWKSFetcher(server.URL, 5*time.Minute)
@@ -245,8 +257,14 @@ func TestJWKSFetcher_InvalidRSAKey(t *testing.T) {
 }
 
 func TestJWKSFetcher_NetworkErrors(t *testing.T) {
-	// Create JWKS fetcher with invalid URL
+	t.Parallel()
+
+	// Create JWKS fetcher with invalid URL and short timeout to avoid hanging
 	fetcher := auth.NewJWKSFetcher("http://invalid-host-that-does-not-exist.local", 5*time.Minute)
+	// Override the HTTP client with a very short timeout to fail fast
+	fetcher.SetHTTPClient(&http.Client{
+		Timeout: 100 * time.Millisecond, // Very short timeout for fast failure
+	})
 
 	// Test fetching key - should fail with network error
 	publicKey, err := fetcher.GetPublicKey("test-kid")
@@ -255,6 +273,8 @@ func TestJWKSFetcher_NetworkErrors(t *testing.T) {
 }
 
 func TestJWKSFetcher_MultipleKeys(t *testing.T) {
+	t.Parallel()
+
 	// Generate multiple test keys
 	privateKey1, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -275,7 +295,7 @@ func TestJWKSFetcher_MultipleKeys(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(jwks)
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	// Create JWKS fetcher
 	fetcher := auth.NewJWKSFetcher(server.URL, 5*time.Minute)

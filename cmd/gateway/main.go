@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -19,11 +18,13 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
 	"github.com/edelwud/vm-proxy-auth/internal/services/access"
 	"github.com/edelwud/vm-proxy-auth/internal/services/auth"
-	"github.com/edelwud/vm-proxy-auth/internal/services/health"
+	"github.com/edelwud/vm-proxy-auth/internal/services/discovery"
+	"github.com/edelwud/vm-proxy-auth/internal/services/memberlist"
 	"github.com/edelwud/vm-proxy-auth/internal/services/metrics"
 	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/services/statestorage"
 	"github.com/edelwud/vm-proxy-auth/internal/services/tenant"
+	netutils "github.com/edelwud/vm-proxy-auth/pkg/utils"
 )
 
 //nolint:gochecknoglobals // We are using global variables for version information.
@@ -33,19 +34,7 @@ var (
 	gitCommit = "unknown"
 )
 
-// Default configuration constants for single upstream backward compatibility.
-const (
-	defaultHealthCheckInterval      = 30 * time.Second
-	defaultHealthCheckTimeout       = 10 * time.Second
-	defaultHealthyThreshold         = 2
-	defaultUnhealthyThreshold       = 3
-	defaultQueueMaxSize             = 1000
-	defaultQueueTimeout             = 5 * time.Second
-	defaultRetryBackoffMilliseconds = 100
-	defaultRetryBackoffSeconds      = 5
-)
-
-//nolint:funlen,gocognit
+//nolint:funlen
 func main() {
 	var (
 		configPath     = flag.String("config", "", "Path to configuration file")
@@ -89,7 +78,7 @@ func main() {
 		domain.Field{Key: "git_commit", Value: gitCommit},
 		domain.Field{Key: "config_path", Value: *configPath},
 		domain.Field{Key: "server_address", Value: cfg.Server.Address},
-		domain.Field{Key: "upstream_url", Value: cfg.Upstream.URL},
+		domain.Field{Key: "backends_count", Value: len(cfg.Backends)},
 		domain.Field{Key: "log_level", Value: cfg.Logging.Level},
 	)
 
@@ -99,70 +88,22 @@ func main() {
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to initialize auth service")
 	}
-	tenantService := tenant.NewService(&cfg.Upstream, &cfg.TenantFilter, appLogger, metricsService)
+	tenantService := tenant.NewService(&cfg.TenantFilter, appLogger, metricsService)
 	accessService := access.NewService(appLogger)
 
-	// Initialize enhanced proxy service (supports both single and multiple upstreams)
-	var configData *config.EnhancedServiceConfig
-
-	if cfg.IsMultipleUpstreamsEnabled() {
-		configData, err = cfg.ToEnhancedServiceConfig()
-		if err != nil {
-			appLogger.Error("Failed to create enhanced service configuration",
-				domain.Field{Key: "error", Value: err.Error()})
-			os.Exit(1)
-		}
-	} else {
-		// Create single backend configuration for backward compatibility
-		configData = &config.EnhancedServiceConfig{
-			Backends: []config.BackendConfig{
-				{URL: cfg.Upstream.URL, Weight: 1},
-			},
-			LoadBalancing: config.LoadBalancingConfig{
-				Strategy: "round-robin",
-			},
-			HealthCheck: config.HealthCheckConfig{
-				CheckInterval:      defaultHealthCheckInterval,
-				Timeout:            defaultHealthCheckTimeout,
-				HealthyThreshold:   defaultHealthyThreshold,
-				UnhealthyThreshold: defaultUnhealthyThreshold,
-				HealthEndpoint:     "/health",
-			},
-			Queue: config.QueueConfig{
-				MaxSize: defaultQueueMaxSize,
-				Timeout: defaultQueueTimeout,
-			},
-			Timeout:        cfg.Upstream.Timeout,
-			MaxRetries:     cfg.Upstream.Retry.MaxRetries,
-			RetryBackoff:   cfg.Upstream.Retry.RetryDelay,
-			EnableQueueing: false, // Disabled by default for single upstream
-		}
+	// Initialize enhanced proxy service
+	if validationErr := cfg.ValidateBackends(); validationErr != nil {
+		appLogger.Error("Invalid backend configuration",
+			domain.Field{Key: "error", Value: validationErr.Error()})
+		os.Exit(1)
 	}
 
-	// Convert config.EnhancedServiceConfig to proxy.EnhancedServiceConfig
-	enhancedConfig := proxy.EnhancedServiceConfig{
-		Backends:      make([]proxy.BackendConfig, len(configData.Backends)),
-		LoadBalancing: proxy.LoadBalancingConfig{Strategy: configData.LoadBalancing.Strategy},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval:      configData.HealthCheck.CheckInterval,
-			Timeout:            configData.HealthCheck.Timeout,
-			HealthyThreshold:   configData.HealthCheck.HealthyThreshold,
-			UnhealthyThreshold: configData.HealthCheck.UnhealthyThreshold,
-			HealthEndpoint:     configData.HealthCheck.HealthEndpoint,
-		},
-		Queue:          proxy.QueueConfig{MaxSize: configData.Queue.MaxSize, Timeout: configData.Queue.Timeout},
-		Timeout:        configData.Timeout,
-		MaxRetries:     configData.MaxRetries,
-		RetryBackoff:   configData.RetryBackoff,
-		EnableQueueing: configData.EnableQueueing,
-	}
-
-	// Convert backends
-	for i, backend := range configData.Backends {
-		enhancedConfig.Backends[i] = proxy.BackendConfig{
-			URL:    backend.URL,
-			Weight: backend.Weight,
-		}
+	// Convert configuration to proxy service config
+	enhancedConfig, err := cfg.ToProxyServiceConfig()
+	if err != nil {
+		appLogger.Error("Failed to convert proxy configuration",
+			domain.Field{Key: "error", Value: err.Error()})
+		os.Exit(1)
 	}
 
 	// Create state storage based on configuration
@@ -173,12 +114,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	stateStorage, err := createStateStorage(stateStorageConfig, storageType, "gateway-node", appLogger)
+	stateStorage, err := statestorage.NewStateStorage(stateStorageConfig, storageType, "gateway-node", appLogger)
 	if err != nil {
 		appLogger.Error("Failed to create state storage",
 			domain.Field{Key: "type", Value: storageType},
 			domain.Field{Key: "error", Value: err.Error()})
 		os.Exit(1)
+	}
+
+	ctx := context.Background()
+
+	// Initialize memberlist for Raft cluster if using Raft storage
+	if storageType == string(domain.StateStorageTypeRaft) {
+		initializeMemberlist(ctx, cfg, stateStorage, appLogger)
 	}
 
 	proxyService, err := proxy.NewEnhancedService(enhancedConfig, appLogger, metricsService, stateStorage)
@@ -189,21 +137,15 @@ func main() {
 	}
 
 	// Start enhanced service
-	ctx := context.Background()
 	if startErr := proxyService.Start(ctx); startErr != nil {
 		appLogger.Error("Failed to start enhanced proxy service",
 			domain.Field{Key: "error", Value: startErr.Error()})
 		os.Exit(1)
 	}
 
-	if cfg.IsMultipleUpstreamsEnabled() {
-		appLogger.Info("Enhanced proxy service started with multiple upstreams",
-			domain.Field{Key: "backends", Value: len(enhancedConfig.Backends)},
-			domain.Field{Key: "strategy", Value: string(enhancedConfig.LoadBalancing.Strategy)})
-	} else {
-		appLogger.Info("Enhanced proxy service started with single upstream",
-			domain.Field{Key: "upstream_url", Value: cfg.Upstream.URL})
-	}
+	appLogger.Info("Proxy service started",
+		domain.Field{Key: "backends", Value: len(enhancedConfig.Backends)},
+		domain.Field{Key: "strategy", Value: string(enhancedConfig.LoadBalancing.Strategy)})
 
 	// Initialize main gateway handler
 	gatewayHandler := handlers.NewGatewayHandler(
@@ -216,7 +158,7 @@ func main() {
 	)
 
 	// Initialize health check handler
-	healthHandler := handlers.NewHealthHandler(appLogger, version)
+	healthHandler := handlers.NewHealthHandler(appLogger, version, proxyService)
 
 	// Setup HTTP router
 	mux := http.NewServeMux()
@@ -277,16 +219,6 @@ func main() {
 	appLogger.Info("Server stopped gracefully")
 }
 
-// createStateStorage creates a state storage instance based on configuration.
-func createStateStorage(
-	storageConfig interface{},
-	storageType string,
-	nodeID string,
-	logger domain.Logger,
-) (domain.StateStorage, error) {
-	return statestorage.NewStateStorage(storageConfig, storageType, nodeID, logger)
-}
-
 // showVersionInfo displays version information to stdout.
 // This function is allowed to use fmt.Printf for CLI utility purposes.
 //
@@ -304,4 +236,95 @@ func showVersionInfo() {
 //nolint:forbidigo // We are using fmt.Println for CLI utility purposes.
 func showValidationSuccess() {
 	fmt.Println("Configuration is valid")
+}
+
+// initializeMemberlist initializes memberlist service for Raft cluster.
+func initializeMemberlist(
+	ctx context.Context,
+	cfg *config.ViperConfig,
+	stateStorage domain.StateStorage,
+	logger domain.Logger,
+) {
+	// Integrate with Raft storage and prepare memberlist
+	var nodeMetadata *memberlist.NodeMetadata
+	var raftStorage *statestorage.RaftStorage
+	logger.Debug("Checking state storage type for Raft integration",
+		domain.Field{Key: "storage_type", Value: fmt.Sprintf("%T", stateStorage)})
+	if rs, ok := stateStorage.(*statestorage.RaftStorage); ok {
+		logger.Info("State storage is RaftStorage, preparing memberlist integration")
+		raftStorage = rs
+
+		// Create node metadata for this instance BEFORE creating memberlist
+		// Convert bind address to advertise address for peer communication
+		raftAdvertiseAddr, addrErr := netutils.ConvertBindToAdvertiseAddress(cfg.StateStorage.Raft.BindAddress)
+		if addrErr != nil {
+			logger.Error("Failed to convert Raft bind address to advertise address",
+				domain.Field{Key: "bind_address", Value: cfg.StateStorage.Raft.BindAddress},
+				domain.Field{Key: "error", Value: addrErr.Error()})
+			os.Exit(1)
+		}
+
+		var metaErr error
+		nodeMetadata, metaErr = memberlist.CreateNodeMetadata(
+			cfg.StateStorage.Raft.NodeID,
+			cfg.Server.Address,
+			raftAdvertiseAddr,
+			cfg.Memberlist.Metadata,
+		)
+		if metaErr != nil {
+			logger.Error("Failed to create node metadata",
+				domain.Field{Key: "error", Value: metaErr.Error()})
+			os.Exit(1)
+		}
+
+		logger.Info("Created node metadata for memberlist",
+			domain.Field{Key: "node_id", Value: nodeMetadata.NodeID},
+			domain.Field{Key: "role", Value: nodeMetadata.Role},
+			domain.Field{Key: "http_address", Value: nodeMetadata.HTTPAddress},
+			domain.Field{Key: "raft_address", Value: nodeMetadata.RaftAddress})
+	}
+
+	// Create memberlist service with metadata and Raft manager
+	mlService, mlErr := memberlist.NewMemberlistServiceWithMetadata(cfg.Memberlist, logger, nodeMetadata, raftStorage)
+	if mlErr != nil {
+		logger.Error("Failed to create memberlist service",
+			domain.Field{Key: "error", Value: mlErr.Error()})
+		os.Exit(1)
+	}
+
+	// Create discovery service if enabled
+	if cfg.Discovery.Enabled {
+		discoveryService := discovery.NewService(cfg.Discovery, logger)
+		mlService.SetDiscoveryService(discoveryService)
+
+		// Connect discovery service to Raft manager for delayed bootstrap
+		if raftStorage != nil {
+			discoveryService.SetRaftManager(raftStorage)
+			logger.Info("Discovery service connected to Raft manager for delayed bootstrap")
+		}
+
+		logger.Info("Discovery service configured",
+			domain.Field{Key: "providers", Value: cfg.Discovery.Providers})
+	}
+
+	// Start memberlist (this will also start discovery if configured)
+	if startErr := mlService.Start(ctx); startErr != nil {
+		logger.Error("Failed to start memberlist service",
+			domain.Field{Key: "error", Value: startErr.Error()})
+		os.Exit(1)
+	}
+
+	// Join cluster if nodes are explicitly configured (fallback)
+	if len(cfg.Memberlist.JoinNodes) > 0 {
+		logger.Info("Using manual join nodes as fallback",
+			domain.Field{Key: "join_nodes", Value: cfg.Memberlist.JoinNodes})
+		if joinErr := mlService.Join(cfg.Memberlist.JoinNodes); joinErr != nil {
+			logger.Warn("Failed to join memberlist cluster",
+				domain.Field{Key: "error", Value: joinErr.Error()},
+				domain.Field{Key: "join_nodes", Value: cfg.Memberlist.JoinNodes})
+		}
+	}
+
+	logger.Info("Memberlist service initialized",
+		domain.Field{Key: "cluster_size", Value: mlService.GetClusterSize()})
 }

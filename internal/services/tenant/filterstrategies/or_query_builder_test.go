@@ -13,6 +13,7 @@ import (
 )
 
 func TestORQueryBuilder_BuildSecureQuery(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		query       string
@@ -23,7 +24,7 @@ func TestORQueryBuilder_BuildSecureQuery(t *testing.T) {
 		notContains []string
 	}{
 		{
-			name:  "simple single tenant",
+			name:  "tenant filtering",
 			query: "up",
 			tenants: []domain.VMTenant{
 				{AccountID: "1000", ProjectID: "10"},
@@ -115,15 +116,12 @@ func TestORQueryBuilder_BuildSecureQuery(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			logger := &testutils.MockLogger{}
+			t.Parallel()
+			logger := testutils.NewMockLogger()
 			builder := filterstrategies.NewORQueryBuilder(logger)
 
-			upstreamCfg := &config.UpstreamSettings{
-				URL: "https://test.example.com",
-			}
-
 			tenantCfg := &config.TenantFilterSettings{
-				Strategy: "or_conditions",
+				Strategy: string(domain.TenantFilterStrategyOrConditions),
 				Labels: config.TenantFilterLabels{
 					AccountLabel: "vm_account_id",
 					ProjectLabel: "vm_project_id",
@@ -131,7 +129,7 @@ func TestORQueryBuilder_BuildSecureQuery(t *testing.T) {
 				},
 			}
 
-			result, err := builder.BuildSecureQuery(tt.query, tt.tenants, upstreamCfg, tenantCfg)
+			result, err := builder.BuildSecureQuery(tt.query, tt.tenants, tenantCfg)
 
 			if tt.expectError {
 				require.Error(t, err)

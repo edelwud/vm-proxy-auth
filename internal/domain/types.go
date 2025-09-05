@@ -223,11 +223,53 @@ type ContextualLogger interface {
 type TenantFilterStrategy string
 
 const (
-	// TenantFilterStrategyOR uses separate OR conditions for each tenant pair.
+	// TenantFilterStrategyOrConditions uses separate OR conditions for each tenant pair.
 	// This ensures exact tenant isolation and prevents cross-tenant data leakage.
 	// Example: {vm_account_id="1000"} or {vm_account_id="2000",vm_project_id="20"}.
-	TenantFilterStrategyOR TenantFilterStrategy = "or_conditions"
+	TenantFilterStrategyOrConditions TenantFilterStrategy = "orConditions"
+	// TenantFilterStrategyAndConditions uses AND conditions for tenant filtering.
+	TenantFilterStrategyAndConditions TenantFilterStrategy = "andConditions"
 )
+
+// StateStorageType defines the type of state storage backend.
+type StateStorageType string
+
+const (
+	StateStorageTypeLocal StateStorageType = "local"
+	StateStorageTypeRedis StateStorageType = "redis"
+	StateStorageTypeRaft  StateStorageType = "raft"
+)
+
+// JWTAlgorithm defines JWT signing algorithms.
+type JWTAlgorithm string
+
+const (
+	JWTAlgorithmHS256 JWTAlgorithm = "HS256"
+	JWTAlgorithmRS256 JWTAlgorithm = "RS256"
+)
+
+// DiscoveryProvider defines the interface for peer discovery implementations.
+type DiscoveryProvider interface {
+	// Discover finds available peer addresses
+	Discover(ctx context.Context) ([]string, error)
+
+	// Start starts the discovery provider (for active providers like mDNS server)
+	Start(ctx context.Context) error
+
+	// Stop stops the discovery provider
+	Stop() error
+
+	// GetProviderType returns the provider type name
+	GetProviderType() string
+}
+
+// PeerInfo represents discovered peer information.
+type PeerInfo struct {
+	Address  string
+	Port     int
+	NodeID   string
+	Metadata map[string]string
+}
 
 // TenantFilterConfig contains configuration for tenant filtering strategy.
 type TenantFilterConfig struct {
@@ -236,7 +278,7 @@ type TenantFilterConfig struct {
 
 // IsValid validates the tenant filter strategy.
 func (s TenantFilterStrategy) IsValid() bool {
-	return s == TenantFilterStrategyOR
+	return s == TenantFilterStrategyOrConditions || s == TenantFilterStrategyAndConditions
 }
 
 // TenantFilter represents a filter that can be applied to PromQL queries.
@@ -330,18 +372,18 @@ func (bs BackendState) IsAvailableWithFallback() bool {
 type LoadBalancingStrategy string
 
 const (
-	// LoadBalancingRoundRobin distributes requests in round-robin fashion.
-	LoadBalancingRoundRobin LoadBalancingStrategy = "round-robin"
-	// LoadBalancingWeightedRoundRobin distributes requests based on backend weights.
-	LoadBalancingWeightedRoundRobin LoadBalancingStrategy = "weighted-round-robin"
-	// LoadBalancingLeastConnections routes to backend with fewest active connections.
-	LoadBalancingLeastConnections LoadBalancingStrategy = "least-connections"
+	// LoadBalancingStrategyRoundRobin distributes requests in round-robin fashion.
+	LoadBalancingStrategyRoundRobin LoadBalancingStrategy = "round-robin"
+	// LoadBalancingStrategyWeighted distributes requests based on backend weights.
+	LoadBalancingStrategyWeighted LoadBalancingStrategy = "weighted-round-robin"
+	// LoadBalancingStrategyLeastConnection routes to backend with fewest active connections.
+	LoadBalancingStrategyLeastConnection LoadBalancingStrategy = "least-connections"
 )
 
 // IsValid validates the load balancing strategy.
 func (lbs LoadBalancingStrategy) IsValid() bool {
 	switch lbs {
-	case LoadBalancingRoundRobin, LoadBalancingWeightedRoundRobin, LoadBalancingLeastConnections:
+	case LoadBalancingStrategyRoundRobin, LoadBalancingStrategyWeighted, LoadBalancingStrategyLeastConnection:
 		return true
 	default:
 		return false
@@ -472,3 +514,105 @@ type RequestQueue interface {
 	// Close performs cleanup and graceful shutdown.
 	Close() error
 }
+
+// ServiceDiscovery provides service discovery for distributed deployments.
+type ServiceDiscovery interface {
+	// Start begins the service discovery process.
+	Start(ctx context.Context) error
+	// Stop gracefully shuts down the service discovery.
+	Stop() error
+	// Events returns a channel for receiving discovery events.
+	Events() <-chan ServiceDiscoveryEvent
+	// DiscoverPeers discovers peer nodes for Raft cluster formation.
+	DiscoverPeers(ctx context.Context) ([]*PeerInfo, error)
+	// DiscoverBackends discovers backend services (VictoriaMetrics instances).
+	DiscoverBackends(ctx context.Context) ([]*BackendInfo, error)
+}
+
+// BackendInfo represents a discovered backend service.
+type BackendInfo struct {
+	URL      string            `json:"url"`
+	Weight   int               `json:"weight"`
+	Healthy  bool              `json:"healthy"`
+	LastSeen time.Time         `json:"last_seen"`
+	Metadata map[string]string `json:"metadata"`
+}
+
+// NodeInfo represents information about this node.
+type NodeInfo struct {
+	NodeID      string            `json:"node_id"`
+	Address     string            `json:"address"`
+	RaftAddress string            `json:"raft_address"`
+	Version     string            `json:"version"`
+	StartTime   time.Time         `json:"start_time"`
+	Metadata    map[string]string `json:"metadata"`
+}
+
+// ServiceDiscoveryEvent represents a change in service topology.
+type ServiceDiscoveryEvent struct {
+	Type      ServiceDiscoveryEventType `json:"type"`
+	Peer      *PeerInfo                 `json:"peer,omitempty"`
+	Backend   *BackendInfo              `json:"backend,omitempty"`
+	Timestamp time.Time                 `json:"timestamp"`
+}
+
+// ServiceDiscoveryEventType represents the type of service discovery event.
+type ServiceDiscoveryEventType string
+
+const (
+	ServiceDiscoveryEventTypePeerJoined     ServiceDiscoveryEventType = "peer_joined"
+	ServiceDiscoveryEventTypePeerLeft       ServiceDiscoveryEventType = "peer_left"
+	ServiceDiscoveryEventTypePeerUpdated    ServiceDiscoveryEventType = "peer_updated"
+	ServiceDiscoveryEventTypeBackendAdded   ServiceDiscoveryEventType = "backend_added"
+	ServiceDiscoveryEventTypeBackendRemoved ServiceDiscoveryEventType = "backend_removed"
+	ServiceDiscoveryEventTypeBackendUpdated ServiceDiscoveryEventType = "backend_updated"
+)
+
+// HealthStatus represents the health status of a component.
+type HealthStatus string
+
+const (
+	// HealthStatusHealthy indicates the component is functioning normally.
+	HealthStatusHealthy HealthStatus = "healthy"
+	// HealthStatusDegraded indicates the component has degraded performance.
+	HealthStatusDegraded HealthStatus = "degraded"
+)
+
+// RaftManager defines the interface for managing Raft cluster membership.
+type RaftManager interface {
+	AddVoter(nodeID, address string) error
+	RemoveServer(nodeID string) error
+	GetLeader() (string, string)
+	GetPeers() ([]string, error)
+	IsLeader() bool
+	TryDelayedBootstrap(discoveredPeers []string) error // Consul pattern support
+	ForceRecoverCluster(nodeID, address string) error   // Emergency recovery for split-brain
+}
+
+// MemberlistDiscoveryService defines interface for auto-discovery integration.
+type MemberlistDiscoveryService interface {
+	SetPeerJoiner(joiner interface{})
+	Start(ctx context.Context) error
+	Stop() error
+}
+
+// PeerJoiner defines interface for joining discovered peers.
+type PeerJoiner interface {
+	Join(peers []string) error
+	GetLocalNode() interface{} // Using interface{} to avoid importing memberlist
+	GetMembers() interface{}   // Using interface{} to avoid importing memberlist
+}
+
+// PeerDiscovery defines interface for discovering cluster peers before bootstrap.
+type PeerDiscovery interface {
+	GetDiscoveredPeers() []string
+	HasExistingRaftPeers() (bool, error)
+}
+
+// ContextKey defines custom type for context keys to avoid collisions.
+type ContextKey string
+
+const (
+	// RequestIDKey is the context key for request ID.
+	RequestIDKey ContextKey = "request_id"
+)

@@ -13,7 +13,9 @@ import (
 )
 
 func TestMetricsService_Creation(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	t.Parallel()
+
+	logger := testutils.NewMockLogger()
 	service := metrics.NewService(logger)
 
 	if service == nil {
@@ -22,7 +24,9 @@ func TestMetricsService_Creation(t *testing.T) {
 }
 
 func TestMetricsService_Handler(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	t.Parallel()
+
+	logger := testutils.NewMockLogger()
 	service := metrics.NewService(logger)
 
 	handler := service.Handler()
@@ -46,8 +50,10 @@ func TestMetricsService_Handler(t *testing.T) {
 	}
 }
 
-func TestMetricsService_RecordRequest(_ *testing.T) {
-	logger := &testutils.MockLogger{}
+func TestMetricsService_RecordRequest(t *testing.T) {
+	t.Parallel()
+
+	logger := testutils.NewMockLogger()
 	service := metrics.NewService(logger)
 
 	ctx := context.Background()
@@ -63,7 +69,9 @@ func TestMetricsService_RecordRequest(_ *testing.T) {
 }
 
 func TestMetricsService_MultipleCalls(t *testing.T) {
-	logger := &testutils.MockLogger{}
+	t.Parallel()
+
+	logger := testutils.NewMockLogger()
 	service := metrics.NewService(logger)
 
 	ctx := context.Background()

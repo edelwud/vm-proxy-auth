@@ -10,6 +10,8 @@ import (
 )
 
 func TestConsoleFormatter_Format(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		entry    *logrus.Entry
@@ -117,6 +119,7 @@ func TestConsoleFormatter_Format(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := formatter.Format(tt.entry)
 			if err != nil {
 				t.Fatalf("Format() error = %v", err)
@@ -140,6 +143,8 @@ func TestConsoleFormatter_Format(t *testing.T) {
 }
 
 func TestConsoleFormatter_ExtractImportantFields(t *testing.T) {
+	t.Parallel()
+
 	formatter := NewConsoleFormatter()
 
 	tests := []struct {
@@ -203,6 +208,7 @@ func TestConsoleFormatter_ExtractImportantFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := formatter.extractImportantFields(tt.fields)
 
 			if result != tt.expected {
@@ -213,6 +219,7 @@ func TestConsoleFormatter_ExtractImportantFields(t *testing.T) {
 }
 
 func TestConsoleFormatter_LevelFormatting(t *testing.T) {
+	t.Parallel()
 	formatter := NewConsoleFormatter()
 
 	tests := []struct {
@@ -259,6 +266,7 @@ func TestConsoleFormatter_LevelFormatting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			entry := &logrus.Entry{
 				Message: "test message",
 				Level:   tt.level,
@@ -281,6 +289,7 @@ func TestConsoleFormatter_LevelFormatting(t *testing.T) {
 }
 
 func TestConsoleFormatter_MessagePreservation(t *testing.T) {
+	t.Parallel()
 	formatter := NewConsoleFormatter()
 
 	tests := []struct {
@@ -307,6 +316,7 @@ func TestConsoleFormatter_MessagePreservation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			entry := &logrus.Entry{
 				Message: tt.message,
 				Level:   logrus.InfoLevel,

@@ -9,11 +9,6 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
-// State storage constants.
-const (
-	defaultWatchChannelBufferSize = 100 // Buffer size for watch channels
-)
-
 // LocalStorage provides in-memory state storage for single-instance deployments.
 type LocalStorage struct {
 	data        sync.Map
@@ -140,7 +135,7 @@ func (ls *LocalStorage) Watch(
 	ctx context.Context,
 	keyPrefix string,
 ) (<-chan domain.StateEvent, error) {
-	ch := make(chan domain.StateEvent, defaultWatchChannelBufferSize)
+	ch := make(chan domain.StateEvent, domain.DefaultWatchChannelBufferSize)
 
 	ls.watchMu.Lock()
 	ls.watches[keyPrefix] = append(ls.watches[keyPrefix], ch)

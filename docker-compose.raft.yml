@@ -1,0 +1,295 @@
+# Docker Compose configuration for Raft State Storage deployment
+# Usage: docker-compose -f docker-compose.raft.yml up -d
+
+version: '3.8'
+
+services:
+  # Raft node 1 (will become leader in most cases)
+  vm-proxy-auth-raft-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+      - "9000:9000"  # Raft port
+    volumes:
+      - ./examples/config.raft-state-storage.example.yaml:/root/config.yaml:ro
+      - raft-data-1:/data
+    environment:
+      - SERVER_ADDRESS=0.0.0.0:8080
+      - RAFT_NODE_ID=node-1
+      - RAFT_BIND_ADDRESS=0.0.0.0:9000
+      - RAFT_DATA_DIR=/data
+      - LOG_LEVEL=info
+    command: ["--config", "/root/config.yaml"]
+    networks:
+      monitoring:
+        aliases:
+          - raft-node-1
+    depends_on:
+      - victoriametrics-1
+      - victoriametrics-2
+      - victoriametrics-3
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Raft node 2
+  vm-proxy-auth-raft-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8080"
+      - "9001:9000"  # Raft port
+    volumes:
+      - ./examples/config.raft-state-storage.example.yaml:/root/config.yaml:ro
+      - raft-data-2:/data
+    environment:
+      - SERVER_ADDRESS=0.0.0.0:8080
+      - RAFT_NODE_ID=node-2
+      - RAFT_BIND_ADDRESS=0.0.0.0:9000
+      - RAFT_DATA_DIR=/data
+      - LOG_LEVEL=info
+    command: ["--config", "/root/config.yaml"]
+    networks:
+      monitoring:
+        aliases:
+          - raft-node-2
+    depends_on:
+      - vm-proxy-auth-raft-1  # Start after node 1 for easier bootstrapping
+      - victoriametrics-1
+      - victoriametrics-2
+      - victoriametrics-3
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  # Raft node 3
+  vm-proxy-auth-raft-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8080"
+      - "9002:9000"  # Raft port
+    volumes:
+      - ./examples/config.raft-state-storage.example.yaml:/root/config.yaml:ro
+      - raft-data-3:/data
+    environment:
+      - SERVER_ADDRESS=0.0.0.0:8080
+      - RAFT_NODE_ID=node-3
+      - RAFT_BIND_ADDRESS=0.0.0.0:9000
+      - RAFT_DATA_DIR=/data
+      - LOG_LEVEL=info
+    command: ["--config", "/root/config.yaml"]
+    networks:
+      monitoring:
+        aliases:
+          - raft-node-3
+    depends_on:
+      - vm-proxy-auth-raft-1  # Start after node 1
+      - vm-proxy-auth-raft-2  # Start after node 2
+      - victoriametrics-1
+      - victoriametrics-2
+      - victoriametrics-3
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 50s
+
+  # Load balancer (nginx) for gateway instances
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx-raft.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - vm-proxy-auth-raft-1
+      - vm-proxy-auth-raft-2
+      - vm-proxy-auth-raft-3
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # VictoriaMetrics cluster node 1
+  victoriametrics-1:
+    image: victoriametrics/victoria-metrics:v1.95.1
+    ports:
+      - "8428:8428"
+    volumes:
+      - vm-data-1:/victoria-metrics-data
+    command:
+      - '--storageDataPath=/victoria-metrics-data'
+      - '--httpListenAddr=:8428'
+      - '--retentionPeriod=1y'
+      - '--maxConcurrentInserts=8'
+    networks:
+      monitoring:
+        aliases:
+          - vm-cluster-1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8428/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # VictoriaMetrics cluster node 2
+  victoriametrics-2:
+    image: victoriametrics/victoria-metrics:v1.95.1
+    ports:
+      - "8429:8428"
+    volumes:
+      - vm-data-2:/victoria-metrics-data
+    command:
+      - '--storageDataPath=/victoria-metrics-data'
+      - '--httpListenAddr=:8428'
+      - '--retentionPeriod=1y'
+      - '--maxConcurrentInserts=8'
+    networks:
+      monitoring:
+        aliases:
+          - vm-cluster-2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8428/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # VictoriaMetrics cluster node 3
+  victoriametrics-3:
+    image: victoriametrics/victoria-metrics:v1.95.1
+    ports:
+      - "8430:8428"
+    volumes:
+      - vm-data-3:/victoria-metrics-data
+    command:
+      - '--storageDataPath=/victoria-metrics-data'
+      - '--httpListenAddr=:8428'
+      - '--retentionPeriod=1y'
+      - '--maxConcurrentInserts=8'
+    networks:
+      monitoring:
+        aliases:
+          - vm-cluster-3
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8428/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Dragonfly for service discovery (Redis-compatible)
+  dragonfly:
+    image: dragonflydb/dragonfly:v1.24.1
+    ports:
+      - "6379:6379"
+    volumes:
+      - dragonfly-data:/data
+    command:
+      - "--alsologtostderr"
+      - "--port=6379"
+      - "--data_dir=/data"
+      - "--logtostderr"
+      - "--max_memory=1GB"
+      - "--cache_mode=true"
+      - "--notify-keyspace-events=Kh"  # Enable keyspace notifications for hashes
+    networks:
+      - monitoring
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Grafana for monitoring the Raft cluster
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      - victoriametrics-1
+
+volumes:
+  vm-data-1:
+    driver: local
+  vm-data-2:
+    driver: local
+  vm-data-3:
+    driver: local
+  raft-data-1:
+    driver: local
+  raft-data-2:
+    driver: local
+  raft-data-3:
+    driver: local
+  dragonfly-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  monitoring:
+    driver: bridge
+
+# Usage Instructions:
+#
+# 1. Start the cluster:
+#    docker-compose -f docker-compose.raft.yml up -d
+#
+# 2. Check Raft cluster status:
+#    curl http://localhost:8080/raft/stats
+#    curl http://localhost:8081/raft/stats
+#    curl http://localhost:8082/raft/stats
+#
+# 3. Test service discovery:
+#    redis-cli -h localhost HGETALL vm-proxy-auth:peers
+#    redis-cli -h localhost HGETALL vm-proxy-auth:backends
+#
+# 4. Monitor with Grafana:
+#    http://localhost:3000 (admin/admin)
+#
+# 5. Test load balancing:
+#    curl -H "Authorization: Bearer YOUR_JWT" http://localhost/api/v1/query?query=up
+#
+# 6. Scale individual components:
+#    docker-compose -f docker-compose.raft.yml up -d --scale victoriametrics-1=2
+#
+# 7. Simulate node failure:
+#    docker-compose -f docker-compose.raft.yml stop vm-proxy-auth-raft-1
+#    # Check that node-2 or node-3 becomes leader
+#
+# 8. View logs:
+#    docker-compose -f docker-compose.raft.yml logs -f vm-proxy-auth-raft-1
+#
+# Production Notes:
+# - In production, use persistent volumes with proper backup strategies
+# - Configure resource limits and requests for each service
+# - Use secrets management for JWT signing keys
+# - Enable TLS for all inter-service communication
+# - Monitor Raft cluster health and alerting

@@ -1,0 +1,69 @@
+server:
+  address: "0.0.0.0:8092"
+
+backends:
+  - url: "http://localhost:8428"
+    weight: 1
+
+loadBalancing:
+  strategy: "round-robin"
+
+timeout: "30s"
+
+# NO Raft - только memberlist discovery тестирование
+stateStorage:
+  type: "local"
+
+# Auto-discovery configuration - Node 2
+discovery:
+  enabled: true
+  providers: ["mdns", "static"]
+  interval: "10s"
+  mdns:
+    serviceName: "_vm-proxy-auth._tcp"
+    domain: "local."
+    hostname: "node-2-test"
+    port: 7948
+  static:
+    peers: []
+
+# Memberlist configuration - Node 2
+memberlist:
+  bindAddress: "127.0.0.1"
+  bindPort: 7948
+  advertiseAddress: "127.0.0.1"
+  advertisePort: 7948
+  gossipInterval: "200ms"
+  gossipNodes: 3
+  probeInterval: "1s"
+  probeTimeout: "500ms"
+  metadata:
+    node_name: "node-2-test"
+    role: "peer"
+    environment: "test"
+
+auth:
+  jwt:
+    algorithm: "HS256"
+    secret: "test-secret-key-at-least-32-chars-long-for-hs256"
+    tokenTtl: "1h"
+    validation:
+      validateAudience: false
+      validateIssuer: false
+
+tenantMapping:
+  - groups: ["admin"]
+    vmTenants:
+      - accountId: "0"
+    readOnly: false
+
+tenantFilter:
+  strategy: "orConditions"
+  labels:
+    accountLabel: "vm_account_id"
+    projectLabel: "vm_project_id"
+    useProjectId: false
+
+logging:
+  level: "debug"
+  format: "pretty"

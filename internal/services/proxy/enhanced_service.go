@@ -17,17 +17,6 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/services/queue"
 )
 
-// Default configuration constants.
-const (
-	defaultTimeoutSeconds = 30
-	defaultMaxRetries     = 3
-	defaultRetryBackoffMs = 100
-	queueCheckInterval    = 100 * time.Millisecond
-	// HTTP status code constants.
-	statusInternalServerError = 500
-	statusBadRequest          = 400
-)
-
 // EnhancedServiceConfig holds configuration for the enhanced proxy service.
 type EnhancedServiceConfig struct {
 	Backends       []BackendConfig      `yaml:"backends"`
@@ -84,13 +73,13 @@ func NewEnhancedService(
 
 	// Set defaults
 	if config.Timeout == 0 {
-		config.Timeout = defaultTimeoutSeconds * time.Second
+		config.Timeout = domain.DefaultProxyTimeoutSeconds * time.Second
 	}
 	if config.MaxRetries == 0 {
-		config.MaxRetries = defaultMaxRetries
+		config.MaxRetries = domain.DefaultProxyMaxRetries
 	}
 	if config.RetryBackoff == 0 {
-		config.RetryBackoff = defaultRetryBackoffMs * time.Millisecond
+		config.RetryBackoff = domain.DefaultRetryBackoffMs * time.Millisecond
 	}
 
 	// Convert backend configs to domain backends
@@ -98,7 +87,7 @@ func NewEnhancedService(
 	for i, backendConfig := range config.Backends {
 		weight := backendConfig.Weight
 		if weight <= 0 {
-			weight = 1
+			weight = domain.DefaultBackendWeight
 		}
 		backends[i] = domain.Backend{
 			URL:    backendConfig.URL,
@@ -185,7 +174,7 @@ func (es *EnhancedService) Forward(ctx context.Context, req *domain.ProxyRequest
 		return es.forwardWithQueue(ctx, req)
 	}
 
-	// Direct processing without queue (backward compatibility)
+	// Direct processing without queue
 	return es.forwardToBackendDirect(ctx, req)
 }
 
@@ -263,7 +252,7 @@ func (es *EnhancedService) processQueuedRequest(
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(queueCheckInterval):
+		case <-time.After(domain.DefaultQueueCheckInterval):
 			// Continue checking
 		}
 	}
@@ -575,15 +564,15 @@ func (es *EnhancedService) processBackendResponse(
 ) (*domain.ProxyResponse, error) {
 	// Check for HTTP error status codes (4xx, 5xx)
 	var reportErr error
-	if resp.StatusCode >= statusInternalServerError {
+	if resp.StatusCode >= domain.StatusInternalServerError {
 		reportErr = fmt.Errorf("upstream returned server error status: %d", resp.StatusCode)
-	} else if resp.StatusCode >= statusBadRequest {
+	} else if resp.StatusCode >= domain.StatusBadRequest {
 		reportErr = fmt.Errorf("upstream returned client error status: %d", resp.StatusCode)
 	}
 
 	// Report result to load balancer (only 5xx errors for retry logic)
 	var lbErr error
-	if resp.StatusCode >= statusInternalServerError {
+	if resp.StatusCode >= domain.StatusInternalServerError {
 		lbErr = reportErr
 	}
 	es.loadBalancer.ReportResult(backend, lbErr, resp.StatusCode)
@@ -601,7 +590,7 @@ func (es *EnhancedService) processBackendResponse(
 	)
 
 	// Return error for 5xx status codes to trigger retries
-	if resp.StatusCode >= statusInternalServerError {
+	if resp.StatusCode >= domain.StatusInternalServerError {
 		return nil, reportErr
 	}
 

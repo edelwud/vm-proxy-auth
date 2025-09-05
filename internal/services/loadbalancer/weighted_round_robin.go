@@ -30,16 +30,16 @@ func NewWeightedRoundRobinBalancer(backends []domain.Backend, logger domain.Logg
 	for i, backend := range backends {
 		weight := backend.Weight
 		if weight <= 0 {
-			weight = 1 // Default weight
+			weight = domain.DefaultBackendWeight // Default weight
 		}
 		weights[i] = weight
-		if totalWeight > (1<<31-1)-int32(weight) { //nolint:gosec // Check for int32 overflow
+		if totalWeight > (1<<31-1)-int32(weight) { //nolint:gosec,G115 // Check for int32 overflow
 			logger.Error("Total weight too large for int32",
 				domain.Field{Key: "total_weight", Value: totalWeight},
 				domain.Field{Key: "adding_weight", Value: weight})
-			weight = 1 // Fallback to prevent overflow
+			weight = domain.DefaultBackendWeight // Fallback to prevent overflow
 		}
-		totalWeight += int32(weight) //nolint:gosec // already checked for overflow
+		totalWeight += int32(weight) //nolint:gosec,G115 // already checked for overflow
 	}
 
 	return &WeightedRoundRobinBalancer{
@@ -108,11 +108,11 @@ func (wrr *WeightedRoundRobinBalancer) selectByWeight(healthyIndices []int) int 
 
 	// Calculate total weight of healthy backends
 	for _, idx := range healthyIndices {
-		weight := int32(wrr.weights[idx])          //nolint:gosec // overflow check
+		weight := int32(wrr.weights[idx])          //nolint:gosec,G115 // overflow check
 		if totalHealthyWeight > (1<<31-1)-weight { // Check for overflow
 			wrr.logger.Error("Total healthy weight overflow prevented",
 				domain.Field{Key: "total_weight", Value: totalHealthyWeight})
-			weight = 1 // Fallback to prevent overflow
+			weight = domain.DefaultBackendWeight // Fallback to prevent overflow
 		}
 		totalHealthyWeight += weight
 	}
@@ -120,11 +120,11 @@ func (wrr *WeightedRoundRobinBalancer) selectByWeight(healthyIndices []int) int 
 	// Find the backend with highest current weight after incrementing
 	for _, idx := range healthyIndices {
 		// Increase current weight by static weight
-		weight := int32(wrr.weights[idx])               //nolint:gosec // overflow check
+		weight := int32(wrr.weights[idx])               //nolint:gosec,G115 // overflow check
 		if wrr.currentWeights[idx] > (1<<31-1)-weight { // Check for overflow
 			wrr.logger.Error("Current weight overflow prevented",
 				domain.Field{Key: "current_weight", Value: wrr.currentWeights[idx]})
-			weight = 1 // Fallback to prevent overflow
+			weight = domain.DefaultBackendWeight // Fallback to prevent overflow
 		}
 		wrr.currentWeights[idx] += weight
 
@@ -146,7 +146,7 @@ func (wrr *WeightedRoundRobinBalancer) selectByWeight(healthyIndices []int) int 
 func (wrr *WeightedRoundRobinBalancer) ReportResult(backend *domain.Backend, err error, statusCode int) {
 	// Weighted round-robin balancer doesn't track individual results,
 	// but we log for debugging purposes
-	backendWeight := 1
+	backendWeight := domain.DefaultBackendWeight
 	for i, b := range wrr.backends {
 		if b.URL == backend.URL {
 			backendWeight = wrr.weights[i]

@@ -11,6 +11,7 @@ import (
 
 //nolint:gocognit // Test function with comprehensive test cases
 func TestLogFmtFormatter_Format(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		entry       *logrus.Entry
@@ -109,6 +110,7 @@ func TestLogFmtFormatter_Format(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := formatter.Format(tt.entry)
 			if err != nil {
 				t.Fatalf("Format() error = %v", err)
@@ -139,6 +141,7 @@ func TestLogFmtFormatter_Format(t *testing.T) {
 }
 
 func TestLogFmtFormatter_FormatValue(t *testing.T) {
+	t.Parallel()
 	formatter := NewLogFmtFormatter()
 
 	tests := []struct {
@@ -190,6 +193,7 @@ func TestLogFmtFormatter_FormatValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := formatter.formatValue(tt.value)
 			if result != tt.expected {
 				t.Errorf("formatValue() = %v, want %v", result, tt.expected)
@@ -199,6 +203,7 @@ func TestLogFmtFormatter_FormatValue(t *testing.T) {
 }
 
 func TestLogFmtFormatter_NeedsQuoting(t *testing.T) {
+	t.Parallel()
 	formatter := NewLogFmtFormatter()
 
 	tests := []struct {
@@ -250,6 +255,7 @@ func TestLogFmtFormatter_NeedsQuoting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := formatter.needsQuoting(tt.value)
 			if result != tt.expected {
 				t.Errorf("needsQuoting() = %v, want %v", result, tt.expected)

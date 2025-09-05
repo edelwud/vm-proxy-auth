@@ -51,6 +51,11 @@ func NewJWKSFetcher(jwksURL string, cacheTTL time.Duration) *JWKSFetcher {
 	}
 }
 
+// SetHTTPClient allows overriding the HTTP client for testing purposes.
+func (f *JWKSFetcher) SetHTTPClient(client *http.Client) {
+	f.client = client
+}
+
 // GetPublicKey fetches and returns the public key for the given kid.
 func (f *JWKSFetcher) GetPublicKey(kid string) (*rsa.PublicKey, error) {
 	// Check cache first
