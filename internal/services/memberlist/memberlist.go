@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hashicorp/memberlist"
@@ -13,6 +14,11 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/config"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	infralogger "github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
+)
+
+const (
+	// defaultLeaveTimeout is the maximum time to wait for graceful cluster leave.
+	defaultLeaveTimeout = 2 * time.Second
 )
 
 // Service implements cluster membership using HashiCorp's memberlist.
@@ -246,15 +252,36 @@ func (ms *Service) Stop() error {
 	close(ms.stopCh)
 	ms.running = false
 
+	// Signal delegate to stop processing notifications to avoid deadlock
+	if ms.delegate != nil {
+		atomic.StoreInt64(&ms.delegate.shutdownFlag, 1)
+	}
+
 	if ms.list != nil {
-		if err := ms.list.Leave(domain.DefaultLeaveTimeout); err != nil {
-			ms.logger.Warn("Failed to leave cluster gracefully",
-				domain.Field{Key: "error", Value: err.Error()})
+		// Try to leave gracefully with a shorter timeout to avoid hanging
+		leaveCtx, cancel := context.WithTimeout(context.Background(), defaultLeaveTimeout)
+		leaveDone := make(chan error, 1)
+
+		go func() {
+			leaveDone <- ms.list.Leave(defaultLeaveTimeout)
+		}()
+
+		select {
+		case err := <-leaveDone:
+			if err != nil {
+				ms.logger.Warn("Failed to leave cluster gracefully",
+					domain.Field{Key: "error", Value: err.Error()})
+			}
+		case <-leaveCtx.Done():
+			ms.logger.Warn("Timeout leaving cluster - forcing shutdown")
 		}
+		cancel()
+
+		// Always attempt shutdown
 		if err := ms.list.Shutdown(); err != nil {
 			ms.logger.Error("Failed to shutdown memberlist",
 				domain.Field{Key: "error", Value: err.Error()})
-			return err
+			// Don't return error - we want to continue cleanup
 		}
 	}
 

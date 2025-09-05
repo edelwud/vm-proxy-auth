@@ -52,7 +52,7 @@ func TestQueueIntegrationWithBackendFailures(t *testing.T) {
 
 	// Create logger and metrics service
 	logger := testutils.NewMockLogger()
-	metricsService := &MockEnhancedMetricsService{}
+	metricsService := &testutils.MockEnhancedMetricsService{}
 
 	// Create enhanced service config with queueing enabled
 	config := proxy.EnhancedServiceConfig{
@@ -207,6 +207,8 @@ func TestQueueIntegrationWithBackendFailures(t *testing.T) {
 
 // TestQueueStats verifies that queue statistics are properly tracked.
 func TestQueueStats(t *testing.T) {
+	t.Parallel()
+
 	// Create a backend that's initially unhealthy
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
@@ -215,10 +217,10 @@ func TestQueueStats(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
-	defer backend.Close()
+	t.Cleanup(backend.Close)
 
 	logger := testutils.NewMockLogger()
-	metricsService := &MockEnhancedMetricsService{}
+	metricsService := &testutils.MockEnhancedMetricsService{}
 
 	config := proxy.EnhancedServiceConfig{
 		Backends: []proxy.BackendConfig{
@@ -249,11 +251,11 @@ func TestQueueStats(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Cleanup(cancel)
 
 	err = service.Start(ctx)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	// Wait for health checker to mark backend as unhealthy
 	time.Sleep(200 * time.Millisecond)

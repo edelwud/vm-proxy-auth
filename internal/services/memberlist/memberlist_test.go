@@ -14,6 +14,8 @@ import (
 )
 
 func TestNewMemberlistService(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		config    config.MemberlistSettings
@@ -54,6 +56,7 @@ func TestNewMemberlistService(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			logger := testutils.NewMockLogger()
 
 			service, err := memberlistpkg.NewMemberlistService(tt.config, logger)
@@ -74,6 +77,8 @@ func TestNewMemberlistService(t *testing.T) {
 }
 
 func TestMemberlistService_StartStop(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	config := config.MemberlistSettings{
 		BindAddress: "127.0.0.1",
@@ -110,6 +115,8 @@ func TestMemberlistService_StartStop(t *testing.T) {
 }
 
 func TestMemberlistService_GetMethods(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	config := config.MemberlistSettings{
 		BindAddress: "127.0.0.1",
@@ -149,6 +156,8 @@ func TestMemberlistService_GetMethods(t *testing.T) {
 }
 
 func TestMemberlistService_ClusterFormation(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 
 	// Create single service for basic cluster testing
@@ -183,6 +192,8 @@ func TestMemberlistService_ClusterFormation(t *testing.T) {
 }
 
 func TestNodeMetadata_CreateAndMarshal(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		nodeID      string
@@ -226,6 +237,7 @@ func TestNodeMetadata_CreateAndMarshal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create metadata
 			meta, err := memberlistpkg.CreateNodeMetadata(tt.nodeID, tt.httpAddr, tt.raftAddr, tt.metadata)
 
@@ -264,6 +276,8 @@ func TestNodeMetadata_CreateAndMarshal(t *testing.T) {
 }
 
 func TestUnmarshalNodeMetadata_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		data      []byte
@@ -288,6 +302,7 @@ func TestUnmarshalNodeMetadata_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			meta, err := memberlistpkg.UnmarshalNodeMetadata(tt.data)
 
 			if tt.wantError {
@@ -302,6 +317,8 @@ func TestUnmarshalNodeMetadata_EdgeCases(t *testing.T) {
 }
 
 func TestDecodeEncryptionKey(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		key       string
@@ -326,6 +343,7 @@ func TestDecodeEncryptionKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			decoded, err := memberlistpkg.DecodeEncryptionKey(tt.key)
 
 			if tt.wantError {
@@ -345,6 +363,8 @@ func TestDecodeEncryptionKey(t *testing.T) {
 }
 
 func TestMemberlistService_RaftIntegration(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	config := config.MemberlistSettings{
 		BindAddress: "127.0.0.1",
@@ -376,6 +396,8 @@ func TestMemberlistService_RaftIntegration(t *testing.T) {
 }
 
 func TestMemberlistService_NodeMetadataIntegration(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	config := config.MemberlistSettings{
 		BindAddress: "127.0.0.1",
@@ -418,6 +440,8 @@ func TestMemberlistService_NodeMetadataIntegration(t *testing.T) {
 }
 
 func TestMemberlistService_JoinCluster(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	config := config.MemberlistSettings{
 		BindAddress: "127.0.0.1",

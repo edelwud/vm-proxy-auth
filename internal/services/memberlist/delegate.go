@@ -3,6 +3,7 @@ package memberlist
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/hashicorp/memberlist"
 
@@ -22,6 +23,7 @@ type RaftDelegate struct {
 	pendingPeers    []PendingPeer   // Peers discovered but not yet added to Raft
 	pendingRemovals map[string]bool // Peers that need to be removed when we become leader
 	localNodeName   string          // Cache to avoid deadlock in NotifyJoin
+	shutdownFlag    int64           // Atomic flag to indicate shutdown state
 }
 
 // PendingPeer represents a peer discovered via memberlist but not yet added to Raft.
@@ -245,6 +247,13 @@ func (d *RaftDelegate) NotifyLeave(node *memberlist.Node) {
 		domain.Field{Key: "node_name", Value: node.Name},
 		domain.Field{Key: "node_address", Value: fmt.Sprintf("%s:%d", node.Addr.String(), node.Port)})
 
+	// Check shutdown flag first to avoid any lock operations during shutdown
+	if atomic.LoadInt64(&d.shutdownFlag) != 0 {
+		d.logger.Debug("Skipping node leave processing during shutdown",
+			domain.Field{Key: "node_name", Value: node.Name})
+		return
+	}
+
 	// Parse node metadata to get Raft information
 	if len(node.Meta) > 0 {
 		metadata, err := UnmarshalNodeMetadata(node.Meta)
@@ -403,7 +412,14 @@ func (d *RaftDelegate) getSurvivingNodeAddress(nodeID string) string {
 		return ""
 	}
 
-	// Search through current members for the node ID
+	// Check shutdown flag to avoid any operations during shutdown
+	if atomic.LoadInt64(&d.shutdownFlag) != 0 {
+		d.logger.Debug("Cannot look up node address: shutdown in progress",
+			domain.Field{Key: "node_id", Value: nodeID})
+		return ""
+	}
+
+	// Safely attempt to get members list
 	members := d.memberlistSvc.list.Members()
 	for _, member := range members {
 		if len(member.Meta) == 0 {

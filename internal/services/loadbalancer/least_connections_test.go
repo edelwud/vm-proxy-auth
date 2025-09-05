@@ -16,6 +16,8 @@ import (
 )
 
 func TestLeastConnectionsBalancer_BasicDistribution(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendHealthy},
@@ -24,7 +26,7 @@ func TestLeastConnectionsBalancer_BasicDistribution(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewLeastConnectionsBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -44,6 +46,8 @@ func TestLeastConnectionsBalancer_BasicDistribution(t *testing.T) {
 }
 
 func TestLeastConnectionsBalancer_ConnectionCounting(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendHealthy},
@@ -51,7 +55,7 @@ func TestLeastConnectionsBalancer_ConnectionCounting(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewLeastConnectionsBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -83,6 +87,8 @@ func TestLeastConnectionsBalancer_ConnectionCounting(t *testing.T) {
 }
 
 func TestLeastConnectionsBalancer_LeastConnectionsSelection(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendHealthy},
@@ -91,7 +97,7 @@ func TestLeastConnectionsBalancer_LeastConnectionsSelection(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewLeastConnectionsBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -115,6 +121,8 @@ func TestLeastConnectionsBalancer_LeastConnectionsSelection(t *testing.T) {
 }
 
 func TestLeastConnectionsBalancer_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendHealthy},
@@ -122,7 +130,7 @@ func TestLeastConnectionsBalancer_ConcurrentAccess(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewLeastConnectionsBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 	const numGoroutines = 50
@@ -182,9 +190,11 @@ func TestLeastConnectionsBalancer_ConcurrentAccess(t *testing.T) {
 }
 
 func TestLeastConnectionsBalancer_NoBackends(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewLeastConnectionsBalancer([]domain.Backend{}, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 	backend, err := balancer.NextBackend(ctx)
@@ -193,13 +203,15 @@ func TestLeastConnectionsBalancer_NoBackends(t *testing.T) {
 }
 
 func TestLeastConnectionsBalancer_SingleBackend(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://only-backend.com", Weight: 1, State: domain.BackendHealthy},
 	}
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewLeastConnectionsBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -213,6 +225,8 @@ func TestLeastConnectionsBalancer_SingleBackend(t *testing.T) {
 }
 
 func TestLeastConnectionsBalancer_MixedHealthyUnhealthy(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendUnhealthy},
@@ -221,7 +235,7 @@ func TestLeastConnectionsBalancer_MixedHealthyUnhealthy(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewLeastConnectionsBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -243,6 +257,8 @@ func TestLeastConnectionsBalancer_MixedHealthyUnhealthy(t *testing.T) {
 }
 
 func TestLeastConnectionsBalancer_WithRateLimitedFallback(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendRateLimited},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendUnhealthy},
@@ -250,7 +266,7 @@ func TestLeastConnectionsBalancer_WithRateLimitedFallback(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewLeastConnectionsBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -262,6 +278,8 @@ func TestLeastConnectionsBalancer_WithRateLimitedFallback(t *testing.T) {
 }
 
 func TestLeastConnectionsBalancer_BackendsStatus(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendUnhealthy},
@@ -269,7 +287,7 @@ func TestLeastConnectionsBalancer_BackendsStatus(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewLeastConnectionsBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -314,6 +332,8 @@ func TestLeastConnectionsBalancer_BackendsStatus(t *testing.T) {
 }
 
 func TestLeastConnectionsBalancer_GetMethods(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendUnhealthy},
@@ -322,7 +342,7 @@ func TestLeastConnectionsBalancer_GetMethods(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewLeastConnectionsBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -342,13 +362,14 @@ func TestLeastConnectionsBalancer_GetMethods(t *testing.T) {
 }
 
 func TestLeastConnectionsBalancer_ResetStats(t *testing.T) {
+	t.Parallel()
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 	}
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewLeastConnectionsBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -365,6 +386,8 @@ func TestLeastConnectionsBalancer_ResetStats(t *testing.T) {
 }
 
 func TestLeastConnectionsBalancer_Close(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 	}
@@ -392,13 +415,15 @@ func TestLeastConnectionsBalancer_Close(t *testing.T) {
 }
 
 func TestLeastConnectionsBalancer_ErrorReporting(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 	}
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewLeastConnectionsBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 	backend, _ := balancer.NextBackend(ctx)
@@ -424,7 +449,7 @@ func BenchmarkLeastConnectionsBalancer_NextBackend(b *testing.B) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewLeastConnectionsBalancer(backends, logger)
-	defer balancer.Close()
+	b.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -457,7 +482,7 @@ func BenchmarkLeastConnectionsBalancer_NextBackendWithSomeUnhealthy(b *testing.B
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewLeastConnectionsBalancer(backends, logger)
-	defer balancer.Close()
+	b.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 

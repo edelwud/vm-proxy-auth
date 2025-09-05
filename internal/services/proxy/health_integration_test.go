@@ -51,7 +51,7 @@ func TestHealthCheckerLoadBalancerIntegration(t *testing.T) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}
 	}))
-	defer backend1.Close()
+	t.Cleanup(func() { backend1.Close() })
 
 	// Backend 2
 	backend2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +77,7 @@ func TestHealthCheckerLoadBalancerIntegration(t *testing.T) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}
 	}))
-	defer backend2.Close()
+	t.Cleanup(func() { backend2.Close() })
 
 	// Create enhanced service with fast health checking
 	config := proxy.EnhancedServiceConfig{
@@ -100,12 +100,12 @@ func TestHealthCheckerLoadBalancerIntegration(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	metrics := &MockEnhancedMetricsService{}
+	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
 	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	ctx := context.Background()
 	err = service.Start(ctx)
@@ -221,7 +221,7 @@ func TestHealthCheckerMaintenanceMode(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	}))
-	defer backend.Close()
+	t.Cleanup(func() { backend.Close() })
 
 	config := proxy.EnhancedServiceConfig{
 		Backends: []proxy.BackendConfig{
@@ -241,12 +241,12 @@ func TestHealthCheckerMaintenanceMode(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	metrics := &MockEnhancedMetricsService{}
+	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
 	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	ctx := context.Background()
 	err = service.Start(ctx)
@@ -311,7 +311,7 @@ func TestHealthCheckerWithWeightedLoadBalancer(t *testing.T) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}
 	}))
-	defer backend1.Close()
+	t.Cleanup(func() { backend1.Close() })
 
 	// Backend 2 (lower weight)
 	backend2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -336,7 +336,7 @@ func TestHealthCheckerWithWeightedLoadBalancer(t *testing.T) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}
 	}))
-	defer backend2.Close()
+	t.Cleanup(func() { backend2.Close() })
 
 	config := proxy.EnhancedServiceConfig{
 		Backends: []proxy.BackendConfig{
@@ -357,12 +357,12 @@ func TestHealthCheckerWithWeightedLoadBalancer(t *testing.T) {
 	}
 
 	logger := testutils.NewMockLogger()
-	metrics := &MockEnhancedMetricsService{}
+	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
 	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
-	defer service.Close()
+	t.Cleanup(func() { service.Close() })
 
 	ctx := context.Background()
 	err = service.Start(ctx)

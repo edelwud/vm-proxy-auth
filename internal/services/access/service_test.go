@@ -19,6 +19,8 @@ func TestNewService(t *testing.T) {
 }
 
 func TestService_CanAccess_ReadOperations(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		user          *domain.User
@@ -108,6 +110,7 @@ func TestService_CanAccess_ReadOperations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			logger := testutils.NewMockLogger()
 			service := access.NewService(logger)
 
@@ -130,6 +133,8 @@ func TestService_CanAccess_ReadOperations(t *testing.T) {
 }
 
 func TestService_CanAccess_WriteOperations(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		user          *domain.User
@@ -197,6 +202,7 @@ func TestService_CanAccess_WriteOperations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			logger := testutils.NewMockLogger()
 			service := access.NewService(logger)
 
@@ -217,6 +223,8 @@ func TestService_CanAccess_WriteOperations(t *testing.T) {
 }
 
 func TestService_CanAccess_RestrictedPaths(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		user          *domain.User
@@ -288,6 +296,7 @@ func TestService_CanAccess_RestrictedPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			logger := testutils.NewMockLogger()
 			service := access.NewService(logger)
 
@@ -305,6 +314,8 @@ func TestService_CanAccess_RestrictedPaths(t *testing.T) {
 }
 
 func TestService_CanAccess_HealthEndpoints(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		path string
@@ -325,6 +336,7 @@ func TestService_CanAccess_HealthEndpoints(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			logger := testutils.NewMockLogger()
 			service := access.NewService(logger)
 
@@ -341,6 +353,8 @@ func TestService_CanAccess_HealthEndpoints(t *testing.T) {
 }
 
 func TestService_CanAccess_HTTPMethods(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		path        string
@@ -393,6 +407,7 @@ func TestService_CanAccess_HTTPMethods(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			logger := testutils.NewMockLogger()
 			service := access.NewService(logger)
 
@@ -418,6 +433,8 @@ func TestService_CanAccess_HTTPMethods(t *testing.T) {
 }
 
 func TestService_CanAccess_NilUser(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	service := access.NewService(logger)
 
@@ -430,6 +447,8 @@ func TestService_CanAccess_NilUser(t *testing.T) {
 }
 
 func TestService_CanAccess_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		path         string
@@ -470,6 +489,7 @@ func TestService_CanAccess_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			logger := testutils.NewMockLogger()
 			service := access.NewService(logger)
 

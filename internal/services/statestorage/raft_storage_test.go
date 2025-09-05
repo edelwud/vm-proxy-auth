@@ -3,8 +3,6 @@ package statestorage_test
 import (
 	"context"
 	"fmt"
-	"io"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,37 +38,6 @@ const (
 	productionSnapshotThreshold  = 1024
 	productionTrailingLogs       = 1024
 )
-
-// getFreePort returns a free TCP port for testing with proper error handling.
-// Avoids global variables by using the OS to ensure unique port allocation.
-func getFreePort() (int, error) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, fmt.Errorf("failed to allocate port: %w", err)
-	}
-	defer listener.Close()
-	return listener.Addr().(*net.TCPAddr).Port, nil
-}
-
-// copyFile copies a file from src to dst with comprehensive error handling.
-func copyFile(src, dst string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("failed to open source file %s: %w", src, err)
-	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("failed to create destination file %s: %w", dst, err)
-	}
-	defer dstFile.Close()
-
-	if _, copyErr := io.Copy(dstFile, srcFile); copyErr != nil {
-		return fmt.Errorf("failed to copy from %s to %s: %w", src, dst, copyErr)
-	}
-	return nil
-}
 
 // waitForLeadership waits for a Raft node to become leader with production timeout.
 func waitForLeadership(raft *statestorage.RaftStorage) bool {
@@ -158,6 +125,8 @@ func createRaftStorageWithAddress(
 }
 
 func TestRaftStorage_SingleNode(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("Skipping Raft integration test in short mode")
 	}
@@ -165,7 +134,7 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	tempDir := t.TempDir()
 
-	port, err := getFreePort()
+	port, err := testutils.GetFreePort()
 	require.NoError(t, err)
 
 	raftConfig := config.RaftSettings{
@@ -178,7 +147,7 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 	storage, err := statestorage.NewStateStorage(raftConfig, "raft", "test-node-1", logger)
 	require.NoError(t, err)
 	require.NotNil(t, storage)
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx := context.Background()
 
@@ -187,25 +156,26 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 	require.True(t, waitForLeadership(raftStorage), "Node failed to become leader")
 
 	t.Run("basic_operations", func(t *testing.T) {
+		t.Parallel()
 		key := "test-key"
 		value := []byte("test-value")
 
 		// Test Set with timeout
 		setCtx, cancel := context.WithTimeout(ctx, operationTimeout)
-		defer cancel()
+		t.Cleanup(cancel)
 		setErr := storage.Set(setCtx, key, value, time.Minute)
 		require.NoError(t, setErr)
 
 		// Test Get with timeout
 		getCtx, cancel2 := context.WithTimeout(ctx, operationTimeout)
-		defer cancel2()
+		t.Cleanup(cancel2)
 		retrieved, getErr := storage.Get(getCtx, key)
 		require.NoError(t, getErr)
 		assert.Equal(t, value, retrieved)
 
 		// Test Delete with timeout
 		delCtx, cancel3 := context.WithTimeout(ctx, operationTimeout)
-		defer cancel3()
+		t.Cleanup(cancel3)
 		err = storage.Delete(delCtx, key)
 		require.NoError(t, err)
 
@@ -215,18 +185,19 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 	})
 
 	t.Run("ttl_expiration", func(t *testing.T) {
+		t.Parallel()
 		key := "expire-key"
 		value := []byte("expire-value")
 
 		// Set with short TTL
 		setCtx, cancel := context.WithTimeout(ctx, operationTimeout)
-		defer cancel()
+		t.Cleanup(cancel)
 		setErr := storage.Set(setCtx, key, value, 100*time.Millisecond)
 		require.NoError(t, setErr)
 
 		// Should be available immediately
 		getCtx, cancel2 := context.WithTimeout(ctx, operationTimeout)
-		defer cancel2()
+		t.Cleanup(cancel2)
 		retrieved, getErr := storage.Get(getCtx, key)
 		require.NoError(t, getErr)
 		assert.Equal(t, value, retrieved)
@@ -240,6 +211,7 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 	})
 
 	t.Run("multiple_operations", func(t *testing.T) {
+		t.Parallel()
 		items := map[string][]byte{
 			"key1": []byte("value1"),
 			"key2": []byte("value2"),
@@ -248,13 +220,13 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 
 		// Test SetMultiple with timeout
 		setCtx, cancel := context.WithTimeout(ctx, operationTimeout)
-		defer cancel()
+		t.Cleanup(cancel)
 		setErr := storage.SetMultiple(setCtx, items, time.Minute)
 		require.NoError(t, setErr)
 
 		// Test GetMultiple with timeout
 		getCtx, cancel2 := context.WithTimeout(ctx, operationTimeout)
-		defer cancel2()
+		t.Cleanup(cancel2)
 		retrieved, getErr := storage.GetMultiple(getCtx, []string{"key1", "key2", "key3", "nonexistent"})
 		require.NoError(t, getErr)
 
@@ -269,9 +241,11 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 			t.Skip("Skipping watch test in short mode")
 		}
 
+		t.Parallel()
+
 		// Create watcher with production timeout
 		watchCtx, cancel := context.WithTimeout(ctx, operationTimeout)
-		defer cancel()
+		t.Cleanup(cancel)
 
 		events, watchErr := storage.Watch(watchCtx, "watch:")
 		require.NoError(t, watchErr)
@@ -282,7 +256,7 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 			defer func() { done <- true }()
 			time.Sleep(50 * time.Millisecond)
 			setCtx, setCancel := context.WithTimeout(ctx, operationTimeout)
-			defer setCancel()
+			t.Cleanup(setCancel)
 			setErr := storage.Set(setCtx, "watch:test", []byte("watched-value"), time.Minute)
 			if setErr != nil {
 				t.Logf("Failed to set watched key: %v", setErr)
@@ -306,8 +280,9 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 	})
 
 	t.Run("ping_health_check", func(t *testing.T) {
+		t.Parallel()
 		pingCtx, cancel := context.WithTimeout(ctx, operationTimeout)
-		defer cancel()
+		t.Cleanup(cancel)
 		pingErr := storage.Ping(pingCtx)
 		require.NoError(t, pingErr)
 	})
@@ -325,7 +300,7 @@ func TestRaftStorage_MultiNode(t *testing.T) {
 	// Get free ports for nodes with proper error handling
 	ports := make([]int, 3)
 	for i := range 3 {
-		port, portErr := getFreePort()
+		port, portErr := testutils.GetFreePort()
 		require.NoError(t, portErr, "Failed to allocate port for node %d", i)
 		ports[i] = port
 	}
@@ -430,10 +405,13 @@ func TestRaftStorage_MultiNode(t *testing.T) {
 }
 
 func TestRaftStorage_ErrorCases(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 
 	t.Run("invalid_data_directory", func(t *testing.T) {
-		port, err := getFreePort()
+		t.Parallel()
+		port, err := testutils.GetFreePort()
 		require.NoError(t, err)
 
 		raftConfig := config.RaftSettings{
@@ -450,8 +428,9 @@ func TestRaftStorage_ErrorCases(t *testing.T) {
 	})
 
 	t.Run("operations_on_closed_storage", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
-		port, err := getFreePort()
+		port, err := testutils.GetFreePort()
 		require.NoError(t, err)
 
 		raftConfig := config.RaftSettings{
@@ -492,6 +471,7 @@ func TestRaftStorage_ErrorCases(t *testing.T) {
 
 		for _, op := range operations {
 			t.Run(op.name, func(t *testing.T) {
+				t.Parallel()
 				opErr := op.op()
 				assert.Equal(t, domain.ErrStorageClosed, opErr, "Operation %s should return ErrStorageClosed", op.name)
 			})
@@ -500,6 +480,8 @@ func TestRaftStorage_ErrorCases(t *testing.T) {
 }
 
 func TestRaftStorage_Watch_MultipleWatchers(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("Skipping Raft watch test in short mode")
 	}
@@ -508,7 +490,7 @@ func TestRaftStorage_Watch_MultipleWatchers(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Get free port
-	port, err := getFreePort()
+	port, err := testutils.GetFreePort()
 	require.NoError(t, err)
 
 	raftConfig := config.RaftSettings{
@@ -520,7 +502,7 @@ func TestRaftStorage_Watch_MultipleWatchers(t *testing.T) {
 
 	storage, err := createRaftStorageWithAddress(raftConfig, fmt.Sprintf("127.0.0.1:%d", port), logger)
 	require.NoError(t, err)
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	// Wait for leadership with production timeout
 	raftStorage := storage.(*statestorage.RaftStorage)
@@ -530,28 +512,28 @@ func TestRaftStorage_Watch_MultipleWatchers(t *testing.T) {
 
 	// Create multiple watchers with proper timeout management
 	watchCtx1, cancel1 := context.WithCancel(ctx)
-	defer cancel1()
+	t.Cleanup(cancel1)
 	events1, err := storage.Watch(watchCtx1, "prefix1:")
 	require.NoError(t, err)
 
 	watchCtx2, cancel2 := context.WithCancel(ctx)
-	defer cancel2()
+	t.Cleanup(cancel2)
 	events2, err := storage.Watch(watchCtx2, "prefix2:")
 	require.NoError(t, err)
 
 	watchCtx3, cancel3 := context.WithCancel(ctx)
-	defer cancel3()
+	t.Cleanup(cancel3)
 	events3, err := storage.Watch(watchCtx3, "prefix1:") // Same prefix as events1
 	require.NoError(t, err)
 
 	// Set values that should trigger different watchers
 	setCtx1, cancel4 := context.WithTimeout(ctx, operationTimeout)
-	defer cancel4()
+	t.Cleanup(cancel4)
 	err = storage.Set(setCtx1, "prefix1:key1", []byte("value1"), time.Minute)
 	require.NoError(t, err)
 
 	setCtx2, cancel5 := context.WithTimeout(ctx, operationTimeout)
-	defer cancel5()
+	t.Cleanup(cancel5)
 	err = storage.Set(setCtx2, "prefix2:key2", []byte("value2"), time.Minute)
 	require.NoError(t, err)
 
@@ -590,7 +572,7 @@ func TestRaftStorage_Watch_MultipleWatchers(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	setCtx3, cancel6 := context.WithTimeout(ctx, operationTimeout)
-	defer cancel6()
+	t.Cleanup(cancel6)
 	err = storage.Set(setCtx3, "prefix1:key3", []byte("value3"), time.Minute)
 	require.NoError(t, err)
 
@@ -612,6 +594,8 @@ func TestRaftStorage_Watch_MultipleWatchers(t *testing.T) {
 }
 
 func TestRaftStorage_ConcurrentOperations(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("Skipping concurrent operations test in short mode")
 	}
@@ -620,7 +604,7 @@ func TestRaftStorage_ConcurrentOperations(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Get free port
-	port, err := getFreePort()
+	port, err := testutils.GetFreePort()
 	require.NoError(t, err)
 
 	raftConfig := config.RaftSettings{
@@ -632,7 +616,7 @@ func TestRaftStorage_ConcurrentOperations(t *testing.T) {
 
 	storage, err := createRaftStorageWithAddress(raftConfig, fmt.Sprintf("127.0.0.1:%d", port), logger)
 	require.NoError(t, err)
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	// Wait for leadership with production timeout
 	raftStorage := storage.(*statestorage.RaftStorage)
@@ -641,13 +625,14 @@ func TestRaftStorage_ConcurrentOperations(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("concurrent_writes", func(t *testing.T) {
+		t.Parallel()
 		errCh := make(chan error, numOperations)
 
 		// Concurrent writes with individual timeouts
 		for i := range numOperations {
 			go func(i int) {
 				setCtx, cancel := context.WithTimeout(ctx, operationTimeout)
-				defer cancel()
+				t.Cleanup(cancel)
 				key := fmt.Sprintf("concurrent-key-%d", i)
 				value := []byte(fmt.Sprintf("value-%d", i))
 				errCh <- storage.Set(setCtx, key, value, time.Minute)
@@ -675,6 +660,8 @@ func TestRaftStorage_ConcurrentOperations(t *testing.T) {
 }
 
 func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("Skipping persistence test in short mode")
 	}
@@ -683,7 +670,7 @@ func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Get free port
-	port, err := getFreePort()
+	port, err := testutils.GetFreePort()
 	require.NoError(t, err)
 
 	raftConfig := config.RaftSettings{
@@ -741,11 +728,11 @@ func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
 		srcPath := filepath.Join(tempDir, file)
 		dstPath := filepath.Join(tempDir2, file)
 		if _, statErr := os.Stat(srcPath); statErr == nil {
-			require.NoError(t, copyFile(srcPath, dstPath), "Failed to copy Raft file %s", file)
+			require.NoError(t, testutils.CopyFile(srcPath, dstPath), "Failed to copy Raft file %s", file)
 		}
 	}
 
-	port2, err2 := getFreePort()
+	port2, err2 := testutils.GetFreePort()
 	require.NoError(t, err2)
 
 	raftConfig2 := config.RaftSettings{
@@ -758,7 +745,7 @@ func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
 	// Create second instance with different port and copied data directory
 	storage2, err := createRaftStorageWithAddress(raftConfig2, fmt.Sprintf("127.0.0.1:%d", port2), logger)
 	require.NoError(t, err)
-	defer storage2.Close()
+	t.Cleanup(func() { storage2.Close() })
 
 	// Wait for second instance leadership and readiness
 	raftStorage2 := storage2.(*statestorage.RaftStorage)
@@ -780,18 +767,20 @@ func TestRaftStorage_PersistenceAndRecovery(t *testing.T) {
 	newKey := "post-restart-key"
 	newValue := []byte("post-restart-value")
 	setCtx, cancel := context.WithTimeout(ctx, operationTimeout)
-	defer cancel()
+	t.Cleanup(cancel)
 	err = storage2.Set(setCtx, newKey, newValue, time.Hour)
 	require.NoError(t, err)
 
 	getCtx, cancel2 := context.WithTimeout(ctx, operationTimeout)
-	defer cancel2()
+	t.Cleanup(cancel2)
 	retrievedNewValue, err := storage2.Get(getCtx, newKey)
 	require.NoError(t, err)
 	assert.Equal(t, newValue, retrievedNewValue)
 }
 
 func TestRaftStorage_Factory_Integration(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("Skipping factory integration test in short mode")
 	}
@@ -799,8 +788,9 @@ func TestRaftStorage_Factory_Integration(t *testing.T) {
 	logger := testutils.NewMockLogger()
 
 	t.Run("raft_storage_creation", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
-		port, err := getFreePort()
+		port, err := testutils.GetFreePort()
 		require.NoError(t, err)
 
 		raftConfig := config.RaftSettings{
@@ -813,7 +803,7 @@ func TestRaftStorage_Factory_Integration(t *testing.T) {
 		storage, err := statestorage.NewStateStorage(raftConfig, "raft", "factory-test-node", logger)
 		require.NoError(t, err)
 		assert.NotNil(t, storage)
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 
 		// Wait for leadership with production timeout
 		raftStorage := storage.(*statestorage.RaftStorage)
@@ -822,18 +812,19 @@ func TestRaftStorage_Factory_Integration(t *testing.T) {
 		// Test basic operation with timeout
 		ctx := context.Background()
 		setCtx, cancel := context.WithTimeout(ctx, operationTimeout)
-		defer cancel()
+		t.Cleanup(cancel)
 		err = storage.Set(setCtx, "factory-test", []byte("factory-value"), time.Minute)
 		require.NoError(t, err)
 
 		getCtx, cancel2 := context.WithTimeout(ctx, operationTimeout)
-		defer cancel2()
+		t.Cleanup(cancel2)
 		value, err := storage.Get(getCtx, "factory-test")
 		require.NoError(t, err)
 		assert.Equal(t, []byte("factory-value"), value)
 	})
 
 	t.Run("invalid_raft_config_type", func(t *testing.T) {
+		t.Parallel()
 		invalidConfig := "not-a-raft-config"
 		storage, err := statestorage.NewStateStorage(invalidConfig, "raft", "test-node", logger)
 		require.Error(t, err)
@@ -843,15 +834,19 @@ func TestRaftStorage_Factory_Integration(t *testing.T) {
 }
 
 func TestRaftStorage_DataDir_Management(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("Skipping data dir management test in short mode")
 	}
+
 	logger := testutils.NewMockLogger()
 
 	t.Run("creates_missing_data_directory", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 		dataDirPath := filepath.Join(tempDir, "missing", "nested", "path")
-		port, err := getFreePort()
+		port, err := testutils.GetFreePort()
 		require.NoError(t, err)
 
 		raftConfig := config.RaftSettings{
@@ -864,7 +859,7 @@ func TestRaftStorage_DataDir_Management(t *testing.T) {
 		// Should create missing directories
 		storage, err := statestorage.NewStateStorage(raftConfig, "raft", "datadir-test-node", logger)
 		require.NoError(t, err)
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 
 		// Verify directory was created
 		info, err := os.Stat(dataDirPath)
@@ -889,7 +884,7 @@ func BenchmarkRaftStorage_WriteOperations(b *testing.B) {
 	logger := testutils.NewMockLogger()
 	tempDir := b.TempDir()
 
-	port, err := getFreePort()
+	port, err := testutils.GetFreePort()
 	require.NoError(b, err)
 
 	raftConfig := config.RaftSettings{
@@ -901,7 +896,7 @@ func BenchmarkRaftStorage_WriteOperations(b *testing.B) {
 
 	storage, err := createRaftStorageWithAddress(raftConfig, fmt.Sprintf("127.0.0.1:%d", port), logger)
 	require.NoError(b, err)
-	defer storage.Close()
+	b.Cleanup(func() { _ = storage.Close() })
 
 	// Wait for leadership
 	raftStorage := storage.(*statestorage.RaftStorage)
@@ -931,7 +926,7 @@ func BenchmarkRaftStorage_ReadOperations(b *testing.B) {
 	logger := testutils.NewMockLogger()
 	tempDir := b.TempDir()
 
-	port, err := getFreePort()
+	port, err := testutils.GetFreePort()
 	require.NoError(b, err)
 
 	raftConfig := config.RaftSettings{
@@ -943,7 +938,7 @@ func BenchmarkRaftStorage_ReadOperations(b *testing.B) {
 
 	storage, err := createRaftStorageWithAddress(raftConfig, fmt.Sprintf("127.0.0.1:%d", port), logger)
 	require.NoError(b, err)
-	defer storage.Close()
+	b.Cleanup(func() { _ = storage.Close() })
 
 	// Wait for leadership
 	raftStorage := storage.(*statestorage.RaftStorage)

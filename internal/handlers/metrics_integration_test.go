@@ -78,7 +78,7 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 	ctx := context.Background()
 	err = proxyService.Start(ctx)
 	require.NoError(t, err)
-	defer proxyService.Close()
+	t.Cleanup(func() { proxyService.Close() })
 
 	// Create gateway handler
 	handler := handlers.NewGatewayHandler(

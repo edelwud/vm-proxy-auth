@@ -13,6 +13,8 @@ import (
 )
 
 func TestMetricsService_Creation(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	service := metrics.NewService(logger)
 
@@ -22,6 +24,8 @@ func TestMetricsService_Creation(t *testing.T) {
 }
 
 func TestMetricsService_Handler(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	service := metrics.NewService(logger)
 
@@ -46,7 +50,9 @@ func TestMetricsService_Handler(t *testing.T) {
 	}
 }
 
-func TestMetricsService_RecordRequest(_ *testing.T) {
+func TestMetricsService_RecordRequest(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	service := metrics.NewService(logger)
 
@@ -63,6 +69,8 @@ func TestMetricsService_RecordRequest(_ *testing.T) {
 }
 
 func TestMetricsService_MultipleCalls(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	service := metrics.NewService(logger)
 

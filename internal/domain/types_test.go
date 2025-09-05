@@ -9,9 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
+	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
 func TestBackendState_String(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		state    domain.BackendState
@@ -41,12 +44,16 @@ func TestBackendState_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			assert.Equal(t, tt.expected, tt.state.String())
 		})
 	}
 }
 
 func TestBackendState_IsAvailable(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		state     domain.BackendState
@@ -76,12 +83,15 @@ func TestBackendState_IsAvailable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.available, tt.state.IsAvailable())
 		})
 	}
 }
 
 func TestBackendState_IsAvailableWithFallback(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		state     domain.BackendState
@@ -111,12 +121,15 @@ func TestBackendState_IsAvailableWithFallback(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.available, tt.state.IsAvailableWithFallback())
 		})
 	}
 }
 
 func TestBackend_String(t *testing.T) {
+	t.Parallel()
+
 	backend := domain.Backend{
 		URL:    "https://vmselect-1.example.com",
 		Weight: 2,
@@ -130,6 +143,8 @@ func TestBackend_String(t *testing.T) {
 }
 
 func TestLoadBalancingStrategy_IsValid(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		strategy domain.LoadBalancingStrategy
@@ -164,12 +179,15 @@ func TestLoadBalancingStrategy_IsValid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.valid, tt.strategy.IsValid())
 		})
 	}
 }
 
 func TestCircuitBreakerState_String(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		state    domain.CircuitBreakerState
@@ -194,12 +212,15 @@ func TestCircuitBreakerState_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.expected, tt.state.String())
 		})
 	}
 }
 
 func TestStateEventType_String(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		eventType domain.StateEventType
@@ -219,12 +240,15 @@ func TestStateEventType_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.expected, tt.eventType.String())
 		})
 	}
 }
 
 func TestBackendStatus_IsHealthy(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		status   domain.BackendStatus
@@ -261,12 +285,15 @@ func TestBackendStatus_IsHealthy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.expected, tt.status.IsHealthy)
 		})
 	}
 }
 
 func TestStateEvent_IsValid(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		event    domain.StateEvent
@@ -329,47 +356,15 @@ func TestStateEvent_IsValid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.expected, tt.event.IsValid())
 		})
 	}
 }
 
-// Mock implementations for testing.
-type mockLoadBalancer struct {
-	nextBackendFunc    func(ctx context.Context) (*domain.Backend, error)
-	reportResultFunc   func(backend *domain.Backend, err error, statusCode int)
-	backendsStatusFunc func() []*domain.BackendStatus
-	closeFunc          func() error
-}
-
-func (m *mockLoadBalancer) NextBackend(ctx context.Context) (*domain.Backend, error) {
-	if m.nextBackendFunc != nil {
-		return m.nextBackendFunc(ctx)
-	}
-	return nil, domain.ErrNoHealthyBackends
-}
-
-func (m *mockLoadBalancer) ReportResult(backend *domain.Backend, err error, statusCode int) {
-	if m.reportResultFunc != nil {
-		m.reportResultFunc(backend, err, statusCode)
-	}
-}
-
-func (m *mockLoadBalancer) BackendsStatus() []*domain.BackendStatus {
-	if m.backendsStatusFunc != nil {
-		return m.backendsStatusFunc()
-	}
-	return nil
-}
-
-func (m *mockLoadBalancer) Close() error {
-	if m.closeFunc != nil {
-		return m.closeFunc()
-	}
-	return nil
-}
-
 func TestLoadBalancerInterface(t *testing.T) {
+	t.Parallel()
+
 	backend := &domain.Backend{
 		URL:    "http://test-backend.com",
 		Weight: 1,
@@ -385,8 +380,8 @@ func TestLoadBalancerInterface(t *testing.T) {
 	}
 
 	// Test NextBackend
-	lb := &mockLoadBalancer{
-		nextBackendFunc: func(_ context.Context) (*domain.Backend, error) {
+	lb := &testutils.MockLoadBalancer{
+		NextBackendFunc: func(_ context.Context) (*domain.Backend, error) {
 			return backend, nil
 		},
 	}
@@ -399,7 +394,7 @@ func TestLoadBalancerInterface(t *testing.T) {
 
 	// Test ReportResult
 	reportCalled := false
-	lb.reportResultFunc = func(b *domain.Backend, err error, statusCode int) {
+	lb.ReportResultFunc = func(b *domain.Backend, err error, statusCode int) {
 		assert.Equal(t, backend, b)
 		require.NoError(t, err)
 		assert.Equal(t, 200, statusCode)
@@ -410,7 +405,7 @@ func TestLoadBalancerInterface(t *testing.T) {
 	assert.True(t, reportCalled)
 
 	// Test BackendsStatus
-	lb.backendsStatusFunc = func() []*domain.BackendStatus {
+	lb.BackendsStatusFunc = func() []*domain.BackendStatus {
 		return []*domain.BackendStatus{status}
 	}
 
@@ -420,7 +415,7 @@ func TestLoadBalancerInterface(t *testing.T) {
 
 	// Test Close
 	closeCalled := false
-	lb.closeFunc = func() error {
+	lb.CloseFunc = func() error {
 		closeCalled = true
 		return nil
 	}
@@ -430,35 +425,9 @@ func TestLoadBalancerInterface(t *testing.T) {
 	assert.True(t, closeCalled)
 }
 
-// Mock health checker for testing.
-type mockHealthChecker struct {
-	checkHealthFunc     func(ctx context.Context, backend *domain.Backend) error
-	startMonitoringFunc func(ctx context.Context) error
-	stopFunc            func() error
-}
-
-func (m *mockHealthChecker) CheckHealth(ctx context.Context, backend *domain.Backend) error {
-	if m.checkHealthFunc != nil {
-		return m.checkHealthFunc(ctx, backend)
-	}
-	return nil
-}
-
-func (m *mockHealthChecker) StartMonitoring(ctx context.Context) error {
-	if m.startMonitoringFunc != nil {
-		return m.startMonitoringFunc(ctx)
-	}
-	return nil
-}
-
-func (m *mockHealthChecker) Stop() error {
-	if m.stopFunc != nil {
-		return m.stopFunc()
-	}
-	return nil
-}
-
 func TestHealthCheckerInterface(t *testing.T) {
+	t.Parallel()
+
 	backend := &domain.Backend{
 		URL:    "http://test-backend.com",
 		Weight: 1,
@@ -466,8 +435,8 @@ func TestHealthCheckerInterface(t *testing.T) {
 	}
 
 	// Test CheckHealth
-	hc := &mockHealthChecker{
-		checkHealthFunc: func(_ context.Context, b *domain.Backend) error {
+	hc := &testutils.MockHealthChecker{
+		CheckHealthFunc: func(_ context.Context, b *domain.Backend) error {
 			assert.Equal(t, backend, b)
 			return nil
 		},
@@ -479,7 +448,7 @@ func TestHealthCheckerInterface(t *testing.T) {
 
 	// Test StartMonitoring
 	monitoringStarted := false
-	hc.startMonitoringFunc = func(_ context.Context) error {
+	hc.StartMonitoringFunc = func(_ context.Context) error {
 		monitoringStarted = true
 		return nil
 	}
@@ -490,7 +459,7 @@ func TestHealthCheckerInterface(t *testing.T) {
 
 	// Test Stop
 	stopped := false
-	hc.stopFunc = func() error {
+	hc.StopFunc = func() error {
 		stopped = true
 		return nil
 	}

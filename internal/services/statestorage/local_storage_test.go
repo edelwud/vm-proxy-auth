@@ -16,7 +16,7 @@ import (
 
 func TestLocalStorage_BasicOperations(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx := context.Background()
 	key := "test-key"
@@ -40,7 +40,7 @@ func TestLocalStorage_BasicOperations(t *testing.T) {
 
 func TestLocalStorage_TTLExpiration(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx := context.Background()
 	key := "expire-key"
@@ -65,7 +65,7 @@ func TestLocalStorage_TTLExpiration(t *testing.T) {
 
 func TestLocalStorage_NoTTL(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx := context.Background()
 	key := "no-ttl-key"
@@ -85,7 +85,7 @@ func TestLocalStorage_NoTTL(t *testing.T) {
 
 func TestLocalStorage_Watch(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx := t.Context()
 
@@ -116,7 +116,7 @@ func TestLocalStorage_Watch(t *testing.T) {
 
 func TestLocalStorage_WatchWithDelete(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx := t.Context()
 
@@ -158,7 +158,7 @@ func TestLocalStorage_WatchWithDelete(t *testing.T) {
 
 func TestLocalStorage_WatchContextCancellation(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -180,7 +180,7 @@ func TestLocalStorage_WatchContextCancellation(t *testing.T) {
 
 func TestLocalStorage_WatchKeyPrefixFiltering(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx := t.Context()
 
@@ -215,7 +215,7 @@ exitLoop:
 
 func TestLocalStorage_ConcurrentAccess(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx := context.Background()
 	var wg sync.WaitGroup
@@ -282,7 +282,7 @@ func TestLocalStorage_ConcurrentAccess(t *testing.T) {
 
 func TestLocalStorage_GetMultiple(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx := context.Background()
 
@@ -307,7 +307,7 @@ func TestLocalStorage_GetMultiple(t *testing.T) {
 
 func TestLocalStorage_GetMultiple_MissingKeys(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx := context.Background()
 
@@ -329,7 +329,7 @@ func TestLocalStorage_GetMultiple_MissingKeys(t *testing.T) {
 
 func TestLocalStorage_SetMultiple(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx := context.Background()
 
@@ -353,7 +353,7 @@ func TestLocalStorage_SetMultiple(t *testing.T) {
 
 func TestLocalStorage_Ping(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx := context.Background()
 	err := storage.Ping(ctx)
@@ -362,7 +362,7 @@ func TestLocalStorage_Ping(t *testing.T) {
 
 func TestLocalStorage_ContextCancellation(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -377,7 +377,7 @@ func TestLocalStorage_ContextCancellation(t *testing.T) {
 
 func TestLocalStorage_CleanupExpiredKeys(t *testing.T) {
 	storage := statestorage.NewLocalStorage("test-node")
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	ctx := context.Background()
 
@@ -439,7 +439,7 @@ func TestLocalStorage_WatchAfterClose(t *testing.T) {
 
 func BenchmarkLocalStorage_Set(b *testing.B) {
 	storage := statestorage.NewLocalStorage("bench-node")
-	defer storage.Close()
+	b.Cleanup(func() { storage.Close() })
 
 	ctx := context.Background()
 	value := []byte("benchmark-value")
@@ -457,7 +457,7 @@ func BenchmarkLocalStorage_Set(b *testing.B) {
 
 func BenchmarkLocalStorage_Get(b *testing.B) {
 	storage := statestorage.NewLocalStorage("bench-node")
-	defer storage.Close()
+	b.Cleanup(func() { storage.Close() })
 
 	ctx := context.Background()
 	key := "bench-get-key"
@@ -476,7 +476,7 @@ func BenchmarkLocalStorage_Get(b *testing.B) {
 
 func BenchmarkLocalStorage_SetMultiple(b *testing.B) {
 	storage := statestorage.NewLocalStorage("bench-node")
-	defer storage.Close()
+	b.Cleanup(func() { storage.Close() })
 
 	ctx := context.Background()
 

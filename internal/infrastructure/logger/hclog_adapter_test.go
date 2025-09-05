@@ -51,6 +51,7 @@ func TestHCLogAdapter_StandardLogger(t *testing.T) {
 }
 
 func TestLogWriter_ParseLogLevel(t *testing.T) {
+	t.Parallel()
 	mockLogger := testutils.NewMockLogger()
 	adapter := logger.NewHCLogAdapter(mockLogger)
 	writer := adapter.StandardWriter(nil)
@@ -70,6 +71,8 @@ func TestLogWriter_ParseLogLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			_, err := writer.Write([]byte(tt.input))
 			assert.NoError(t, err)
 		})
@@ -77,6 +80,7 @@ func TestLogWriter_ParseLogLevel(t *testing.T) {
 }
 
 func TestLogWriter_ParseLogMessage(t *testing.T) {
+	t.Parallel()
 	mockLogger := testutils.NewMockLogger()
 	adapter := logger.NewHCLogAdapter(mockLogger)
 	writer := adapter.StandardWriter(nil)
@@ -97,6 +101,7 @@ func TestLogWriter_ParseLogMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := writer.Write([]byte(tt.input))
 			assert.NoError(t, err)
 		})
@@ -104,6 +109,8 @@ func TestLogWriter_ParseLogMessage(t *testing.T) {
 }
 
 func TestHCLogAdapter_LevelThresholds(t *testing.T) {
+	t.Parallel()
+
 	mockLogger := testutils.NewMockLogger()
 	adapter := logger.NewHCLogAdapter(mockLogger)
 	adapter.SetLevel(hclog.Warn) // Set threshold to WARN

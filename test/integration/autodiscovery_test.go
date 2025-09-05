@@ -3,7 +3,6 @@ package integration_test
 import (
 	"context"
 	"fmt"
-	"net"
 	"testing"
 	"time"
 
@@ -17,33 +16,20 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
-// getFreePort returns a free port number for testing.
-func getFreePort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-	if err != nil {
-		return 0, err
-	}
-
-	listener, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0, err
-	}
-	defer listener.Close()
-
-	return listener.Addr().(*net.TCPAddr).Port, nil
-}
-
 func TestAutoDiscoveryIntegration(t *testing.T) {
 	t.Parallel()
+
 	logger := testutils.NewMockLogger()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	t.Cleanup(cancel)
 
 	t.Run("static_discovery_two_nodes", func(t *testing.T) {
+		t.Parallel()
 		testStaticDiscoveryTwoNodes(ctx, t, logger)
 	})
 
 	t.Run("mdns_discovery_two_nodes", func(t *testing.T) {
+		t.Parallel()
 		testMDNSDiscoveryTwoNodes(ctx, t)
 	})
 }
@@ -64,8 +50,7 @@ func testStaticDiscoveryTwoNodes(ctx context.Context, t *testing.T, logger domai
 }
 
 func testMDNSDiscoveryTwoNodes(ctx context.Context, t *testing.T) {
-	t.Parallel()
-	debugLogger := testutils.NewDebugLogger(t)
+	debugLogger := testutils.NewMockLogger()
 	serviceName := "_mdns-integration-test._tcp"
 	port1, port2 := getFreePorts(t)
 
@@ -85,11 +70,9 @@ func testMDNSDiscoveryTwoNodes(ctx context.Context, t *testing.T) {
 }
 
 func getFreePorts(t *testing.T) (int, int) {
-	port1, err := getFreePort()
+	ports, err := testutils.GetFreePorts(2)
 	require.NoError(t, err)
-	port2, err := getFreePort()
-	require.NoError(t, err)
-	return port1, port2
+	return ports[0], ports[1]
 }
 
 func createStaticNode1Config(
@@ -104,7 +87,7 @@ func createStaticNode1Config(
 	discoveryConfig := config.DiscoverySettings{
 		Enabled:   true,
 		Providers: []string{"static"},
-		Interval:  3 * time.Second,
+		Interval:  200 * time.Millisecond,
 		Static: config.StaticDiscoveryConfig{
 			Peers: []string{fmt.Sprintf("127.0.0.1:%d", port2)},
 		},
@@ -124,7 +107,7 @@ func createStaticNode2Config(
 	discoveryConfig := config.DiscoverySettings{
 		Enabled:   true,
 		Providers: []string{"static"},
-		Interval:  3 * time.Second,
+		Interval:  200 * time.Millisecond,
 		Static: config.StaticDiscoveryConfig{
 			Peers: []string{fmt.Sprintf("127.0.0.1:%d", port1)},
 		},
@@ -187,7 +170,7 @@ func createMDNSDiscoveryConfig(
 	return config.DiscoverySettings{
 		Enabled:   true,
 		Providers: []string{"mdns"},
-		Interval:  500 * time.Millisecond,
+		Interval:  200 * time.Millisecond,
 		MDNS: config.MDNSDiscoveryConfig{
 			ServiceName: serviceName,
 			Domain:      "local.",
@@ -219,7 +202,7 @@ func runStaticDiscoveryTest(
 	defer node1.Stop()
 	defer node2.Stop()
 
-	waitForDiscovery(t, node1, node2, 10*time.Second)
+	waitForDiscovery(t, node1, node2, 3*time.Second)
 	verifyClusterFormation(t, node1, node2, "auto-test-node-1", "auto-test-node-2")
 }
 
@@ -244,7 +227,7 @@ func runMDNSDiscoveryTest(
 	defer node1.Stop()
 	defer node2.Stop()
 
-	waitForDiscovery(t, node1, node2, 15*time.Second)
+	waitForDiscovery(t, node1, node2, 3*time.Second)
 	verifyClusterFormation(t, node1, node2, "mdns-auto-node-1", "mdns-auto-node-2")
 }
 
@@ -332,7 +315,7 @@ func createAndStartMDNSNodes(
 	require.NoError(t, err)
 
 	t.Log("Node 1 established, waiting before starting Node 2...")
-	time.Sleep(2 * time.Second)
+	time.Sleep(200 * time.Millisecond)
 
 	// Start Node 2
 	t.Log("Starting Node 2...")
@@ -340,7 +323,7 @@ func createAndStartMDNSNodes(
 	require.NoError(t, err)
 
 	t.Log("Waiting for mDNS autodiscovery...")
-	time.Sleep(6 * time.Second)
+	time.Sleep(800 * time.Millisecond)
 
 	return node1, node2
 }
@@ -350,7 +333,7 @@ func waitForDiscovery(t *testing.T, node1, node2 *memberlist.Service, timeout ti
 		node1Members := node1.GetMembers()
 		node2Members := node2.GetMembers()
 		return len(node1Members) == 2 && len(node2Members) == 2
-	}, timeout, 200*time.Millisecond, "Both nodes should discover each other")
+	}, timeout, 100*time.Millisecond, "Both nodes should discover each other")
 }
 
 func verifyClusterFormation(

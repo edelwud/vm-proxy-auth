@@ -21,6 +21,8 @@ func createTestBackends() []domain.Backend {
 }
 
 func TestFactory_CreateLoadBalancer_RoundRobin(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	factory := loadbalancer.NewFactory(logger)
 	backends := createTestBackends()
@@ -35,6 +37,8 @@ func TestFactory_CreateLoadBalancer_RoundRobin(t *testing.T) {
 }
 
 func TestFactory_CreateLoadBalancer_WeightedRoundRobin(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	factory := loadbalancer.NewFactory(logger)
 	backends := createTestBackends()
@@ -49,6 +53,8 @@ func TestFactory_CreateLoadBalancer_WeightedRoundRobin(t *testing.T) {
 }
 
 func TestFactory_CreateLoadBalancer_LeastConnections(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	factory := loadbalancer.NewFactory(logger)
 	backends := createTestBackends()
@@ -63,6 +69,8 @@ func TestFactory_CreateLoadBalancer_LeastConnections(t *testing.T) {
 }
 
 func TestFactory_CreateLoadBalancer_UnsupportedStrategy(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	factory := loadbalancer.NewFactory(logger)
 	backends := createTestBackends()
@@ -74,6 +82,7 @@ func TestFactory_CreateLoadBalancer_UnsupportedStrategy(t *testing.T) {
 }
 
 func TestFactory_CreateLoadBalancer_EmptyBackends(t *testing.T) {
+	t.Parallel()
 	logger := testutils.NewMockLogger()
 	factory := loadbalancer.NewFactory(logger)
 
@@ -84,6 +93,8 @@ func TestFactory_CreateLoadBalancer_EmptyBackends(t *testing.T) {
 }
 
 func TestFactory_GetSupportedStrategies(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	factory := loadbalancer.NewFactory(logger)
 
@@ -100,6 +111,8 @@ func TestFactory_GetSupportedStrategies(t *testing.T) {
 }
 
 func TestFactory_ValidateStrategy(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	factory := loadbalancer.NewFactory(logger)
 
@@ -132,6 +145,7 @@ func TestFactory_ValidateStrategy(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			err := factory.ValidateStrategy(tc.strategy)
 			if tc.wantErr {
 				require.Error(t, err)
@@ -144,6 +158,8 @@ func TestFactory_ValidateStrategy(t *testing.T) {
 }
 
 func TestFactory_GetStrategyDescription(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	factory := loadbalancer.NewFactory(logger)
 
@@ -171,6 +187,7 @@ func TestFactory_GetStrategyDescription(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.strategy), func(t *testing.T) {
+			t.Parallel()
 			description := factory.GetStrategyDescription(tc.strategy)
 			assert.Contains(t, description, tc.shouldContain)
 			assert.NotEmpty(t, description)
@@ -179,6 +196,8 @@ func TestFactory_GetStrategyDescription(t *testing.T) {
 }
 
 func TestFactory_CreatedLoadBalancersWork(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	factory := loadbalancer.NewFactory(logger)
 	backends := createTestBackends()
@@ -191,6 +210,7 @@ func TestFactory_CreatedLoadBalancersWork(t *testing.T) {
 
 	for _, strategy := range strategies {
 		t.Run(string(strategy), func(t *testing.T) {
+			t.Parallel()
 			lb, err := factory.CreateLoadBalancer(strategy, backends)
 			require.NoError(t, err)
 			require.NotNil(t, lb)
@@ -222,6 +242,8 @@ func TestFactory_CreatedLoadBalancersWork(t *testing.T) {
 }
 
 func TestFactory_MultipleInstancesAreSeparate(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	factory := loadbalancer.NewFactory(logger)
 	backends := createTestBackends()
@@ -229,11 +251,11 @@ func TestFactory_MultipleInstancesAreSeparate(t *testing.T) {
 	// Create two load balancers of the same type
 	lb1, err1 := factory.CreateLoadBalancer(domain.LoadBalancingStrategyRoundRobin, backends)
 	require.NoError(t, err1)
-	defer lb1.Close()
+	t.Cleanup(func() { lb1.Close() })
 
 	lb2, err2 := factory.CreateLoadBalancer(domain.LoadBalancingStrategyRoundRobin, backends)
 	require.NoError(t, err2)
-	defer lb2.Close()
+	t.Cleanup(func() { lb2.Close() })
 
 	// They should be different instances
 	assert.NotEqual(t, lb1, lb2, "Factory should create separate instances")

@@ -60,7 +60,7 @@ clean:
 # Run tests
 test:
 	@echo "Running tests..."
-	$(GOTEST) -v ./...
+	$(GOTEST) -v ./... -parallel=8
 
 # Run tests with coverage
 coverage:

@@ -2,7 +2,6 @@ package auth_test
 
 import (
 	"context"
-	"net/http"
 	"testing"
 	"time"
 
@@ -17,8 +16,10 @@ import (
 )
 
 func TestNewService_WithSecretAuth(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
-	metrics := &MockMetricsService{}
+	metrics := &testutils.MockMetricsService{}
 
 	cfg := config.AuthSettings{
 		JWT: config.JWTSettings{
@@ -44,8 +45,10 @@ func TestNewService_WithSecretAuth(t *testing.T) {
 }
 
 func TestNewService_WithJWKSAuth(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
-	metrics := &MockMetricsService{}
+	metrics := &testutils.MockMetricsService{}
 
 	cfg := config.AuthSettings{
 		JWT: config.JWTSettings{
@@ -64,8 +67,10 @@ func TestNewService_WithJWKSAuth(t *testing.T) {
 }
 
 func TestNewService_ErrorWithoutAuthConfig(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
-	metrics := &MockMetricsService{}
+	metrics := &testutils.MockMetricsService{}
 
 	cfg := config.AuthSettings{
 		JWT: config.JWTSettings{
@@ -83,6 +88,8 @@ func TestNewService_ErrorWithoutAuthConfig(t *testing.T) {
 }
 
 func TestService_Authenticate_ValidToken(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		tokenClaims     jwt.MapClaims
@@ -145,8 +152,9 @@ func TestService_Authenticate_ValidToken(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			logger := testutils.NewMockLogger()
-			metrics := &MockMetricsService{}
+			metrics := &testutils.MockMetricsService{}
 
 			cfg := config.AuthSettings{
 				JWT: config.JWTSettings{
@@ -185,8 +193,10 @@ func TestService_Authenticate_ValidToken(t *testing.T) {
 }
 
 func TestService_Authenticate_InvalidToken(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
-	metrics := &MockMetricsService{}
+	metrics := &testutils.MockMetricsService{}
 
 	cfg := config.AuthSettings{
 		JWT: config.JWTSettings{
@@ -220,6 +230,7 @@ func TestService_Authenticate_InvalidToken(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			user, authErr := service.Authenticate(context.Background(), tt.token)
 			require.Error(t, authErr)
 			assert.Nil(t, user)
@@ -228,6 +239,8 @@ func TestService_Authenticate_InvalidToken(t *testing.T) {
 }
 
 func TestService_TenantMapping_ComplexScenarios(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		userGroups       []string
@@ -305,8 +318,9 @@ func TestService_TenantMapping_ComplexScenarios(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			logger := testutils.NewMockLogger()
-			metrics := &MockMetricsService{}
+			metrics := &testutils.MockMetricsService{}
 
 			cfg := config.AuthSettings{
 				JWT: config.JWTSettings{
@@ -347,8 +361,10 @@ func TestService_TenantMapping_ComplexScenarios(t *testing.T) {
 }
 
 func TestService_UserCaching(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
-	metrics := &MockMetricsService{}
+	metrics := &testutils.MockMetricsService{}
 
 	cfg := config.AuthSettings{
 		JWT: config.JWTSettings{
@@ -391,50 +407,3 @@ func TestService_UserCaching(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "cached-user@example.com", user3.ID)
 }
-
-// MockMetricsService implements domain.MetricsService for testing.
-type MockMetricsService struct{}
-
-func (m *MockMetricsService) RecordRequest(context.Context, string, string, string, time.Duration, *domain.User) {
-}
-
-func (m *MockMetricsService) RecordUpstream(context.Context, string, string, string, time.Duration, []string) {
-}
-func (m *MockMetricsService) RecordQueryFilter(context.Context, string, int, bool, time.Duration) {}
-func (m *MockMetricsService) RecordAuthAttempt(_ context.Context, _, _ string)                    {}
-func (m *MockMetricsService) RecordTenantAccess(context.Context, string, string, bool)            {}
-
-// Backend-specific metrics.
-func (m *MockMetricsService) RecordUpstreamBackend(
-	context.Context,
-	string,
-	string,
-	string,
-	string,
-	time.Duration,
-	[]string,
-) {
-}
-func (m *MockMetricsService) RecordHealthCheck(context.Context, string, bool, time.Duration) {}
-
-func (m *MockMetricsService) RecordBackendStateChange(
-	context.Context,
-	string,
-	domain.BackendState,
-	domain.BackendState,
-) {
-}
-
-func (m *MockMetricsService) RecordCircuitBreakerStateChange(context.Context, string, domain.CircuitBreakerState) {
-}
-func (m *MockMetricsService) RecordQueueOperation(context.Context, string, time.Duration, int) {}
-
-func (m *MockMetricsService) RecordLoadBalancerSelection(
-	context.Context,
-	domain.LoadBalancingStrategy,
-	string,
-	time.Duration,
-) {
-}
-
-func (m *MockMetricsService) Handler() http.Handler { return nil }

@@ -11,6 +11,7 @@ import (
 )
 
 func TestGetExternalIP(t *testing.T) {
+	t.Parallel()
 	ip, err := netutils.GetExternalIP()
 	require.NoError(t, err)
 	require.NotEmpty(t, ip)
@@ -21,6 +22,7 @@ func TestGetExternalIP(t *testing.T) {
 }
 
 func TestConvertBindToAdvertiseAddress(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		bindAddr    string
@@ -55,6 +57,7 @@ func TestConvertBindToAdvertiseAddress(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := netutils.ConvertBindToAdvertiseAddress(tt.bindAddr)
 
 			if tt.expectError {

@@ -30,9 +30,11 @@ func createTestRequest(userID string) *domain.ProxyRequest {
 }
 
 func TestMemoryQueue_EnqueueDequeue(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	q := queue.NewMemoryQueue(10, time.Second, logger)
-	defer q.Close()
+	t.Cleanup(func() { q.Close() })
 
 	ctx := context.Background()
 	req := createTestRequest("test-user")
@@ -50,9 +52,11 @@ func TestMemoryQueue_EnqueueDequeue(t *testing.T) {
 }
 
 func TestMemoryQueue_QueueFull(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	q := queue.NewMemoryQueue(2, time.Second, logger) // Small queue
-	defer q.Close()
+	t.Cleanup(func() { q.Close() })
 
 	ctx := context.Background()
 
@@ -83,9 +87,11 @@ func TestMemoryQueue_QueueFull(t *testing.T) {
 }
 
 func TestMemoryQueue_DequeueEmpty(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	q := queue.NewMemoryQueue(10, 0, logger) // No timeout
-	defer q.Close()
+	t.Cleanup(func() { q.Close() })
 
 	ctx := context.Background()
 
@@ -95,10 +101,12 @@ func TestMemoryQueue_DequeueEmpty(t *testing.T) {
 }
 
 func TestMemoryQueue_DequeueTimeout(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	timeout := 50 * time.Millisecond
 	q := queue.NewMemoryQueue(10, timeout, logger)
-	defer q.Close()
+	t.Cleanup(func() { q.Close() })
 
 	ctx := context.Background()
 
@@ -112,9 +120,11 @@ func TestMemoryQueue_DequeueTimeout(t *testing.T) {
 }
 
 func TestMemoryQueue_ContextCancellation(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	q := queue.NewMemoryQueue(10, time.Second, logger)
-	defer q.Close()
+	t.Cleanup(func() { q.Close() })
 
 	// Test enqueue cancellation - fill queue first to make enqueue block
 	ctx := context.Background()
@@ -135,10 +145,10 @@ func TestMemoryQueue_ContextCancellation(t *testing.T) {
 
 	// Test dequeue cancellation with empty queue and timeout context
 	emptyQ := queue.NewMemoryQueue(10, time.Second, logger)
-	defer emptyQ.Close()
+	t.Cleanup(func() { emptyQ.Close() })
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel2()
+	t.Cleanup(cancel2)
 
 	_, err = emptyQ.Dequeue(ctx2)
 	assert.Equal(t, context.DeadlineExceeded, err)
@@ -146,9 +156,11 @@ func TestMemoryQueue_ContextCancellation(t *testing.T) {
 
 //nolint:gocognit // test cases
 func TestMemoryQueue_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	q := queue.NewMemoryQueue(50, 0, logger) // No timeout for simplicity
-	defer q.Close()
+	t.Cleanup(func() { q.Close() })
 
 	ctx := context.Background()
 	const numProducers = 5
@@ -239,6 +251,8 @@ func TestMemoryQueue_ConcurrentAccess(t *testing.T) {
 }
 
 func TestMemoryQueue_Close(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	q := queue.NewMemoryQueue(10, time.Second, logger)
 
@@ -272,9 +286,11 @@ func TestMemoryQueue_Close(t *testing.T) {
 }
 
 func TestMemoryQueue_Stats(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	q := queue.NewMemoryQueue(5, time.Second, logger)
-	defer q.Close()
+	t.Cleanup(func() { q.Close() })
 
 	ctx := context.Background()
 
@@ -321,9 +337,11 @@ func TestMemoryQueue_Stats(t *testing.T) {
 }
 
 func TestMemoryQueue_HealthyUtilization(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	q := queue.NewMemoryQueue(10, time.Second, logger)
-	defer q.Close()
+	t.Cleanup(func() { q.Close() })
 
 	ctx := context.Background()
 
@@ -360,7 +378,7 @@ func TestMemoryQueue_HealthyUtilization(t *testing.T) {
 func BenchmarkMemoryQueue_EnqueueDequeue(b *testing.B) {
 	logger := testutils.NewMockLogger()
 	q := queue.NewMemoryQueue(1000, time.Second, logger)
-	defer q.Close()
+	b.Cleanup(func() { _ = q.Close() })
 
 	ctx := context.Background()
 	req := createTestRequest("bench-user")
@@ -386,7 +404,7 @@ func BenchmarkMemoryQueue_EnqueueDequeue(b *testing.B) {
 func BenchmarkMemoryQueue_EnqueueOnly(b *testing.B) {
 	logger := testutils.NewMockLogger()
 	q := queue.NewMemoryQueue(b.N+1000, time.Second, logger) // Size based on N
-	defer q.Close()
+	b.Cleanup(func() { _ = q.Close() })
 
 	ctx := context.Background()
 	req := createTestRequest("bench-user")

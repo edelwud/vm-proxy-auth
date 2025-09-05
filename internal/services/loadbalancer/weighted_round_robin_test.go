@@ -15,6 +15,8 @@ import (
 )
 
 func TestWeightedRoundRobinBalancer_BasicDistribution(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 3, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 2, State: domain.BackendHealthy},
@@ -23,7 +25,7 @@ func TestWeightedRoundRobinBalancer_BasicDistribution(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewWeightedRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -50,6 +52,8 @@ func TestWeightedRoundRobinBalancer_BasicDistribution(t *testing.T) {
 }
 
 func TestWeightedRoundRobinBalancer_SmoothDistribution(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 5, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendHealthy},
@@ -57,7 +61,7 @@ func TestWeightedRoundRobinBalancer_SmoothDistribution(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewWeightedRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -111,6 +115,8 @@ func TestWeightedRoundRobinBalancer_SmoothDistribution(t *testing.T) {
 }
 
 func TestWeightedRoundRobinBalancer_DefaultWeights(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 0, State: domain.BackendHealthy},  // Should default to 1
 		{URL: "http://backend2.com", Weight: -5, State: domain.BackendHealthy}, // Should default to 1
@@ -119,7 +125,7 @@ func TestWeightedRoundRobinBalancer_DefaultWeights(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewWeightedRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	// Verify weights were normalized
 	assert.Equal(t, 1, balancer.GetBackendWeight("http://backend1.com"))
@@ -129,6 +135,8 @@ func TestWeightedRoundRobinBalancer_DefaultWeights(t *testing.T) {
 }
 
 func TestWeightedRoundRobinBalancer_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 2, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 1, State: domain.BackendHealthy},
@@ -136,7 +144,7 @@ func TestWeightedRoundRobinBalancer_ConcurrentAccess(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewWeightedRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 	const numGoroutines = 50
@@ -197,9 +205,11 @@ func TestWeightedRoundRobinBalancer_ConcurrentAccess(t *testing.T) {
 }
 
 func TestWeightedRoundRobinBalancer_NoBackends(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewWeightedRoundRobinBalancer([]domain.Backend{}, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 	backend, err := balancer.NextBackend(ctx)
@@ -208,13 +218,15 @@ func TestWeightedRoundRobinBalancer_NoBackends(t *testing.T) {
 }
 
 func TestWeightedRoundRobinBalancer_SingleBackend(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://only-backend.com", Weight: 5, State: domain.BackendHealthy},
 	}
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewWeightedRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -227,6 +239,8 @@ func TestWeightedRoundRobinBalancer_SingleBackend(t *testing.T) {
 }
 
 func TestWeightedRoundRobinBalancer_MixedHealthyUnhealthy(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 3, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 5, State: domain.BackendUnhealthy},
@@ -235,7 +249,7 @@ func TestWeightedRoundRobinBalancer_MixedHealthyUnhealthy(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewWeightedRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -261,6 +275,8 @@ func TestWeightedRoundRobinBalancer_MixedHealthyUnhealthy(t *testing.T) {
 }
 
 func TestWeightedRoundRobinBalancer_WithRateLimitedFallback(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 3, State: domain.BackendRateLimited},
 		{URL: "http://backend2.com", Weight: 2, State: domain.BackendUnhealthy},
@@ -268,7 +284,7 @@ func TestWeightedRoundRobinBalancer_WithRateLimitedFallback(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewWeightedRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -279,6 +295,8 @@ func TestWeightedRoundRobinBalancer_WithRateLimitedFallback(t *testing.T) {
 }
 
 func TestWeightedRoundRobinBalancer_BackendsStatus(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 3, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 2, State: domain.BackendUnhealthy},
@@ -286,7 +304,7 @@ func TestWeightedRoundRobinBalancer_BackendsStatus(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewWeightedRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	status := balancer.BackendsStatus()
 	require.Len(t, status, 2)
@@ -315,6 +333,8 @@ func TestWeightedRoundRobinBalancer_BackendsStatus(t *testing.T) {
 }
 
 func TestWeightedRoundRobinBalancer_GetMethods(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 3, State: domain.BackendHealthy},
 		{URL: "http://backend2.com", Weight: 2, State: domain.BackendUnhealthy},
@@ -323,7 +343,7 @@ func TestWeightedRoundRobinBalancer_GetMethods(t *testing.T) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewWeightedRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	t.Cleanup(func() { balancer.Close() })
 
 	assert.Equal(t, 3, balancer.GetBackendCount())
 	assert.Equal(t, 2, balancer.GetHealthyBackendCount()) // backend1 and backend3
@@ -336,6 +356,8 @@ func TestWeightedRoundRobinBalancer_GetMethods(t *testing.T) {
 }
 
 func TestWeightedRoundRobinBalancer_Close(t *testing.T) {
+	t.Parallel()
+
 	backends := []domain.Backend{
 		{URL: "http://backend1.com", Weight: 1, State: domain.BackendHealthy},
 	}
@@ -370,7 +392,7 @@ func BenchmarkWeightedRoundRobinBalancer_NextBackend(b *testing.B) {
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewWeightedRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	b.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 
@@ -401,7 +423,7 @@ func BenchmarkWeightedRoundRobinBalancer_NextBackendWithSomeUnhealthy(b *testing
 
 	logger := testutils.NewMockLogger()
 	balancer := loadbalancer.NewWeightedRoundRobinBalancer(backends, logger)
-	defer balancer.Close()
+	b.Cleanup(func() { balancer.Close() })
 
 	ctx := context.Background()
 

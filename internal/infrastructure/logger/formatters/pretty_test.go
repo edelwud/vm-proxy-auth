@@ -10,6 +10,8 @@ import (
 )
 
 func TestPrettyFormatter_Format(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		entry    *logrus.Entry
@@ -115,6 +117,8 @@ func TestPrettyFormatter_Format(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			if tt.setup != nil {
 				tt.setup()
 			}
@@ -146,6 +150,8 @@ func TestPrettyFormatter_Format(t *testing.T) {
 }
 
 func TestPrettyFormatter_FormatLevel(t *testing.T) {
+	t.Parallel()
+
 	formatter := NewPrettyFormatter()
 
 	tests := []struct {
@@ -177,6 +183,8 @@ func TestPrettyFormatter_FormatLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			result := formatter.formatLevel(tt.level)
 
 			// Remove color codes for easier testing
@@ -190,6 +198,8 @@ func TestPrettyFormatter_FormatLevel(t *testing.T) {
 }
 
 func TestPrettyFormatter_PadMessage(t *testing.T) {
+	t.Parallel()
+
 	formatter := NewPrettyFormatter()
 
 	tests := []struct {
@@ -216,6 +226,8 @@ func TestPrettyFormatter_PadMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			result := formatter.padMessage(tt.message)
 			if len(result) < tt.expected {
 				t.Errorf("padMessage() length = %v, want at least %v", len(result), tt.expected)
@@ -230,6 +242,8 @@ func TestPrettyFormatter_PadMessage(t *testing.T) {
 }
 
 func TestPrettyFormatter_FormatFieldValue(t *testing.T) {
+	t.Parallel()
+
 	formatter := NewPrettyFormatter()
 
 	tests := []struct {
@@ -266,6 +280,8 @@ func TestPrettyFormatter_FormatFieldValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			result := formatter.formatFieldValue(tt.value)
 
 			// Remove color codes for easier testing
@@ -285,6 +301,7 @@ func TestPrettyFormatter_ColorSupport(t *testing.T) {
 }
 
 func TestPrettyFormatter_FormatFields(t *testing.T) {
+	t.Parallel()
 	formatter := NewPrettyFormatter()
 
 	tests := []struct {
@@ -316,6 +333,8 @@ func TestPrettyFormatter_FormatFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			result := formatter.formatFields(tt.fields)
 
 			// Remove color codes for easier testing

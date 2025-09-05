@@ -16,19 +16,22 @@ import (
 )
 
 func TestMDNSBroadcast_TwoNodesDiscovery(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	t.Cleanup(cancel)
 
 	// Get free ports for memberlist
-	port1, err := getFreePort()
+	port1, err := testutils.GetFreePort()
 	require.NoError(t, err)
-	port2, err := getFreePort()
+	port2, err := testutils.GetFreePort()
 	require.NoError(t, err)
 
 	t.Logf("Using memberlist ports: Node1=%d, Node2=%d", port1, port2)
 
 	t.Run("mdns_with_broadcast_address", func(t *testing.T) {
+		t.Parallel()
 		// Node 1 configuration - uses 0.0.0.0 for mDNS broadcast discovery
 		node1MemberlistConfig := config.MemberlistSettings{
 			BindAddress:      "0.0.0.0", // Bind to all interfaces
@@ -49,7 +52,7 @@ func TestMDNSBroadcast_TwoNodesDiscovery(t *testing.T) {
 		node1DiscoveryConfig := config.DiscoverySettings{
 			Enabled:   true,
 			Providers: []string{"mdns"},
-			Interval:  500 * time.Millisecond,
+			Interval:  150 * time.Millisecond,
 			MDNS: config.MDNSDiscoveryConfig{
 				ServiceName: "_broadcast-vm-proxy._tcp",
 				Domain:      "local.",
@@ -78,7 +81,7 @@ func TestMDNSBroadcast_TwoNodesDiscovery(t *testing.T) {
 		node2DiscoveryConfig := config.DiscoverySettings{
 			Enabled:   true,
 			Providers: []string{"mdns"},
-			Interval:  500 * time.Millisecond,
+			Interval:  150 * time.Millisecond,
 			MDNS: config.MDNSDiscoveryConfig{
 				ServiceName: "_broadcast-vm-proxy._tcp", // Same service name
 				Domain:      "local.",
@@ -126,7 +129,7 @@ func TestMDNSBroadcast_TwoNodesDiscovery(t *testing.T) {
 		require.NoError(t, err)
 
 		t.Log("Node 1 established, waiting before starting Node 2...")
-		time.Sleep(1 * time.Second)
+		time.Sleep(200 * time.Millisecond)
 
 		// Start Node 2
 		t.Log("Starting Node 2...")
@@ -136,7 +139,7 @@ func TestMDNSBroadcast_TwoNodesDiscovery(t *testing.T) {
 		// Monitor broadcast discovery process
 		t.Log("Monitoring mDNS broadcast discovery...")
 
-		// Wait for discovery with eventually check
+		// Wait for discovery with eventually check - mDNS can be slow
 		require.Eventually(t, func() bool {
 			members1 := node1.GetMembers()
 			members2 := node2.GetMembers()

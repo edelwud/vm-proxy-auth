@@ -16,6 +16,8 @@ import (
 // TestDistributedStateEventPropagation tests that state events propagate
 // correctly between multiple storage instances.
 func TestDistributedStateEventPropagation(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("Skipping distributed integration test in short mode")
 	}
@@ -39,19 +41,20 @@ func TestDistributedStateEventPropagation(t *testing.T) {
 		t.Skipf("Redis not available: %v", err)
 		return
 	}
-	defer storage1.Close()
+	t.Cleanup(func() { storage1.Close() })
 
 	storage2, err := statestorage.NewRedisStorage(config, "node-2", logger)
 	if err != nil {
 		t.Skipf("Redis not available: %v", err)
 		return
 	}
-	defer storage2.Close()
+	t.Cleanup(func() { storage2.Close() })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	t.Run("set_event_propagation", func(t *testing.T) {
+		t.Parallel()
 		// Start watching from storage2
 		eventCh, watchErr := storage2.Watch(ctx, "distributed-test:set:")
 		require.NoError(t, watchErr)
@@ -95,6 +98,7 @@ func TestDistributedStateEventPropagation(t *testing.T) {
 	})
 
 	t.Run("delete_event_propagation", func(t *testing.T) {
+		t.Parallel()
 		// Set up data first
 		key := "distributed-test:delete:key1"
 		value := []byte("to-be-deleted")
@@ -138,6 +142,7 @@ func TestDistributedStateEventPropagation(t *testing.T) {
 	})
 
 	t.Run("multiple_watchers_same_prefix", func(t *testing.T) {
+		t.Parallel()
 		// Create multiple watchers on the same prefix from different nodes
 		prefix := "distributed-test:multi:"
 
@@ -184,6 +189,8 @@ func TestDistributedStateEventPropagation(t *testing.T) {
 //
 //nolint:gocognit // test case
 func TestDistributedStateConsistency(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("Skipping distributed consistency test in short mode")
 	}
@@ -209,13 +216,14 @@ func TestDistributedStateConsistency(t *testing.T) {
 			t.Skipf("Redis not available: %v", storageErr)
 			return
 		}
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 		storages[i] = storage
 	}
 
 	ctx := context.Background()
 
 	t.Run("eventual_consistency", func(t *testing.T) {
+		t.Parallel()
 		key := "consistency-test:eventual"
 		value := []byte("consistent-value")
 
@@ -235,6 +243,7 @@ func TestDistributedStateConsistency(t *testing.T) {
 	})
 
 	t.Run("concurrent_writes", func(t *testing.T) {
+		t.Parallel()
 		baseKey := "consistency-test:concurrent:"
 
 		// Perform concurrent writes from different instances
@@ -284,6 +293,7 @@ func TestDistributedStateConsistency(t *testing.T) {
 	})
 
 	t.Run("bulk_operations_consistency", func(t *testing.T) {
+		t.Parallel()
 		prefix := "consistency-test:bulk:"
 
 		// Prepare bulk data
@@ -324,6 +334,8 @@ func TestDistributedStateConsistency(t *testing.T) {
 
 // TestDistributedStateFailover tests behavior when one storage instance fails.
 func TestDistributedStateFailover(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("Skipping distributed failover test in short mode")
 	}
@@ -356,6 +368,7 @@ func TestDistributedStateFailover(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("continue_after_node_failure", func(t *testing.T) {
+		t.Parallel()
 		// Set initial data
 		key := "failover-test:data"
 		value := []byte("persistent-data")

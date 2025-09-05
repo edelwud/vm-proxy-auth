@@ -11,6 +11,8 @@ import (
 )
 
 func TestAllViperConfigs_Validation(t *testing.T) {
+	t.Parallel()
+
 	configFiles := []string{
 		"../../examples/config.basic.yaml",
 		"../../examples/config.production.yaml",
@@ -21,6 +23,8 @@ func TestAllViperConfigs_Validation(t *testing.T) {
 
 	for _, configFile := range configFiles {
 		t.Run(filepath.Base(configFile), func(t *testing.T) {
+			t.Parallel()
+
 			viperConfig, err := config.LoadViperConfig(configFile)
 			require.NoError(t, err, "Config %s should be valid", configFile)
 

@@ -12,16 +12,6 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
-// mockPeerJoiner implements the PeerJoiner interface for testing.
-type mockPeerJoiner struct {
-	joinedPeers []string
-}
-
-func (m *mockPeerJoiner) Join(peers []string) error {
-	m.joinedPeers = append(m.joinedPeers, peers...)
-	return nil
-}
-
 func TestDiscoveryService_StaticProvider(t *testing.T) {
 	logger := testutils.NewMockLogger()
 
@@ -37,7 +27,7 @@ func TestDiscoveryService_StaticProvider(t *testing.T) {
 	service := discovery.NewService(cfg, logger)
 
 	// Setup mock peer joiner
-	mockJoiner := &mockPeerJoiner{}
+	mockJoiner := &testutils.MockPeerJoiner{}
 	service.SetPeerJoiner(mockJoiner)
 
 	ctx := context.Background()
@@ -54,9 +44,9 @@ func TestDiscoveryService_StaticProvider(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify peers were discovered
-	require.NotEmpty(t, mockJoiner.joinedPeers)
-	require.Contains(t, mockJoiner.joinedPeers, "127.0.0.1:7946")
-	require.Contains(t, mockJoiner.joinedPeers, "127.0.0.1:7947")
+	require.NotEmpty(t, mockJoiner.JoinedPeers)
+	require.Contains(t, mockJoiner.JoinedPeers, "127.0.0.1:7946")
+	require.Contains(t, mockJoiner.JoinedPeers, "127.0.0.1:7947")
 }
 
 func TestDiscoveryService_Disabled(t *testing.T) {

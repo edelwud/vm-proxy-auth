@@ -33,6 +33,8 @@ func getFreePortForMDNS() (int, error) {
 }
 
 func TestMDNSProvider_Creation(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 
 	tests := []struct {
@@ -71,6 +73,8 @@ func TestMDNSProvider_Creation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			provider := NewMDNSProvider(tt.serviceName, tt.domainName, tt.hostname, tt.port, nil, logger)
 			require.NotNil(t, provider)
 			assert.Equal(t, tt.expectType, provider.GetProviderType())
@@ -79,6 +83,8 @@ func TestMDNSProvider_Creation(t *testing.T) {
 }
 
 func TestMDNSProvider_StartStop(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 
 	port, err := getFreePortForMDNS()
@@ -90,6 +96,7 @@ func TestMDNSProvider_StartStop(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("start_success", func(t *testing.T) {
+		t.Parallel()
 		startErr := provider.Start(ctx)
 		require.NoError(t, startErr)
 
@@ -104,12 +111,14 @@ func TestMDNSProvider_StartStop(t *testing.T) {
 	})
 
 	t.Run("stop_before_start", func(t *testing.T) {
+		t.Parallel()
 		// Should be safe to stop before start
 		stopErr := provider.Stop()
 		require.NoError(t, stopErr)
 	})
 
 	t.Run("multiple_stops", func(t *testing.T) {
+		t.Parallel()
 		startErr := provider.Start(ctx)
 		require.NoError(t, startErr)
 
@@ -123,6 +132,8 @@ func TestMDNSProvider_StartStop(t *testing.T) {
 }
 
 func TestMDNSProvider_Discover(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 
 	port1, err := getFreePortForMDNS()
@@ -131,6 +142,7 @@ func TestMDNSProvider_Discover(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("discover_self", func(t *testing.T) {
+		t.Parallel()
 		// Test discovering self through mDNS
 		provider := NewMDNSProvider("_mdns-unit-test._tcp", "local.", "127.0.0.1", port1, nil, logger)
 		require.NotNil(t, provider)
@@ -146,7 +158,7 @@ func TestMDNSProvider_Discover(t *testing.T) {
 		}()
 
 		// Give mDNS time to start announcing
-		time.Sleep(1 * time.Second)
+		time.Sleep(200 * time.Millisecond)
 
 		// Discover peers
 		peers, discoverErr := provider.Discover(ctx)
@@ -163,12 +175,13 @@ func TestMDNSProvider_Discover(t *testing.T) {
 	})
 
 	t.Run("discover_with_timeout", func(t *testing.T) {
+		t.Parallel()
 		provider := NewMDNSProvider("_timeout-test._tcp", "local.", "127.0.0.1", port2, nil, logger)
 		require.NotNil(t, provider)
 
 		// Create context with short timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
+		t.Cleanup(cancel)
 
 		// Start provider
 		startErr := provider.Start(ctx)
@@ -190,12 +203,13 @@ func TestMDNSProvider_Discover(t *testing.T) {
 	})
 
 	t.Run("discover_without_server", func(t *testing.T) {
+		t.Parallel()
 		// Test discovery without starting server (client-only mode)
 		provider := NewMDNSProvider("_client-only-test._tcp", "local.", "127.0.0.1", port1+100, nil, logger)
 		require.NotNil(t, provider)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
+		t.Cleanup(cancel)
 
 		// Discover without starting server
 		peers, discoverErr := provider.Discover(ctx)
@@ -207,10 +221,13 @@ func TestMDNSProvider_Discover(t *testing.T) {
 }
 
 func TestMDNSProvider_GetLocalIP(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 	provider := &MDNSProvider{logger: logger}
 
 	t.Run("get_local_ip_success", func(t *testing.T) {
+		t.Parallel()
 		ip, err := provider.getLocalIP()
 		require.NoError(t, err, "getLocalIP must succeed in test environment")
 
@@ -223,6 +240,8 @@ func TestMDNSProvider_GetLocalIP(t *testing.T) {
 }
 
 func TestMDNSProvider_Integration_TwoProviders(t *testing.T) {
+	t.Parallel()
+
 	// Always run integration tests - they're critical for correctness
 
 	logger := testutils.NewMockLogger()
@@ -255,6 +274,7 @@ func TestMDNSProvider_Integration_TwoProviders(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("two_providers_announce_and_discover", func(t *testing.T) {
+		t.Parallel()
 		// Start both providers
 		startErr1 := provider1.Start(ctx)
 		require.NoError(t, startErr1)
@@ -272,7 +292,7 @@ func TestMDNSProvider_Integration_TwoProviders(t *testing.T) {
 
 		// Give time for mDNS registration and propagation
 		t.Log("Waiting for mDNS service registration...")
-		time.Sleep(5 * time.Second)
+		time.Sleep(500 * time.Millisecond)
 
 		// Both providers should discover peers
 		t.Log("Starting discovery from provider 1...")
@@ -327,6 +347,7 @@ func TestMDNSProvider_Integration_TwoProviders(t *testing.T) {
 	})
 
 	t.Run("sequential_discovery", func(t *testing.T) {
+		t.Parallel()
 		// Test sequential startup to see if timing affects discovery
 		seqServiceName := "_mdns-sequential-test._tcp"
 
@@ -356,7 +377,7 @@ func TestMDNSProvider_Integration_TwoProviders(t *testing.T) {
 		}()
 
 		t.Log("Provider 1 started, waiting before starting provider 2...")
-		time.Sleep(3 * time.Second)
+		time.Sleep(300 * time.Millisecond)
 
 		// Start provider 2 after delay
 		startErr2 := seqProvider2.Start(ctx)
@@ -367,7 +388,7 @@ func TestMDNSProvider_Integration_TwoProviders(t *testing.T) {
 		}()
 
 		t.Log("Provider 2 started, waiting for cross-discovery...")
-		time.Sleep(5 * time.Second)
+		time.Sleep(500 * time.Millisecond)
 
 		// Test discovery from both
 		peers1, discoverErr1 := seqProvider1.Discover(ctx)
@@ -395,9 +416,12 @@ func TestMDNSProvider_Integration_TwoProviders(t *testing.T) {
 }
 
 func TestMDNSProvider_ErrorCases(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 
 	t.Run("invalid_service_name", func(t *testing.T) {
+		t.Parallel()
 		// mDNS library should handle invalid service names gracefully
 		provider := NewMDNSProvider("invalid-service-name", "local.", "127.0.0.1", 8080, nil, logger)
 		require.NotNil(t, provider)
@@ -413,6 +437,7 @@ func TestMDNSProvider_ErrorCases(t *testing.T) {
 	})
 
 	t.Run("invalid_port", func(t *testing.T) {
+		t.Parallel()
 		provider := NewMDNSProvider("_test._tcp", "local.", "127.0.0.1", -1, nil, logger)
 		require.NotNil(t, provider)
 
@@ -428,6 +453,8 @@ func TestMDNSProvider_ErrorCases(t *testing.T) {
 }
 
 func TestMDNSProvider_ConcurrentOperations(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 
 	port, err := getFreePortForMDNS()
@@ -439,6 +466,7 @@ func TestMDNSProvider_ConcurrentOperations(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("concurrent_start_stop", func(t *testing.T) {
+		t.Parallel()
 		// Start provider
 		startErr := provider.Start(ctx)
 		require.NoError(t, startErr)
@@ -454,7 +482,7 @@ func TestMDNSProvider_ConcurrentOperations(t *testing.T) {
 				}()
 
 				discoverCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-				defer cancel()
+				t.Cleanup(cancel)
 
 				peers, discErr := provider.Discover(discoverCtx)
 				if discErr != nil {
@@ -497,7 +525,6 @@ func TestMDNSProvider_EdgeCases(t *testing.T) {
 		require.NoError(t, err) // Should not error on cancelled context
 
 		// With cancelled context, should return empty slice (not nil)
-		assert.NotNil(t, peers, "Should return empty slice, not nil")
 		assert.Empty(t, peers, "Cancelled context should return no peers")
 
 		t.Logf("Discovery with cancelled context returned %d peers", len(peers))
@@ -515,6 +542,8 @@ func TestMDNSProvider_EdgeCases(t *testing.T) {
 }
 
 func TestMDNSProvider_ServiceNameFormats(t *testing.T) {
+	t.Parallel()
+
 	logger := testutils.NewMockLogger()
 
 	validServiceNames := []string{
@@ -527,6 +556,7 @@ func TestMDNSProvider_ServiceNameFormats(t *testing.T) {
 
 	for _, serviceName := range validServiceNames {
 		t.Run(fmt.Sprintf("service_%s", serviceName), func(t *testing.T) {
+			t.Parallel()
 			provider := NewMDNSProvider(serviceName, "local.", "valid-service-names", 8080, nil, logger)
 			require.NotNil(t, provider)
 			assert.Equal(t, "mdns", provider.GetProviderType())

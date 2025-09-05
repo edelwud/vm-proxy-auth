@@ -11,6 +11,8 @@ import (
 )
 
 func TestStaticProvider_Discover(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		peers         []string
@@ -35,6 +37,7 @@ func TestStaticProvider_Discover(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			logger := testutils.NewMockLogger()
 			provider := providers.NewStaticProvider(tt.peers, logger)
 

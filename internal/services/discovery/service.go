@@ -13,6 +13,13 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
+const (
+	// defaultStopTimeout is the maximum time to wait for graceful shutdown.
+	defaultStopTimeout = 2 * time.Second
+	// defaultDiscoveryTimeout is the maximum time for each discovery cycle.
+	defaultDiscoveryTimeout = 5 * time.Second
+)
+
 // Service implements automatic peer discovery service.
 type Service struct {
 	logger     domain.Logger
@@ -108,9 +115,9 @@ func (s *Service) Start(ctx context.Context) error {
 	// Run initial discovery
 	s.runDiscovery(ctx)
 
-	// Start discovery loop with background context (not tied to Start() context)
+	// Start discovery loop - it will use stopCh for cancellation
 	s.wg.Add(1)
-	go s.discoveryLoop(context.Background())
+	go s.discoveryLoop()
 
 	return nil
 }
@@ -118,16 +125,21 @@ func (s *Service) Start(ctx context.Context) error {
 // Stop stops the discovery service.
 func (s *Service) Stop() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if !s.running {
+		s.mu.Unlock()
 		return nil
 	}
 
-	close(s.stopCh)
 	s.running = false
 
-	// Stop all providers
+	// Close stop channel to signal loop to exit
+	if s.stopCh != nil {
+		close(s.stopCh)
+		s.stopCh = nil // Prevent double close
+	}
+
+	// Stop all providers before unlocking to avoid race
 	for _, provider := range s.providers {
 		if err := provider.Stop(); err != nil {
 			s.logger.Warn("Error stopping discovery provider",
@@ -136,13 +148,27 @@ func (s *Service) Stop() error {
 		}
 	}
 
-	s.wg.Wait()
-	s.logger.Info("Discovery service stopped")
+	s.mu.Unlock() // Unlock before waiting to avoid deadlock
+
+	// Wait for discovery loop to finish with timeout to avoid hanging
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		s.logger.Info("Discovery service stopped")
+	case <-time.After(defaultStopTimeout):
+		s.logger.Warn("Discovery service stop timeout - forcefully terminating")
+	}
+
 	return nil
 }
 
 // discoveryLoop periodically runs discovery across all providers.
-func (s *Service) discoveryLoop(ctx context.Context) {
+func (s *Service) discoveryLoop() {
 	defer s.wg.Done()
 
 	s.logger.Debug("Starting discovery loop",
@@ -151,16 +177,19 @@ func (s *Service) discoveryLoop(ctx context.Context) {
 	ticker := time.NewTicker(s.config.Interval)
 	defer ticker.Stop()
 
+	// Create a context for discovery operations
+	ctx := context.Background()
+
 	for {
 		select {
 		case <-ticker.C:
 			s.logger.Debug("Ticker fired - starting discovery cycle")
-			s.runDiscovery(ctx)
+			// Create a timeout context for each discovery cycle
+			discoveryCtx, cancel := context.WithTimeout(ctx, defaultDiscoveryTimeout)
+			s.runDiscovery(discoveryCtx)
+			cancel()
 		case <-s.stopCh:
 			s.logger.Debug("Discovery loop stopped via stop channel")
-			return
-		case <-ctx.Done():
-			s.logger.Debug("Discovery loop stopped via context cancellation")
 			return
 		}
 	}

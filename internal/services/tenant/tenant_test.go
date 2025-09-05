@@ -16,6 +16,7 @@ import (
 )
 
 func TestService_FilterQuery_ORStrategy(t *testing.T) {
+	t.Parallel()
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
@@ -52,6 +53,7 @@ func TestService_FilterQuery_ORStrategy(t *testing.T) {
 }
 
 func TestService_FilterQuery_OneTenant(t *testing.T) {
+	t.Parallel()
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
@@ -86,6 +88,7 @@ func TestService_FilterQuery_OneTenant(t *testing.T) {
 }
 
 func TestService_FilterQuery_ComplexQuery_ORStrategy(t *testing.T) {
+	t.Parallel()
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
@@ -167,6 +170,7 @@ func (m *MockMetricsService) RecordLoadBalancerSelection(
 func (m *MockMetricsService) Handler() http.Handler { return nil }
 
 func TestService_CanAccessTenant(t *testing.T) {
+	t.Parallel()
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
@@ -182,6 +186,7 @@ func TestService_CanAccessTenant(t *testing.T) {
 	service := tenant.NewService(tenantCfg, logger, metrics)
 
 	t.Run("access_allowed_by_account_id", func(t *testing.T) {
+		t.Parallel()
 		user := &domain.User{
 			ID: "test-user",
 			VMTenants: []domain.VMTenant{
@@ -199,6 +204,7 @@ func TestService_CanAccessTenant(t *testing.T) {
 	})
 
 	t.Run("access_allowed_by_tenant_string", func(t *testing.T) {
+		t.Parallel()
 		user := &domain.User{
 			ID: "test-user",
 			VMTenants: []domain.VMTenant{
@@ -212,6 +218,7 @@ func TestService_CanAccessTenant(t *testing.T) {
 	})
 
 	t.Run("access_denied_no_match", func(t *testing.T) {
+		t.Parallel()
 		user := &domain.User{
 			ID: "test-user",
 			VMTenants: []domain.VMTenant{
@@ -228,6 +235,7 @@ func TestService_CanAccessTenant(t *testing.T) {
 	})
 
 	t.Run("access_denied_no_vm_tenants", func(t *testing.T) {
+		t.Parallel()
 		user := &domain.User{
 			ID:        "test-user",
 			VMTenants: []domain.VMTenant{}, // Empty VM tenants
@@ -240,6 +248,7 @@ func TestService_CanAccessTenant(t *testing.T) {
 }
 
 func TestService_DetermineTargetTenant(t *testing.T) {
+	t.Parallel()
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
@@ -255,6 +264,7 @@ func TestService_DetermineTargetTenant(t *testing.T) {
 	service := tenant.NewService(tenantCfg, logger, metrics)
 
 	t.Run("use_tenant_from_header_x_prometheus_tenant", func(t *testing.T) {
+		t.Parallel()
 		user := &domain.User{
 			ID: "test-user",
 			VMTenants: []domain.VMTenant{
@@ -275,6 +285,7 @@ func TestService_DetermineTargetTenant(t *testing.T) {
 	})
 
 	t.Run("use_tenant_from_header_x_tenant_id", func(t *testing.T) {
+		t.Parallel()
 		user := &domain.User{
 			ID: "test-user",
 			VMTenants: []domain.VMTenant{
@@ -294,6 +305,7 @@ func TestService_DetermineTargetTenant(t *testing.T) {
 	})
 
 	t.Run("forbidden_tenant_in_header", func(t *testing.T) {
+		t.Parallel()
 		user := &domain.User{
 			ID: "test-user",
 			VMTenants: []domain.VMTenant{
@@ -319,6 +331,7 @@ func TestService_DetermineTargetTenant(t *testing.T) {
 	})
 
 	t.Run("use_first_vm_tenant_default", func(t *testing.T) {
+		t.Parallel()
 		user := &domain.User{
 			ID: "test-user",
 			VMTenants: []domain.VMTenant{
@@ -337,6 +350,7 @@ func TestService_DetermineTargetTenant(t *testing.T) {
 	})
 
 	t.Run("error_no_vm_tenants", func(t *testing.T) {
+		t.Parallel()
 		user := &domain.User{
 			ID:        "test-user",
 			VMTenants: []domain.VMTenant{}, // No VM tenants
