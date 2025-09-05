@@ -148,10 +148,34 @@ func TestStructuredLogger_LogLevels(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			buf.Reset()
-			tt.logFunc(tt.message, tt.fields...)
+			
+			// Each subtest gets its own buffer and logger to avoid race conditions
+			var testBuf bytes.Buffer
+			testLogger := logrus.New()
+			testLogger.SetOutput(&testBuf)
+			testLogger.SetFormatter(&logrus.JSONFormatter{})
+			testLogger.SetLevel(logrus.DebugLevel)
+			
+			testStructLogger := &StructuredLogger{
+				logger: testLogger,
+				fields: make(logrus.Fields),
+			}
+			
+			// Execute the log function using the test-specific logger
+			switch tt.name {
+			case "debug level":
+				testStructLogger.Debug(tt.message, tt.fields...)
+			case "info level":
+				testStructLogger.Info(tt.message, tt.fields...)
+			case "warning level":
+				testStructLogger.Warn(tt.message, tt.fields...)
+			case "error level":
+				testStructLogger.Error(tt.message, tt.fields...)
+			default:
+				tt.logFunc(tt.message, tt.fields...)
+			}
 
-			output := buf.String()
+			output := testBuf.String()
 			if !strings.Contains(output, tt.expected) {
 				t.Errorf("Expected output to contain %q, but got: %s", tt.expected, output)
 			}

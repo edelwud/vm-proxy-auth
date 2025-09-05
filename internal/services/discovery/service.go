@@ -188,7 +188,11 @@ func (s *Service) discoveryLoop() {
 			discoveryCtx, cancel := context.WithTimeout(ctx, defaultDiscoveryTimeout)
 			s.runDiscovery(discoveryCtx)
 			cancel()
-		case <-s.stopCh:
+		case <-func() <-chan struct{} {
+			s.mu.RLock()
+			defer s.mu.RUnlock()
+			return s.stopCh
+		}():
 			s.logger.Debug("Discovery loop stopped via stop channel")
 			return
 		}

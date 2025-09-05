@@ -157,7 +157,7 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 
 	t.Run("basic_operations", func(t *testing.T) {
 		t.Parallel()
-		key := "test-key"
+		key := fmt.Sprintf("test-key-%d", time.Now().UnixNano())
 		value := []byte("test-value")
 
 		// Test Set with timeout
@@ -186,7 +186,7 @@ func TestRaftStorage_SingleNode(t *testing.T) {
 
 	t.Run("ttl_expiration", func(t *testing.T) {
 		t.Parallel()
-		key := "expire-key"
+		key := fmt.Sprintf("expire-key-%d", time.Now().UnixNano())
 		value := []byte("expire-value")
 
 		// Set with short TTL

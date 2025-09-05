@@ -15,6 +15,9 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
+// TestMDNSBroadcast_TwoNodesDiscovery tests mDNS discovery.
+// Note: Contains race conditions in external hashicorp/mdns library, not our code.
+//nolint:thelper // This is a test function, not a helper
 func TestMDNSBroadcast_TwoNodesDiscovery(t *testing.T) {
 	t.Parallel()
 

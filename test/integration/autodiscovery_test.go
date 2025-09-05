@@ -16,6 +16,8 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
+// TestAutoDiscoveryIntegration tests various discovery mechanisms.
+// Note: mDNS tests contain race conditions in external hashicorp/mdns library.
 func TestAutoDiscoveryIntegration(t *testing.T) {
 	t.Parallel()
 
