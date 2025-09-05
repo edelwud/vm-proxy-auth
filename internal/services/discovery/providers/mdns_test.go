@@ -97,37 +97,49 @@ func TestMDNSProvider_StartStop(t *testing.T) {
 
 	t.Run("start_success", func(t *testing.T) {
 		t.Parallel()
-		startErr := provider.Start(ctx)
+		testPort, portErr := getFreePortForMDNS()
+		require.NoError(t, portErr)
+		testProvider := NewMDNSProvider("_test-service._tcp", "local.", "127.0.0.1", testPort, nil, logger)
+		
+		startErr := testProvider.Start(ctx)
 		require.NoError(t, startErr)
 
 		// Should not allow double start
-		doubleStartErr := provider.Start(ctx)
+		doubleStartErr := testProvider.Start(ctx)
 		require.Error(t, doubleStartErr)
 		assert.Contains(t, doubleStartErr.Error(), "already running")
 
 		// Clean stop
-		err = provider.Stop()
-		require.NoError(t, err)
+		stopErr := testProvider.Stop()
+		require.NoError(t, stopErr)
 	})
 
 	t.Run("stop_before_start", func(t *testing.T) {
 		t.Parallel()
+		testPort, portErr := getFreePortForMDNS()
+		require.NoError(t, portErr)
+		testProvider := NewMDNSProvider("_test-service._tcp", "local.", "127.0.0.1", testPort, nil, logger)
+		
 		// Should be safe to stop before start
-		stopErr := provider.Stop()
+		stopErr := testProvider.Stop()
 		require.NoError(t, stopErr)
 	})
 
 	t.Run("multiple_stops", func(t *testing.T) {
 		t.Parallel()
-		startErr := provider.Start(ctx)
+		testPort, portErr := getFreePortForMDNS()
+		require.NoError(t, portErr)
+		testProvider := NewMDNSProvider("_test-service._tcp", "local.", "127.0.0.1", testPort, nil, logger)
+		
+		startErr := testProvider.Start(ctx)
 		require.NoError(t, startErr)
 
-		err = provider.Stop()
-		require.NoError(t, err)
+		stopErr1 := testProvider.Stop()
+		require.NoError(t, stopErr1)
 
 		// Multiple stops should be safe
-		err = provider.Stop()
-		require.NoError(t, err)
+		stopErr2 := testProvider.Stop()
+		require.NoError(t, stopErr2)
 	})
 }
 
