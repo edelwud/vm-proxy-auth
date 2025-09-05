@@ -259,8 +259,12 @@ func TestJWKSFetcher_InvalidRSAKey(t *testing.T) {
 func TestJWKSFetcher_NetworkErrors(t *testing.T) {
 	t.Parallel()
 
-	// Create JWKS fetcher with invalid URL
+	// Create JWKS fetcher with invalid URL and short timeout to avoid hanging
 	fetcher := auth.NewJWKSFetcher("http://invalid-host-that-does-not-exist.local", 5*time.Minute)
+	// Override the HTTP client with a very short timeout to fail fast
+	fetcher.SetHTTPClient(&http.Client{
+		Timeout: 100 * time.Millisecond, // Very short timeout for fast failure
+	})
 
 	// Test fetching key - should fail with network error
 	publicKey, err := fetcher.GetPublicKey("test-kid")

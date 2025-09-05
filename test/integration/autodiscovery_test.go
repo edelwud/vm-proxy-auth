@@ -31,7 +31,7 @@ func TestAutoDiscoveryIntegration(t *testing.T) {
 	})
 
 	t.Run("mdns_discovery_two_nodes", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() - disabled due to race conditions in hashicorp/mdns library
 		testMDNSDiscoveryTwoNodes(ctx, t)
 	})
 }

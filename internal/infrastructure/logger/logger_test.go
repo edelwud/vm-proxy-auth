@@ -148,26 +148,26 @@ func TestStructuredLogger_LogLevels(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			// Each subtest gets its own buffer and logger to avoid race conditions
 			var testBuf bytes.Buffer
 			testLogger := logrus.New()
 			testLogger.SetOutput(&testBuf)
 			testLogger.SetFormatter(&logrus.JSONFormatter{})
 			testLogger.SetLevel(logrus.DebugLevel)
-			
+
 			testStructLogger := &StructuredLogger{
 				logger: testLogger,
 				fields: make(logrus.Fields),
 			}
-			
+
 			// Execute the log function using the test-specific logger
 			switch tt.name {
 			case "debug level":
 				testStructLogger.Debug(tt.message, tt.fields...)
 			case "info level":
 				testStructLogger.Info(tt.message, tt.fields...)
-			case "warning level":
+			case "warn level":
 				testStructLogger.Warn(tt.message, tt.fields...)
 			case "error level":
 				testStructLogger.Error(tt.message, tt.fields...)
@@ -405,19 +405,19 @@ func TestEnhancedStructuredLogger_ContextMethods(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			// Each subtest gets its own buffer to avoid race conditions
 			var testBuf bytes.Buffer
 			testLogger := logrus.New()
 			testLogger.SetOutput(&testBuf)
 			testLogger.SetFormatter(&logrus.JSONFormatter{})
-			
+
 			testBaseLogger := &StructuredLogger{
 				logger: testLogger,
 				fields: make(logrus.Fields),
 			}
 			testEnhancedLogger := &EnhancedStructuredLogger{Logger: testBaseLogger}
-			
+
 			// Execute setup function with test-specific logger
 			var contextualLogger domain.Logger
 			switch tt.name {
@@ -428,7 +428,7 @@ func TestEnhancedStructuredLogger_ContextMethods(t *testing.T) {
 			case "WithComponent":
 				contextualLogger = testEnhancedLogger.WithComponent("auth")
 			}
-			
+
 			contextualLogger.Info("test message")
 
 			output := testBuf.String()
@@ -480,19 +480,19 @@ func TestEnhancedStructuredLogger_WithTenant(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			// Each subtest gets its own buffer to avoid race conditions
 			var testBuf bytes.Buffer
 			testLogger := logrus.New()
 			testLogger.SetOutput(&testBuf)
 			testLogger.SetFormatter(&logrus.JSONFormatter{})
-			
+
 			testBaseLogger := &StructuredLogger{
 				logger: testLogger,
 				fields: make(logrus.Fields),
 			}
 			testEnhancedLogger := &EnhancedStructuredLogger{Logger: testBaseLogger}
-			
+
 			tenantLogger := testEnhancedLogger.WithTenant(tt.accountID, tt.projectID)
 			tenantLogger.Info("tenant test")
 

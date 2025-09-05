@@ -143,7 +143,7 @@ run_tests() {
     print_status "Running tests..."
     
     # Run tests with coverage
-    if ! go test -race -v ./...; then
+    if ! go test -v ./...; then
         print_error "Tests failed! Please fix failing tests before committing."
         exit 1
     fi

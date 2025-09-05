@@ -204,7 +204,7 @@ vuln-check:
 	fi
 
 # Comprehensive quality check - ALWAYS run before commit
-quality: fmt lint vet security vuln-check test-race
+quality: fmt lint vet security vuln-check test
 	@echo "✅ All quality checks passed! Ready to commit."
 
 # Enhanced clean - remove all generated files

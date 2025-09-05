@@ -17,9 +17,11 @@ import (
 
 // TestMDNSBroadcast_TwoNodesDiscovery tests mDNS discovery.
 // Note: Contains race conditions in external hashicorp/mdns library, not our code.
+// Parallelism disabled to prevent race detector failures in external library.
+//
 //nolint:thelper // This is a test function, not a helper
 func TestMDNSBroadcast_TwoNodesDiscovery(t *testing.T) {
-	t.Parallel()
+	// t.Parallel() - disabled due to race conditions in hashicorp/mdns library
 
 	logger := testutils.NewMockLogger()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -34,7 +36,7 @@ func TestMDNSBroadcast_TwoNodesDiscovery(t *testing.T) {
 	t.Logf("Using memberlist ports: Node1=%d, Node2=%d", port1, port2)
 
 	t.Run("mdns_with_broadcast_address", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() - disabled due to race conditions in hashicorp/mdns library
 		// Node 1 configuration - uses 0.0.0.0 for mDNS broadcast discovery
 		node1MemberlistConfig := config.MemberlistSettings{
 			BindAddress:      "0.0.0.0", // Bind to all interfaces

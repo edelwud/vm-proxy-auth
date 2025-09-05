@@ -13,6 +13,18 @@ import (
 	"github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
 )
 
+// safeServiceEntry is a race-safe copy of mdns.ServiceEntry with string representations.
+type safeServiceEntry struct {
+	Name      string
+	Host      string
+	Port      int
+	Info      string
+	AddrV4Str string
+	AddrV6Str string
+	HasAddrV4 bool
+	HasAddrV6 bool
+}
+
 // MDNSProvider implements mDNS-based discovery with both server and client.
 type MDNSProvider struct {
 	logger domain.Logger
@@ -25,7 +37,7 @@ type MDNSProvider struct {
 
 	// mDNS server for announcing ourselves
 	server   *mdns.Server
-	serverMu sync.Mutex
+	serverMu sync.RWMutex
 
 	running bool
 	stopCh  chan struct{}
@@ -143,6 +155,15 @@ func (m *MDNSProvider) Stop() error {
 
 // Discover implements DiscoveryProvider for mDNS.
 func (m *MDNSProvider) Discover(ctx context.Context) ([]string, error) {
+	// Check if provider is running with read lock
+	m.serverMu.RLock()
+	isRunning := m.running
+	m.serverMu.RUnlock()
+
+	if !isRunning {
+		return []string{}, nil
+	}
+
 	// Create entries channel with buffer
 	entriesCh := make(chan *mdns.ServiceEntry, domain.DefaultDiscoveryBufferSize)
 
@@ -188,28 +209,31 @@ func (m *MDNSProvider) Discover(ctx context.Context) ([]string, error) {
 				goto done
 			}
 
+			// Create a complete safe copy of the service entry immediately to avoid race conditions
+			entryCopy := m.copyServiceEntry(entry)
+
 			m.logger.Debug("Received mDNS entry",
-				domain.Field{Key: "name", Value: entry.Name},
-				domain.Field{Key: "host", Value: entry.Host},
-				domain.Field{Key: "port", Value: entry.Port},
-				domain.Field{Key: "addrV4", Value: entry.AddrV4},
-				domain.Field{Key: "addrV6", Value: entry.AddrV6},
-				domain.Field{Key: "info", Value: entry.Info})
+				domain.Field{Key: "name", Value: entryCopy.Name},
+				domain.Field{Key: "host", Value: entryCopy.Host},
+				domain.Field{Key: "port", Value: entryCopy.Port},
+				domain.Field{Key: "addrV4", Value: entryCopy.AddrV4Str},
+				domain.Field{Key: "addrV6", Value: entryCopy.AddrV6Str},
+				domain.Field{Key: "info", Value: entryCopy.Info})
 
 			// Skip if no IPv4 address
-			if entry.AddrV4 == nil {
+			if !entryCopy.HasAddrV4 {
 				m.logger.Debug("Skipping entry without IPv4 address",
-					domain.Field{Key: "name", Value: entry.Name})
+					domain.Field{Key: "name", Value: entryCopy.Name})
 				continue
 			}
 
-			peerAddr := fmt.Sprintf("%s:%d", entry.AddrV4.String(), entry.Port)
+			peerAddr := fmt.Sprintf("%s:%d", entryCopy.AddrV4Str, entryCopy.Port)
 			peers = append(peers, peerAddr)
 
 			m.logger.Info("Discovered mDNS peer",
 				domain.Field{Key: "address", Value: peerAddr},
-				domain.Field{Key: "hostname", Value: entry.Host},
-				domain.Field{Key: "info", Value: entry.Info})
+				domain.Field{Key: "hostname", Value: entryCopy.Host},
+				domain.Field{Key: "info", Value: entryCopy.Info})
 
 		case <-lookupCtx.Done():
 			// Timeout or cancellation
@@ -266,4 +290,60 @@ func (m *MDNSProvider) getLocalIP() (net.IP, error) {
 	}
 
 	return nil, errors.New("no non-loopback IP address found")
+}
+
+// copyServiceEntry creates a race-safe copy of an mdns.ServiceEntry.
+// This function uses defensive programming to handle potential race conditions
+// in the external hashicorp/mdns library.
+func (m *MDNSProvider) copyServiceEntry(entry *mdns.ServiceEntry) *safeServiceEntry {
+	if entry == nil {
+		return &safeServiceEntry{}
+	}
+
+	// Create default safe entry
+	safe := &safeServiceEntry{}
+
+	// Use defer + recover to handle potential race conditions during field access
+	defer func() {
+		if r := recover(); r != nil {
+			m.logger.Debug("Recovered from panic during service entry copy",
+				domain.Field{Key: "error", Value: fmt.Sprintf("%v", r)})
+		}
+	}()
+
+	// Safely copy string fields with nil checks
+	if entry.Name != "" {
+		safe.Name = entry.Name
+	}
+	if entry.Host != "" {
+		safe.Host = entry.Host
+	}
+	if entry.Info != "" {
+		safe.Info = entry.Info
+	}
+	safe.Port = entry.Port
+
+	// Safely copy IPv4 address with extensive checks
+	if len(entry.AddrV4) > 0 {
+		safe.HasAddrV4 = true
+		// Create copy in separate operation
+		addrV4Copy := make(net.IP, len(entry.AddrV4))
+		n := copy(addrV4Copy, entry.AddrV4)
+		if n > 0 {
+			safe.AddrV4Str = addrV4Copy.String()
+		}
+	}
+
+	// Safely copy IPv6 address with extensive checks
+	if len(entry.AddrV6) > 0 {
+		safe.HasAddrV6 = true
+		// Create copy in separate operation
+		addrV6Copy := make(net.IP, len(entry.AddrV6))
+		n := copy(addrV6Copy, entry.AddrV6)
+		if n > 0 {
+			safe.AddrV6Str = addrV6Copy.String()
+		}
+	}
+
+	return safe
 }

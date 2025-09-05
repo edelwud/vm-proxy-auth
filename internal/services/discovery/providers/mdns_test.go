@@ -100,7 +100,7 @@ func TestMDNSProvider_StartStop(t *testing.T) {
 		testPort, portErr := getFreePortForMDNS()
 		require.NoError(t, portErr)
 		testProvider := NewMDNSProvider("_test-service._tcp", "local.", "127.0.0.1", testPort, nil, logger)
-		
+
 		startErr := testProvider.Start(ctx)
 		require.NoError(t, startErr)
 
@@ -119,7 +119,7 @@ func TestMDNSProvider_StartStop(t *testing.T) {
 		testPort, portErr := getFreePortForMDNS()
 		require.NoError(t, portErr)
 		testProvider := NewMDNSProvider("_test-service._tcp", "local.", "127.0.0.1", testPort, nil, logger)
-		
+
 		// Should be safe to stop before start
 		stopErr := testProvider.Stop()
 		require.NoError(t, stopErr)
@@ -130,7 +130,7 @@ func TestMDNSProvider_StartStop(t *testing.T) {
 		testPort, portErr := getFreePortForMDNS()
 		require.NoError(t, portErr)
 		testProvider := NewMDNSProvider("_test-service._tcp", "local.", "127.0.0.1", testPort, nil, logger)
-		
+
 		startErr := testProvider.Start(ctx)
 		require.NoError(t, startErr)
 
