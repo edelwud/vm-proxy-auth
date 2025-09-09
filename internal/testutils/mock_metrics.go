@@ -12,6 +12,11 @@ import (
 // MockMetricsService implements domain.MetricsService for testing.
 type MockMetricsService struct{}
 
+// NewMockMetrics creates a new mock metrics service.
+func NewMockMetrics() *MockMetricsService {
+	return &MockMetricsService{}
+}
+
 // RecordRequest records a request metric.
 func (m *MockMetricsService) RecordRequest(context.Context, string, string, string, time.Duration, *domain.User) {
 }

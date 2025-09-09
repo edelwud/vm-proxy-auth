@@ -653,6 +653,35 @@ func (es *EnhancedService) GetHealthStats() map[string]health.BackendHealthStats
 	return nil
 }
 
+// IsHealthCheckerRunning returns true if the health checker is currently running.
+func (es *EnhancedService) IsHealthCheckerRunning() bool {
+	if hc, ok := es.healthChecker.(*health.Checker); ok {
+		return hc.IsRunning()
+	}
+	return false
+}
+
+// RestartHealthChecker restarts the health checker if it has stopped.
+func (es *EnhancedService) RestartHealthChecker(ctx context.Context) error {
+	es.mu.Lock()
+	defer es.mu.Unlock()
+
+	if es.closed {
+		return errors.New("service is closed")
+	}
+
+	if hc, ok := es.healthChecker.(*health.Checker); ok {
+		if hc.IsRunning() {
+			es.logger.Debug("Health checker is already running")
+			return nil
+		}
+
+		es.logger.Info("Restarting health checker")
+		return hc.StartMonitoring(ctx)
+	}
+	return errors.New("health checker not available")
+}
+
 // GetQueueStats returns queue statistics if queueing is enabled.
 func (es *EnhancedService) GetQueueStats() *queue.Stats {
 	if es.requestQueue != nil {
