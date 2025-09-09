@@ -46,7 +46,7 @@ func NewEnhancedService(
 	// Set defaults with fallback values
 	timeout := config.Reliability.Timeout
 	if timeout == 0 {
-		timeout = domain.DefaultProxyTimeoutSeconds * time.Second
+		timeout = proxy.DefaultProxyTimeoutSeconds * time.Second
 	}
 
 	// TODO: Implement retry logic using these values
@@ -64,7 +64,7 @@ func NewEnhancedService(
 	for i, upstreamConfig := range config.Upstreams {
 		weight := upstreamConfig.Weight
 		if weight <= 0 {
-			weight = domain.DefaultBackendWeight
+			weight = proxy.DefaultBackendWeight
 		}
 		backends[i] = domain.Backend{
 			URL:    upstreamConfig.URL,
@@ -238,7 +238,7 @@ func (es *EnhancedService) processQueuedRequest(
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(domain.DefaultQueueCheckInterval):
+		case <-time.After(proxy.DefaultQueueCheckInterval):
 			// Continue checking
 		}
 	}

@@ -3,10 +3,8 @@ package config
 import (
 	"errors"
 	"fmt"
-)
 
-const (
-	storageTypeRaft = "raft"
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
 // ValidateConfig performs comprehensive configuration validation.
@@ -83,19 +81,19 @@ func validateCrossModule(config *Config) error {
 	}
 
 	// Validate storage-specific configurations
-	switch config.Storage.Type {
-	case "redis":
+	switch domain.StateStorageType(config.Storage.Type) {
+	case domain.StateStorageTypeRedis:
 		if config.Storage.Redis.Address == "" {
 			return errors.New("redis address is required when storage type is redis")
 		}
-	case storageTypeRaft:
+	case domain.StateStorageTypeRaft:
 		if config.Storage.Raft.DataDir == "" {
 			return errors.New("raft data directory is required when storage type is raft")
 		}
 		if config.Storage.Raft.BindAddress == "" {
 			return errors.New("raft bind address is required when storage type is raft")
 		}
-	case "local":
+	case domain.StateStorageTypeLocal:
 		// Local storage doesn't need additional validation
 	default:
 		return fmt.Errorf("unsupported storage type: %s", config.Storage.Type)

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 	"time"
+
+	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
 // Config represents storage configuration.
@@ -60,17 +62,21 @@ type RaftConfig struct {
 
 // Validate validates storage configuration.
 func (c *Config) Validate() error {
-	validTypes := []string{"local", "redis", "raft"}
+	validTypes := []string{
+		string(domain.StateStorageTypeLocal),
+		string(domain.StateStorageTypeRedis),
+		string(domain.StateStorageTypeRaft),
+	}
 	if !slices.Contains(validTypes, c.Type) {
 		return fmt.Errorf("invalid storage type: %s (valid: %v)", c.Type, validTypes)
 	}
 
-	switch c.Type {
-	case "redis":
+	switch domain.StateStorageType(c.Type) {
+	case domain.StateStorageTypeRedis:
 		return c.Redis.Validate()
-	case "raft":
+	case domain.StateStorageTypeRaft:
 		return c.Raft.Validate()
-	case "local":
+	case domain.StateStorageTypeLocal:
 		// Local storage doesn't need validation
 		return nil
 	default:

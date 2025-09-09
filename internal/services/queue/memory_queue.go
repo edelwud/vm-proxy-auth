@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
@@ -213,8 +214,8 @@ func (qs Stats) IsHealthy() bool {
 	}
 
 	// Consider queue unhealthy if it's consistently near capacity
-	utilizationPercent := float64(qs.Size) / float64(qs.MaxSize) * domain.DefaultQueuePercentageMultiplier
-	return utilizationPercent < domain.DefaultQueueHealthyUtilizationThreshold
+	utilizationPercent := float64(qs.Size) / float64(qs.MaxSize) * proxy.DefaultQueuePercentageMultiplier
+	return utilizationPercent < proxy.DefaultQueueHealthyUtilizationThreshold
 }
 
 // UtilizationPercent returns the current queue utilization as a percentage.
@@ -222,5 +223,5 @@ func (qs Stats) UtilizationPercent() float64 {
 	if qs.MaxSize == 0 {
 		return 0
 	}
-	return float64(qs.Size) / float64(qs.MaxSize) * domain.DefaultQueuePercentageMultiplier
+	return float64(qs.Size) / float64(qs.MaxSize) * proxy.DefaultQueuePercentageMultiplier
 }

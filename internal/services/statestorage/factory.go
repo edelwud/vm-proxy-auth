@@ -64,11 +64,11 @@ func NewStateStorage(
 			BootstrapExpected:  raftConfig.BootstrapExpected,
 			HeartbeatTimeout:   1 * time.Second,
 			ElectionTimeout:    1 * time.Second,
-			LeaderLeaseTimeout: domain.DefaultLeaderLeaseTimeout,
-			CommitTimeout:      domain.DefaultCommitTimeout,
-			SnapshotRetention:  domain.DefaultSnapshotRetention,
-			SnapshotThreshold:  domain.DefaultSnapshotThreshold,
-			TrailingLogs:       domain.DefaultTrailingLogs,
+			LeaderLeaseTimeout: storage.DefaultLeaderLeaseTimeout,
+			CommitTimeout:      storage.DefaultCommitTimeout,
+			SnapshotRetention:  storage.DefaultSnapshotRetention,
+			SnapshotThreshold:  storage.DefaultSnapshotThreshold,
+			TrailingLogs:       storage.DefaultTrailingLogs,
 		}
 
 		logger.Info("Creating Raft state storage",

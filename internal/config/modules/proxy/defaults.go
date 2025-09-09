@@ -6,19 +6,26 @@ import (
 
 // Default proxy configuration values.
 const (
-	DefaultStrategy            = "round-robin"
-	DefaultHealthCheckInterval = 30 * time.Second
-	DefaultHealthCheckTimeout  = 10 * time.Second
-	DefaultHealthCheckEndpoint = "/health"
-	DefaultHealthyThreshold    = 2
-	DefaultUnhealthyThreshold  = 3
-	DefaultTimeout             = 30 * time.Second
-	DefaultRetries             = 3
-	DefaultBackoff             = 100 * time.Millisecond
-	DefaultQueueEnabled        = true
-	DefaultQueueMaxSize        = 1000
-	DefaultQueueTimeout        = 5 * time.Second
-	DefaultUpstreamWeight      = 1
+	DefaultStrategy                         = "round-robin"
+	DefaultHealthCheckInterval              = 30 * time.Second
+	DefaultHealthCheckTimeout               = 10 * time.Second
+	DefaultHealthCheckEndpoint              = "/health"
+	DefaultHealthyThreshold                 = 2
+	DefaultUnhealthyThreshold               = 3
+	DefaultTimeout                          = 30 * time.Second
+	DefaultRetries                          = 3
+	DefaultBackoff                          = 100 * time.Millisecond
+	DefaultQueueEnabled                     = true
+	DefaultQueueMaxSize                     = 1000
+	DefaultQueueTimeout                     = 5 * time.Second
+	DefaultUpstreamWeight                   = 1
+	DefaultBackendWeight                    = 1
+	DefaultProxyTimeoutSeconds              = 30
+	DefaultProxyMaxRetries                  = 3
+	DefaultQueueCheckInterval               = 100 * time.Millisecond
+	DefaultQueuePercentageMultiplier        = 100
+	DefaultQueueHealthyUtilizationThreshold = 90
+	DefaultQueueTimeoutSeconds              = 5
 )
 
 // GetDefaults returns default proxy configuration.

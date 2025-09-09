@@ -13,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/edelwud/vm-proxy-auth/internal/config"
+	serverconfig "github.com/edelwud/vm-proxy-auth/internal/config/modules/server"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/handlers"
 	"github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
@@ -192,7 +193,7 @@ func main() {
 	}
 
 	// Graceful shutdown
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), domain.DefaultShutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), serverconfig.DefaultShutdownTimeout)
 	defer cancel()
 
 	if shutdownErr := server.Shutdown(shutdownCtx); shutdownErr != nil {

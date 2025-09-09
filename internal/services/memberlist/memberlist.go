@@ -247,7 +247,7 @@ func (ms *Service) Join(joinNodes []string) error {
 	// Process existing cluster members for Raft integration
 	// Add slight delay to allow memberlist gossip to propagate
 	go func() {
-		time.Sleep(domain.DefaultMemberlistProcessDelay)
+		time.Sleep(cluster.DefaultMemberlistProcessDelay)
 		ms.processExistingMembers()
 	}()
 
@@ -402,7 +402,7 @@ func (ms *Service) processExistingMembers() {
 
 // monitorLeadership monitors Raft leadership changes and processes pending peers.
 func (ms *Service) monitorLeadership(ctx context.Context) {
-	ticker := time.NewTicker(domain.DefaultLeadershipCheckInterval)
+	ticker := time.NewTicker(cluster.DefaultLeadershipCheckInterval)
 	defer ticker.Stop()
 
 	ms.logger.Debug("Started leadership monitoring")

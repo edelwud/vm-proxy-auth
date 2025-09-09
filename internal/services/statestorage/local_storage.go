@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/storage"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
@@ -135,7 +136,7 @@ func (ls *LocalStorage) Watch(
 	ctx context.Context,
 	keyPrefix string,
 ) (<-chan domain.StateEvent, error) {
-	ch := make(chan domain.StateEvent, domain.DefaultWatchChannelBufferSize)
+	ch := make(chan domain.StateEvent, storage.DefaultWatchChannelBufferSize)
 
 	ls.watchMu.Lock()
 	ls.watches[keyPrefix] = append(ls.watches[keyPrefix], ch)

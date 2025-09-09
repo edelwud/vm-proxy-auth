@@ -11,6 +11,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/storage"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
@@ -55,24 +56,24 @@ func NewRedisStorage(
 	}
 
 	if config.KeyPrefix == "" {
-		config.KeyPrefix = domain.DefaultRedisKeyPrefix
+		config.KeyPrefix = storage.DefaultRedisKeyPrefix
 	}
 
 	// Set defaults
 	if config.ConnectTimeout == 0 {
-		config.ConnectTimeout = domain.DefaultRedisConnectTimeout
+		config.ConnectTimeout = storage.DefaultRedisConnectTimeout
 	}
 	if config.ReadTimeout == 0 {
-		config.ReadTimeout = domain.DefaultRedisReadTimeout
+		config.ReadTimeout = storage.DefaultRedisReadTimeout
 	}
 	if config.WriteTimeout == 0 {
-		config.WriteTimeout = domain.DefaultRedisWriteTimeout
+		config.WriteTimeout = storage.DefaultRedisWriteTimeout
 	}
 	if config.PoolSize == 0 {
-		config.PoolSize = domain.DefaultRedisPoolSize
+		config.PoolSize = storage.DefaultRedisPoolSize
 	}
 	if config.MinIdleConns == 0 {
-		config.MinIdleConns = domain.DefaultRedisMinIdleConns
+		config.MinIdleConns = storage.DefaultRedisMinIdleConns
 	}
 
 	// Create Redis client with optimized settings
@@ -81,7 +82,7 @@ func NewRedisStorage(
 		Password:        config.Password,
 		DB:              config.Database,
 		ConnMaxLifetime: time.Hour,
-		ConnMaxIdleTime: domain.DefaultRedisConnMaxIdleTime,
+		ConnMaxIdleTime: storage.DefaultRedisConnMaxIdleTime,
 		MaxRetries:      config.MaxRetries,
 		MinRetryBackoff: config.MinRetryBackoff,
 		MaxRetryBackoff: config.MaxRetryBackoff,
@@ -343,7 +344,7 @@ func (rs *RedisStorage) Watch(
 		return nil, err
 	}
 
-	ch := make(chan domain.StateEvent, domain.DefaultWatchChannelBufferSize)
+	ch := make(chan domain.StateEvent, storage.DefaultWatchChannelBufferSize)
 
 	rs.watchersMu.Lock()
 	rs.watchers[keyPrefix] = append(rs.watchers[keyPrefix], ch)
@@ -357,7 +358,7 @@ func (rs *RedisStorage) Watch(
 
 	rs.logger.Debug("Redis watcher registered",
 		domain.Field{Key: "key_prefix", Value: keyPrefix},
-		domain.Field{Key: "channel_buffer", Value: domain.DefaultWatchChannelBufferSize})
+		domain.Field{Key: "channel_buffer", Value: storage.DefaultWatchChannelBufferSize})
 
 	return ch, nil
 }
@@ -430,7 +431,7 @@ func (rs *RedisStorage) checkClosed() error {
 
 // startPubSubMonitoring initializes Redis pub/sub for distributed state events.
 func (rs *RedisStorage) startPubSubMonitoring() error {
-	rs.pubsub = rs.client.Subscribe(context.Background(), domain.DefaultRedisPubSubChannel)
+	rs.pubsub = rs.client.Subscribe(context.Background(), storage.DefaultRedisPubSubChannel)
 
 	// Verify subscription
 	_, err := rs.pubsub.Receive(context.Background())
@@ -463,7 +464,7 @@ func (rs *RedisStorage) processPubSubMessages() {
 		}
 
 		// Non-blocking receive
-		msg, err := rs.pubsub.ReceiveTimeout(context.Background(), domain.DefaultRedisReceiveTimeout)
+		msg, err := rs.pubsub.ReceiveTimeout(context.Background(), storage.DefaultRedisReceiveTimeout)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
 				continue // Normal timeout, keep checking
@@ -528,7 +529,7 @@ func (rs *RedisStorage) publishStateEvent(event domain.StateEvent) {
 	ctx, cancel := context.WithTimeout(context.Background(), rs.config.WriteTimeout)
 	defer cancel()
 
-	if publishErr := rs.client.Publish(ctx, domain.DefaultRedisPubSubChannel, eventJSON).Err(); publishErr != nil {
+	if publishErr := rs.client.Publish(ctx, storage.DefaultRedisPubSubChannel, eventJSON).Err(); publishErr != nil {
 		rs.logger.Error("Failed to publish state event",
 			domain.Field{Key: "event", Value: event},
 			domain.Field{Key: "error", Value: publishErr})

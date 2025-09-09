@@ -10,6 +10,10 @@ const (
 	DefaultUserGroupsClaim = "groups"
 	DefaultTokenTTL        = 1 * time.Hour
 	DefaultJwksTTL         = 15 * time.Minute
+	DefaultCacheTTL        = 5 * time.Minute
+	DefaultMaxRetries      = 3
+	DefaultRetryDelay      = time.Second
+	DefaultRetryBackoffMs  = 100
 )
 
 // GetDefaults returns default authentication configuration.
