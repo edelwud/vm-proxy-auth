@@ -245,7 +245,7 @@ func (hc *Checker) recordHealthCheck(backendURL string, isHealthy bool, duration
 }
 
 // StartMonitoring begins continuous health monitoring.
-func (hc *Checker) StartMonitoring(ctx context.Context) error {
+func (hc *Checker) StartMonitoring(_ context.Context) error {
 	// Skip monitoring if check interval is 0 or negative (disabled)
 	if hc.config.CheckInterval <= 0 {
 		hc.logger.Debug("Health monitoring disabled (CheckInterval<=0)")
@@ -265,7 +265,9 @@ func (hc *Checker) StartMonitoring(ctx context.Context) error {
 		domain.Field{Key: "check_interval", Value: hc.config.CheckInterval},
 		domain.Field{Key: "timeout", Value: hc.config.Timeout})
 
-	go hc.monitoringLoop(ctx)
+	// Use a background context for monitoring loop to avoid being cancelled
+	// by external contexts. The monitoring loop should only stop via Stop() method
+	go hc.monitoringLoop(context.Background())
 	return nil
 }
 
@@ -330,6 +332,13 @@ func (hc *Checker) performHealthChecks(ctx context.Context) {
 	}
 
 	wg.Wait()
+}
+
+// IsRunning returns true if the health checker is currently running.
+func (hc *Checker) IsRunning() bool {
+	hc.runningMu.RLock()
+	defer hc.runningMu.RUnlock()
+	return hc.running
 }
 
 // Stop stops health monitoring.
