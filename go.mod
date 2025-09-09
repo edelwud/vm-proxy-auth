@@ -5,9 +5,10 @@ go 1.24.4
 require (
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/hashicorp/go-hclog v1.6.3
+	github.com/hashicorp/mdns v1.0.6
 	github.com/hashicorp/memberlist v0.5.3
 	github.com/hashicorp/raft v1.7.3
-	github.com/hashicorp/raft-boltdb/v2 v2.3.0
+	github.com/hashicorp/raft-boltdb/v2 v2.3.1
 	github.com/prometheus/client_golang v1.22.0
 	github.com/prometheus/prometheus v0.300.1
 	github.com/redis/go-redis/v9 v9.12.1
@@ -36,7 +37,6 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.0 // indirect
 	github.com/hashicorp/golang-lru v0.6.0 // indirect
-	github.com/hashicorp/mdns v1.0.6 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/miekg/dns v1.1.62 // indirect
