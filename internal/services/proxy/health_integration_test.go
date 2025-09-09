@@ -11,9 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/edelwud/vm-proxy-auth/internal/domain"
-	"github.com/edelwud/vm-proxy-auth/internal/services/health"
-	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/proxy"
+	proxyService "github.com/edelwud/vm-proxy-auth/internal/services/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
@@ -80,30 +79,33 @@ func TestHealthCheckerLoadBalancerIntegration(t *testing.T) {
 	t.Cleanup(func() { backend2.Close() })
 
 	// Create enhanced service with fast health checking
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backend1.URL, Weight: 1},
 			{URL: backend2.URL, Weight: 1},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyRoundRobin,
+		Routing: proxy.RoutingConfig{
+			Strategy: "round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           50 * time.Millisecond, // Fast for testing
+				Timeout:            1 * time.Second,
+				Endpoint:           "/health",
+				HealthyThreshold:   1, // Quick recovery
+				UnhealthyThreshold: 1, // Quick detection
+			},
 		},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval:      50 * time.Millisecond, // Fast for testing
-			Timeout:            1 * time.Second,
-			HealthyThreshold:   1, // Quick recovery
-			UnhealthyThreshold: 1, // Quick detection
-			HealthEndpoint:     "/health",
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 1, // Don't retry on health integration test
+			Backoff: 100 * time.Millisecond,
 		},
-		Timeout:    5 * time.Second,
-		MaxRetries: 1, // Don't retry on health integration test
 	}
 
 	logger := testutils.NewMockLogger()
 	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	t.Cleanup(func() { service.Close() })
 
@@ -223,28 +225,32 @@ func TestHealthCheckerMaintenanceMode(t *testing.T) {
 	}))
 	t.Cleanup(func() { backend.Close() })
 
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backend.URL, Weight: 1},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyRoundRobin,
+		Routing: proxy.RoutingConfig{
+			Strategy: "round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           50 * time.Millisecond,
+				Timeout:            1 * time.Second,
+				Endpoint:           "/health",
+				HealthyThreshold:   1,
+				UnhealthyThreshold: 1,
+			},
 		},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval:      50 * time.Millisecond,
-			Timeout:            1 * time.Second,
-			HealthyThreshold:   1,
-			UnhealthyThreshold: 1,
-			HealthEndpoint:     "/health",
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 3,
+			Backoff: 100 * time.Millisecond,
 		},
-		Timeout: 5 * time.Second,
 	}
 
 	logger := testutils.NewMockLogger()
 	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	t.Cleanup(func() { service.Close() })
 
@@ -338,29 +344,33 @@ func TestHealthCheckerWithWeightedLoadBalancer(t *testing.T) {
 	}))
 	t.Cleanup(func() { backend2.Close() })
 
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backend1.URL, Weight: 3}, // Higher weight
 			{URL: backend2.URL, Weight: 1}, // Lower weight
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyWeighted,
+		Routing: proxy.RoutingConfig{
+			Strategy: "weighted-round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           50 * time.Millisecond,
+				Timeout:            1 * time.Second,
+				Endpoint:           "/health",
+				HealthyThreshold:   1,
+				UnhealthyThreshold: 1,
+			},
 		},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval:      50 * time.Millisecond,
-			Timeout:            1 * time.Second,
-			HealthyThreshold:   1,
-			UnhealthyThreshold: 1,
-			HealthEndpoint:     "/health",
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 3,
+			Backoff: 100 * time.Millisecond,
 		},
-		Timeout: 5 * time.Second,
 	}
 
 	logger := testutils.NewMockLogger()
 	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	t.Cleanup(func() { service.Close() })
 

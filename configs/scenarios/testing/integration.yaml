@@ -1,0 +1,79 @@
+# Testing - Integration Tests
+# Configuration optimized for integration testing
+
+metadata:
+  nodeId: "vm-proxy-auth-test"
+  role: "gateway"
+  environment: "testing"
+  region: "test"
+
+logging:
+  level: "debug"
+  format: "json"
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+server:
+  address: "0.0.0.0:8080"
+  timeouts:
+    read: "10s"
+    write: "10s"
+    idle: "30s"
+
+proxy:
+  upstreams:
+    - url: "http://test-backend:8428"
+      weight: 1
+  
+  routing:
+    strategy: "round-robin"
+    healthCheck:
+      interval: "5s"
+      timeout: "2s"
+      endpoint: "/health"
+      healthyThreshold: 1
+      unhealthyThreshold: 2
+    
+  reliability:
+    timeout: "10s"
+    retries: 1
+    backoff: "50ms"
+    queue:
+      enabled: true
+      maxSize: 100
+      timeout: "2s"
+
+auth:
+  jwt:
+    algorithm: "HS256"
+    secret: "test-secret-key-for-integration-tests"
+    validation:
+      audience: false
+      issuer: false
+    claims:
+      userGroups: "groups"
+    cache:
+      tokenTTL: "5m"
+      jwksTTL: "1m"
+
+tenants:
+  filter:
+    strategy: "orConditions"
+    labels:
+      account: "vm_account_id"
+      project: "vm_project_id"
+      useProjectId: false
+  mappings:
+    - groups: ["test-admin"]
+      vmTenants:
+        - account: "0"
+      permissions: ["read", "write"]
+    - groups: ["test-user"]
+      vmTenants:
+        - account: "1000"
+      permissions: ["read"]
+
+storage:
+  type: "local"

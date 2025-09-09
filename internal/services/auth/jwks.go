@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/server"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
@@ -43,7 +44,7 @@ type JWKSFetcher struct {
 func NewJWKSFetcher(jwksURL string, cacheTTL time.Duration) *JWKSFetcher {
 	return &JWKSFetcher{
 		client: &http.Client{
-			Timeout: domain.DefaultTimeout,
+			Timeout: server.DefaultTimeout,
 		},
 		jwksURL:  jwksURL,
 		cache:    make(map[string]*rsa.PublicKey),

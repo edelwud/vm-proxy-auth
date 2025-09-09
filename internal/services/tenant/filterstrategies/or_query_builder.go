@@ -8,7 +8,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/tenant"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
@@ -36,7 +36,7 @@ func NewORQueryBuilder(logger domain.Logger) *ORQueryBuilder {
 func (b *ORQueryBuilder) BuildSecureQuery(
 	originalQuery string,
 	tenants []domain.VMTenant,
-	tenantCfg *config.TenantFilterSettings,
+	tenantCfg *tenant.FilterConfig,
 ) (string, error) {
 	if len(tenants) == 0 {
 		return "", domain.ErrNoVMTenantsForFiltering
@@ -72,7 +72,7 @@ func (b *ORQueryBuilder) BuildSecureQuery(
 func (b *ORQueryBuilder) createSecureORExpression(
 	originalExpr parser.Expr,
 	tenants []domain.VMTenant,
-	tenantCfg *config.TenantFilterSettings,
+	tenantCfg *tenant.FilterConfig,
 ) parser.Expr {
 	// Group tenants for optimization
 	tenantGroups := b.optimizeGroups(tenants, tenantCfg)
@@ -116,7 +116,7 @@ type Group struct {
 // If a tenant has project_id=".*", it grants access to all projects in that account.
 func (b *ORQueryBuilder) optimizeGroups(
 	tenants []domain.VMTenant,
-	_ *config.TenantFilterSettings,
+	_ *tenant.FilterConfig,
 ) []Group {
 	accountGroups := make(map[string][]string)
 	accountWildcards := make(map[string]bool)
@@ -199,14 +199,14 @@ func (b *ORQueryBuilder) cloneExpression(expr parser.Expr) parser.Expr {
 func (b *ORQueryBuilder) injectTenantToExpression(
 	expr parser.Expr,
 	group Group,
-	tenantCfg *config.TenantFilterSettings,
+	tenantCfg *tenant.FilterConfig,
 ) parser.Expr {
-	tenantLabel := tenantCfg.Labels.AccountLabel
+	tenantLabel := tenantCfg.Labels.Account
 	if tenantLabel == "" {
 		tenantLabel = defaultTenantLabel
 	}
 
-	projectLabel := tenantCfg.Labels.ProjectLabel
+	projectLabel := tenantCfg.Labels.Project
 	if projectLabel == "" {
 		projectLabel = defaultProjectLabel
 	}

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/cluster"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/services/discovery"
 	"github.com/edelwud/vm-proxy-auth/internal/services/memberlist"
@@ -79,18 +79,18 @@ func getFreePorts(t *testing.T) (int, int) {
 
 func createStaticNode1Config(
 	port1, port2 int,
-) (config.MemberlistSettings, config.DiscoverySettings) {
+) (cluster.MemberlistConfig, cluster.DiscoveryConfig) {
 	memberlistConfig := createMemberlistConfig(
 		port1,
 		"auto-test-node-1",
 		"127.0.0.1",
 		"integration-test",
 	)
-	discoveryConfig := config.DiscoverySettings{
+	discoveryConfig := cluster.DiscoveryConfig{
 		Enabled:   true,
 		Providers: []string{"static"},
 		Interval:  200 * time.Millisecond,
-		Static: config.StaticDiscoveryConfig{
+		Static: &cluster.StaticConfig{
 			Peers: []string{fmt.Sprintf("127.0.0.1:%d", port2)},
 		},
 	}
@@ -99,18 +99,18 @@ func createStaticNode1Config(
 
 func createStaticNode2Config(
 	port1, port2 int,
-) (config.MemberlistSettings, config.DiscoverySettings) {
+) (cluster.MemberlistConfig, cluster.DiscoveryConfig) {
 	memberlistConfig := createMemberlistConfig(
 		port2,
 		"auto-test-node-2",
 		"127.0.0.1",
 		"integration-test",
 	)
-	discoveryConfig := config.DiscoverySettings{
+	discoveryConfig := cluster.DiscoveryConfig{
 		Enabled:   true,
 		Providers: []string{"static"},
 		Interval:  200 * time.Millisecond,
-		Static: config.StaticDiscoveryConfig{
+		Static: &cluster.StaticConfig{
 			Peers: []string{fmt.Sprintf("127.0.0.1:%d", port1)},
 		},
 	}
@@ -120,7 +120,7 @@ func createStaticNode2Config(
 func createMDNSNode1Config(
 	port1 int,
 	serviceName string,
-) (config.MemberlistSettings, config.DiscoverySettings) {
+) (cluster.MemberlistConfig, cluster.DiscoveryConfig) {
 	memberlistConfig := createMemberlistConfig(port1, "mdns-auto-node-1", "0.0.0.0", "mdns-test")
 	discoveryConfig := createMDNSDiscoveryConfig(
 		serviceName,
@@ -133,7 +133,7 @@ func createMDNSNode1Config(
 func createMDNSNode2Config(
 	port2 int,
 	serviceName string,
-) (config.MemberlistSettings, config.DiscoverySettings) {
+) (cluster.MemberlistConfig, cluster.DiscoveryConfig) {
 	memberlistConfig := createMemberlistConfig(port2, "mdns-auto-node-2", "0.0.0.0", "mdns-test")
 	discoveryConfig := createMDNSDiscoveryConfig(
 		serviceName,
@@ -146,16 +146,19 @@ func createMDNSNode2Config(
 func createMemberlistConfig(
 	port int,
 	nodeName, bindAddress, environment string,
-) config.MemberlistSettings {
-	return config.MemberlistSettings{
-		BindAddress:      bindAddress,
-		BindPort:         port,
-		AdvertiseAddress: "",
-		AdvertisePort:    port,
-		GossipInterval:   100 * time.Millisecond,
-		GossipNodes:      3,
-		ProbeInterval:    1 * time.Second,
-		ProbeTimeout:     500 * time.Millisecond,
+) cluster.MemberlistConfig {
+	return cluster.MemberlistConfig{
+		BindAddress:      fmt.Sprintf("%s:%d", bindAddress, port),
+		AdvertiseAddress: fmt.Sprintf("%s:%d", bindAddress, port),
+		Peers:            cluster.PeersConfig{},
+		Gossip: cluster.GossipConfig{
+			Interval: 100 * time.Millisecond,
+			Nodes:    3,
+		},
+		Probe: cluster.ProbeConfig{
+			Interval: 1 * time.Second,
+			Timeout:  500 * time.Millisecond,
+		},
 		Metadata: map[string]string{
 			"node_name":   nodeName,
 			"role":        "peer",
@@ -168,12 +171,13 @@ func createMDNSDiscoveryConfig(
 	serviceName string,
 	port int,
 	hostname string,
-) config.DiscoverySettings {
-	return config.DiscoverySettings{
+) cluster.DiscoveryConfig {
+	return cluster.DiscoveryConfig{
 		Enabled:   true,
 		Providers: []string{"mdns"},
 		Interval:  200 * time.Millisecond,
-		MDNS: config.MDNSDiscoveryConfig{
+		MDNS: cluster.MDNSConfig{
+			Enabled:     true,
 			ServiceName: serviceName,
 			Domain:      "local.",
 			Hostname:    hostname,
@@ -186,10 +190,10 @@ func runStaticDiscoveryTest(
 	ctx context.Context,
 	t *testing.T,
 	logger domain.Logger,
-	node1MemberlistConfig config.MemberlistSettings,
-	node1DiscoveryConfig config.DiscoverySettings,
-	node2MemberlistConfig config.MemberlistSettings,
-	node2DiscoveryConfig config.DiscoverySettings,
+	node1MemberlistConfig cluster.MemberlistConfig,
+	node1DiscoveryConfig cluster.DiscoveryConfig,
+	node2MemberlistConfig cluster.MemberlistConfig,
+	node2DiscoveryConfig cluster.DiscoveryConfig,
 ) {
 	node1, node2 := createAndStartNodes(
 		ctx,
@@ -212,10 +216,10 @@ func runMDNSDiscoveryTest(
 	ctx context.Context,
 	t *testing.T,
 	logger domain.Logger,
-	node1MemberlistConfig config.MemberlistSettings,
-	node1DiscoveryConfig config.DiscoverySettings,
-	node2MemberlistConfig config.MemberlistSettings,
-	node2DiscoveryConfig config.DiscoverySettings,
+	node1MemberlistConfig cluster.MemberlistConfig,
+	node1DiscoveryConfig cluster.DiscoveryConfig,
+	node2MemberlistConfig cluster.MemberlistConfig,
+	node2DiscoveryConfig cluster.DiscoveryConfig,
 ) {
 	node1, node2 := createAndStartMDNSNodes(
 		ctx,
@@ -234,8 +238,8 @@ func runMDNSDiscoveryTest(
 }
 
 func createAndStartNodes(ctx context.Context, t *testing.T, logger domain.Logger,
-	node1MemberlistConfig config.MemberlistSettings, node1DiscoveryConfig config.DiscoverySettings,
-	node2MemberlistConfig config.MemberlistSettings, node2DiscoveryConfig config.DiscoverySettings,
+	node1MemberlistConfig cluster.MemberlistConfig, node1DiscoveryConfig cluster.DiscoveryConfig,
+	node2MemberlistConfig cluster.MemberlistConfig, node2DiscoveryConfig cluster.DiscoveryConfig,
 	logPrefix string,
 ) (*memberlist.Service, *memberlist.Service) {
 	// Create nodes
@@ -279,10 +283,10 @@ func createAndStartMDNSNodes(
 	ctx context.Context,
 	t *testing.T,
 	logger domain.Logger,
-	node1MemberlistConfig config.MemberlistSettings,
-	node1DiscoveryConfig config.DiscoverySettings,
-	node2MemberlistConfig config.MemberlistSettings,
-	node2DiscoveryConfig config.DiscoverySettings,
+	node1MemberlistConfig cluster.MemberlistConfig,
+	node1DiscoveryConfig cluster.DiscoveryConfig,
+	node2MemberlistConfig cluster.MemberlistConfig,
+	node2DiscoveryConfig cluster.DiscoveryConfig,
 ) (*memberlist.Service, *memberlist.Service) {
 	// Create nodes
 	node1, err := memberlist.NewMemberlistService(

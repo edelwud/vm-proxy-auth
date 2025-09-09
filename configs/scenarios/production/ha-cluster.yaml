@@ -1,0 +1,135 @@
+# Production - High Availability Cluster
+# Enterprise setup with Raft consensus and memberlist clustering
+
+metadata:
+  nodeId: "vm-proxy-auth-node-1"  # Override via VM_PROXY_AUTH_METADATA_NODE_ID
+  role: "gateway"
+  environment: "production"
+  region: "us-east-1"
+
+logging:
+  level: "info"
+  format: "json"
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+server:
+  address: "0.0.0.0:8080"
+  timeouts:
+    read: "30s"
+    write: "30s"
+    idle: "60s"
+
+proxy:
+  upstreams:
+    - url: "http://vm-backend-1:8428"
+      weight: 2
+    - url: "http://vm-backend-2:8428"
+      weight: 2
+    - url: "http://vm-backend-3:8428"
+      weight: 1
+  
+  routing:
+    strategy: "weighted-round-robin"
+    healthCheck:
+      interval: "20s"
+      timeout: "8s"
+      endpoint: "/health"
+      healthyThreshold: 2
+      unhealthyThreshold: 2
+    
+  reliability:
+    timeout: "45s"
+    retries: 4
+    backoff: "150ms"
+    queue:
+      enabled: true
+      maxSize: 2000
+      timeout: "8s"
+
+auth:
+  jwt:
+    algorithm: "RS256"
+    jwksUrl: "https://auth.company.com/.well-known/jwks.json"
+    validation:
+      audience: true
+      issuer: true
+      requiredIssuer: "https://auth.company.com"
+      requiredAudience: ["vm-proxy-auth", "monitoring"]
+    claims:
+      userGroups: "groups"
+    cache:
+      tokenTTL: "1h"
+      jwksTTL: "15m"
+
+tenants:
+  filter:
+    strategy: "orConditions"
+    labels:
+      account: "vm_account_id"
+      project: "vm_project_id"
+      useProjectId: true
+  mappings:
+    - groups: ["platform-admins"]
+      vmTenants:
+        - account: "0"
+          project: "platform"
+      permissions: ["read", "write"]
+    - groups: ["team-backend"]
+      vmTenants:
+        - account: "1000"
+          project: "backend"
+      permissions: ["read", "write"]
+    - groups: ["team-frontend"]
+      vmTenants:
+        - account: "2000"
+          project: "frontend"
+      permissions: ["read", "write"]
+    - groups: ["readonly-users"]
+      vmTenants:
+        - account: "1000"
+          project: "backend"
+        - account: "2000"
+          project: "frontend"
+      permissions: ["read"]
+
+storage:
+  type: "raft"
+  raft:
+    bindAddress: "0.0.0.0:9000"    # Override via VM_PROXY_AUTH_STORAGE_RAFT_BIND_ADDRESS
+    dataDir: "/data/raft"
+    bootstrapExpected: 3
+
+cluster:
+  memberlist:
+    bindAddress: "0.0.0.0:7946"    # Override via VM_PROXY_AUTH_CLUSTER_MEMBERLIST_BIND_ADDRESS
+    advertiseAddress: ""           # Override via VM_PROXY_AUTH_CLUSTER_MEMBERLIST_ADVERTISE_ADDRESS
+    peers:
+      join: []                     # Override via VM_PROXY_AUTH_CLUSTER_MEMBERLIST_PEERS_JOIN
+      encryption: ""               # Override via VM_PROXY_AUTH_CLUSTER_MEMBERLIST_PEERS_ENCRYPTION
+    gossip:
+      interval: "200ms"
+      nodes: 3
+    probe:
+      interval: "1s"
+      timeout: "500ms"
+    metadata:
+      datacenter: "dc1"
+      version: "1.0.0"
+    
+  discovery:
+    interval: "30s"
+    
+    static:
+      peers:
+        - "vm-proxy-auth-seed-1:7946"
+        - "vm-proxy-auth-seed-2:7946"
+        - "vm-proxy-auth-seed-3:7946"
+    
+    mdns:
+      enabled: false  # Disabled in production - use static discovery
+      serviceName: "_vm-proxy-auth._tcp"
+      domain: "local."
+      port: 7946

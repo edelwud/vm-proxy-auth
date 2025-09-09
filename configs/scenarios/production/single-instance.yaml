@@ -1,0 +1,108 @@
+# Production - Single Instance
+# Production-ready single instance with Redis state storage and RS256 JWT
+
+metadata:
+  nodeId: "vm-proxy-auth-prod"
+  role: "gateway"
+  environment: "production"
+  region: "us-east-1"
+
+logging:
+  level: "info"
+  format: "json"
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+server:
+  address: "0.0.0.0:8080"
+  timeouts:
+    read: "30s"
+    write: "30s"
+    idle: "60s"
+
+proxy:
+  upstreams:
+    - url: "http://vm-backend-1:8428"
+      weight: 3
+    - url: "http://vm-backend-2:8428"
+      weight: 2
+  
+  routing:
+    strategy: "weighted-round-robin"
+    healthCheck:
+      interval: "30s"
+      timeout: "10s"
+      endpoint: "/health"
+      healthyThreshold: 2
+      unhealthyThreshold: 3
+    
+  reliability:
+    timeout: "60s"
+    retries: 5
+    backoff: "200ms"
+    queue:
+      enabled: true
+      maxSize: 5000
+      timeout: "10s"
+
+auth:
+  jwt:
+    algorithm: "RS256"
+    jwksUrl: "https://auth.company.com/.well-known/jwks.json"
+    validation:
+      audience: true
+      issuer: true
+      requiredIssuer: "https://auth.company.com"
+      requiredAudience: ["vm-proxy-auth"]
+    claims:
+      userGroups: "groups"
+    cache:
+      tokenTTL: "1h"
+      jwksTTL: "15m"
+
+tenants:
+  filter:
+    strategy: "orConditions"
+    labels:
+      account: "vm_account_id"
+      project: "vm_project_id"
+      useProjectId: true
+  mappings:
+    - groups: ["admin", "platform-ops"]
+      vmTenants:
+        - account: "1000"
+          project: "platform"
+      permissions: ["read", "write"]
+    - groups: ["team-alpha"]
+      vmTenants:
+        - account: "2000"
+          project: "alpha"
+      permissions: ["read", "write"]
+    - groups: ["readonly-users"]
+      vmTenants:
+        - account: "1000"
+          project: "platform"
+        - account: "2000"
+          project: "alpha"
+      permissions: ["read"]
+
+storage:
+  type: "redis"
+  redis:
+    address: "redis:6379"
+    database: 0
+    keyPrefix: "vm-proxy-auth:"
+    pool:
+      size: 20
+      minIdle: 10
+    timeouts:
+      connect: "5s"
+      read: "3s"
+      write: "3s"
+    retry:
+      maxAttempts: 3
+      backoff:
+        min: "100ms"
+        max: "1s"

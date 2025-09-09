@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/cluster"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/services/discovery"
 	"github.com/edelwud/vm-proxy-auth/internal/services/memberlist"
@@ -32,15 +32,18 @@ func TestMemberlistDiscoveryIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		// Node 1 memberlist configuration
-		memberConfig1 := config.MemberlistSettings{
-			BindAddress:      "127.0.0.1",
-			BindPort:         port1,
-			AdvertiseAddress: "127.0.0.1",
-			AdvertisePort:    port1,
-			GossipInterval:   200 * time.Millisecond,
-			GossipNodes:      3,
-			ProbeInterval:    1 * time.Second,
-			ProbeTimeout:     500 * time.Millisecond,
+		memberConfig1 := cluster.MemberlistConfig{
+			BindAddress:      fmt.Sprintf("127.0.0.1:%d", port1),
+			AdvertiseAddress: fmt.Sprintf("127.0.0.1:%d", port1),
+			Peers:            cluster.PeersConfig{},
+			Gossip: cluster.GossipConfig{
+				Interval: 200 * time.Millisecond,
+				Nodes:    3,
+			},
+			Probe: cluster.ProbeConfig{
+				Interval: 1 * time.Second,
+				Timeout:  500 * time.Millisecond,
+			},
 			Metadata: map[string]string{
 				"node_name":   "test-node-1",
 				"role":        "peer",
@@ -49,15 +52,18 @@ func TestMemberlistDiscoveryIntegration(t *testing.T) {
 		}
 
 		// Node 2 memberlist configuration
-		memberConfig2 := config.MemberlistSettings{
-			BindAddress:      "127.0.0.1",
-			BindPort:         port2,
-			AdvertiseAddress: "127.0.0.1",
-			AdvertisePort:    port2,
-			GossipInterval:   200 * time.Millisecond,
-			GossipNodes:      3,
-			ProbeInterval:    1 * time.Second,
-			ProbeTimeout:     500 * time.Millisecond,
+		memberConfig2 := cluster.MemberlistConfig{
+			BindAddress:      fmt.Sprintf("127.0.0.1:%d", port2),
+			AdvertiseAddress: fmt.Sprintf("127.0.0.1:%d", port2),
+			Peers:            cluster.PeersConfig{},
+			Gossip: cluster.GossipConfig{
+				Interval: 200 * time.Millisecond,
+				Nodes:    3,
+			},
+			Probe: cluster.ProbeConfig{
+				Interval: 1 * time.Second,
+				Timeout:  500 * time.Millisecond,
+			},
 			Metadata: map[string]string{
 				"node_name":   "test-node-2",
 				"role":        "peer",
@@ -66,20 +72,20 @@ func TestMemberlistDiscoveryIntegration(t *testing.T) {
 		}
 
 		// Discovery configurations
-		discoveryConfig1 := config.DiscoverySettings{
+		discoveryConfig1 := cluster.DiscoveryConfig{
 			Enabled:   true,
 			Providers: []string{"static"},
 			Interval:  200 * time.Millisecond,
-			Static: config.StaticDiscoveryConfig{
+			Static: &cluster.StaticConfig{
 				Peers: []string{fmt.Sprintf("127.0.0.1:%d", port2)},
 			},
 		}
 
-		discoveryConfig2 := config.DiscoverySettings{
+		discoveryConfig2 := cluster.DiscoveryConfig{
 			Enabled:   true,
 			Providers: []string{"static"},
 			Interval:  200 * time.Millisecond,
-			Static: config.StaticDiscoveryConfig{
+			Static: &cluster.StaticConfig{
 				Peers: []string{fmt.Sprintf("127.0.0.1:%d", port1)},
 			},
 		}

@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vm-proxy-auth
+  namespace: monitoring
+  labels:
+    app: vm-proxy-auth
+    version: v1.0.0
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vm-proxy-auth
+  template:
+    metadata:
+      labels:
+        app: vm-proxy-auth
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: vm-proxy-auth
+      containers:
+      - name: vm-proxy-auth
+        image: vm-proxy-auth:v1.0.0
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: memberlist
+          containerPort: 7946
+          protocol: TCP
+        - name: raft
+          containerPort: 9000
+          protocol: TCP
+        env:
+        - name: VM_PROXY_AUTH_METADATA_NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: VM_PROXY_AUTH_METADATA_REGION
+          value: "us-east-1"
+        - name: VM_PROXY_AUTH_CLUSTER_MEMBERLIST_BIND_ADDRESS
+          value: "0.0.0.0:7946"
+        - name: VM_PROXY_AUTH_CLUSTER_MEMBERLIST_ADVERTISE_ADDRESS
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: VM_PROXY_AUTH_STORAGE_RAFT_BIND_ADDRESS
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: VM_PROXY_AUTH_AUTH_JWT_JWKS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: vm-proxy-auth-config
+              key: jwks-url
+        - name: VM_PROXY_AUTH_CLUSTER_MEMBERLIST_PEERS_ENCRYPTION
+          valueFrom:
+            secretKeyRef:
+              name: vm-proxy-auth-secrets
+              key: memberlist-encryption-key
+        volumeMounts:
+        - name: config
+          mountPath: /etc/vm-proxy-auth
+          readOnly: true
+        - name: data
+          mountPath: /data
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: config
+        configMap:
+          name: vm-proxy-auth-config
+      - name: data
+        persistentVolumeClaim:
+          claimName: vm-proxy-auth-data
+      securityContext:
+        fsGroup: 1000
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - vm-proxy-auth
+              topologyKey: kubernetes.io/hostname

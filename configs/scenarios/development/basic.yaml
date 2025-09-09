@@ -1,0 +1,79 @@
+# Development - Basic Configuration
+# Simple development setup with local storage and HS256 JWT
+
+metadata:
+  nodeId: "vm-proxy-auth-dev"
+  role: "gateway"
+  environment: "development"
+  region: "local"
+
+logging:
+  level: "debug"
+  format: "pretty"
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+server:
+  address: "0.0.0.0:8080"
+  timeouts:
+    read: "30s"
+    write: "30s"
+    idle: "60s"
+
+proxy:
+  upstreams:
+    - url: "http://localhost:8428"
+      weight: 1
+  
+  routing:
+    strategy: "round-robin"
+    healthCheck:
+      interval: "30s"
+      timeout: "10s"
+      endpoint: "/health"
+      healthyThreshold: 2
+      unhealthyThreshold: 3
+    
+  reliability:
+    timeout: "30s"
+    retries: 3
+    backoff: "100ms"
+    queue:
+      enabled: true
+      maxSize: 500
+      timeout: "5s"
+
+auth:
+  jwt:
+    algorithm: "HS256"
+    secret: "dev-secret-key-at-least-32-characters-long-for-hs256"
+    validation:
+      audience: false
+      issuer: false
+    claims:
+      userGroups: "groups"
+    cache:
+      tokenTTL: "1h"
+      jwksTTL: "5m"
+
+tenants:
+  filter:
+    strategy: "orConditions"
+    labels:
+      account: "vm_account_id"
+      project: "vm_project_id"
+      useProjectId: false
+  mappings:
+    - groups: ["admin"]
+      vmTenants:
+        - account: "0"
+      permissions: ["read", "write"]
+    - groups: ["developer"]
+      vmTenants:
+        - account: "1000"
+      permissions: ["read"]
+
+storage:
+  type: "local"

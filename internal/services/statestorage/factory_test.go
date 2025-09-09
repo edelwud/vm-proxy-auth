@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/storage"
 	"github.com/edelwud/vm-proxy-auth/internal/services/statestorage"
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
@@ -27,18 +27,26 @@ func TestNewStateStorage(t *testing.T) {
 
 	t.Run("redis_storage_valid_config", func(t *testing.T) {
 		t.Parallel()
-		redisConfig := config.RedisSettings{
-			Address:         "localhost:6379",
-			Database:        0,
-			KeyPrefix:       "test:",
-			ConnectTimeout:  5 * time.Second,
-			ReadTimeout:     3 * time.Second,
-			WriteTimeout:    3 * time.Second,
-			PoolSize:        10,
-			MinIdleConns:    1,
-			MaxRetries:      3,
-			MinRetryBackoff: 100 * time.Millisecond,
-			MaxRetryBackoff: 1 * time.Second,
+		redisConfig := storage.RedisConfig{
+			Address:   "localhost:6379",
+			Database:  0,
+			KeyPrefix: "test:",
+			Pool: storage.RedisPoolConfig{
+				Size:    10,
+				MinIdle: 1,
+			},
+			Timeouts: storage.RedisTimeoutsConfig{
+				Connect: 5 * time.Second,
+				Read:    3 * time.Second,
+				Write:   3 * time.Second,
+			},
+			Retry: storage.RedisRetryConfig{
+				MaxAttempts: 3,
+				Backoff: storage.BackoffConfig{
+					Min: 100 * time.Millisecond,
+					Max: 1 * time.Second,
+				},
+			},
 		}
 
 		// This will fail connection but config validation should pass

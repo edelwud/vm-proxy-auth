@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
 
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/storage"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	infralogger "github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
 )
@@ -149,8 +150,8 @@ func createRaftTransport(config RaftStorageConfig) (*raft.NetworkTransport, erro
 	transport, err := raft.NewTCPTransport(
 		config.BindAddress,
 		addr,
-		domain.DefaultRaftMaxConnections,
-		domain.DefaultRaftApplyTimeout,
+		storage.DefaultRaftMaxConnections,
+		storage.DefaultRaftApplyTimeout,
 		os.Stderr,
 	)
 	if err != nil {
@@ -300,7 +301,7 @@ func (rs *RaftStorage) bootstrapWithStaticPeers() error {
 		if peer != rs.config.NodeID+":"+rs.config.BindAddress {
 			// Parse peer format: "nodeID:address"
 			parts := strings.Split(peer, ":")
-			if len(parts) >= domain.DefaultRaftMinPeerParts {
+			if len(parts) >= storage.DefaultRaftMinPeerParts {
 				nodeID := parts[0]
 				address := strings.Join(parts[1:], ":")
 				servers = append(servers, raft.Server{
@@ -432,7 +433,7 @@ func (rs *RaftStorage) Set(_ context.Context, key string, value []byte, ttl time
 		return fmt.Errorf("failed to marshal command: %w", err)
 	}
 
-	future := rs.raft.Apply(data, domain.DefaultRaftApplyTimeout)
+	future := rs.raft.Apply(data, storage.DefaultRaftApplyTimeout)
 	if applyErr := future.Error(); applyErr != nil {
 		return fmt.Errorf("failed to apply raft command: %w", applyErr)
 	}
@@ -471,7 +472,7 @@ func (rs *RaftStorage) Delete(_ context.Context, key string) error {
 		return fmt.Errorf("failed to marshal command: %w", err)
 	}
 
-	future := rs.raft.Apply(data, domain.DefaultRaftApplyTimeout)
+	future := rs.raft.Apply(data, storage.DefaultRaftApplyTimeout)
 	if applyErr := future.Error(); applyErr != nil {
 		return fmt.Errorf("failed to apply raft command: %w", applyErr)
 	}
@@ -529,7 +530,7 @@ func (rs *RaftStorage) SetMultiple(_ context.Context, items map[string][]byte, t
 		return fmt.Errorf("failed to marshal bulk command: %w", err)
 	}
 
-	future := rs.raft.Apply(data, domain.DefaultRaftApplyTimeoutBulk)
+	future := rs.raft.Apply(data, storage.DefaultRaftApplyTimeoutBulk)
 	if applyErr := future.Error(); applyErr != nil {
 		return fmt.Errorf("failed to apply bulk raft command: %w", applyErr)
 	}
@@ -547,7 +548,7 @@ func (rs *RaftStorage) Watch(ctx context.Context, keyPrefix string) (<-chan doma
 		return nil, domain.ErrStorageClosed
 	}
 
-	ch := make(chan domain.StateEvent, domain.DefaultRaftWatchChannelSize)
+	ch := make(chan domain.StateEvent, storage.DefaultRaftWatchChannelSize)
 
 	rs.mu.Lock()
 	rs.watchChans[keyPrefix] = append(rs.watchChans[keyPrefix], ch)

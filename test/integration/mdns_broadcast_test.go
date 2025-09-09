@@ -2,13 +2,14 @@ package integration_test
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/cluster"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/services/discovery"
 	memberlistsvc "github.com/edelwud/vm-proxy-auth/internal/services/memberlist"
@@ -38,15 +39,18 @@ func TestMDNSBroadcast_TwoNodesDiscovery(t *testing.T) {
 	t.Run("mdns_with_broadcast_address", func(t *testing.T) {
 		// t.Parallel() - disabled due to race conditions in hashicorp/mdns library
 		// Node 1 configuration - uses 0.0.0.0 for mDNS broadcast discovery
-		node1MemberlistConfig := config.MemberlistSettings{
-			BindAddress:      "0.0.0.0", // Bind to all interfaces
-			BindPort:         port1,
-			AdvertiseAddress: "127.0.0.1", // Advertise specific address
-			AdvertisePort:    port1,
-			GossipInterval:   100 * time.Millisecond,
-			GossipNodes:      3,
-			ProbeInterval:    1 * time.Second,
-			ProbeTimeout:     500 * time.Millisecond,
+		node1MemberlistConfig := cluster.MemberlistConfig{
+			BindAddress:      "0.0.0.0:" + strconv.Itoa(port1),   // Bind to all interfaces
+			AdvertiseAddress: "127.0.0.1:" + strconv.Itoa(port1), // Advertise specific address
+			Peers:            cluster.PeersConfig{},
+			Gossip: cluster.GossipConfig{
+				Interval: 100 * time.Millisecond,
+				Nodes:    3,
+			},
+			Probe: cluster.ProbeConfig{
+				Interval: 1 * time.Second,
+				Timeout:  500 * time.Millisecond,
+			},
 			Metadata: map[string]string{
 				"node_name":   "broadcast-node-1",
 				"role":        "peer",
@@ -54,11 +58,12 @@ func TestMDNSBroadcast_TwoNodesDiscovery(t *testing.T) {
 			},
 		}
 
-		node1DiscoveryConfig := config.DiscoverySettings{
+		node1DiscoveryConfig := cluster.DiscoveryConfig{
 			Enabled:   true,
 			Providers: []string{"mdns"},
 			Interval:  150 * time.Millisecond,
-			MDNS: config.MDNSDiscoveryConfig{
+			MDNS: cluster.MDNSConfig{
+				Enabled:     true,
 				ServiceName: "_broadcast-vm-proxy._tcp",
 				Domain:      "local.",
 				Hostname:    "0.0.0.0", // Use broadcast address for mDNS
@@ -67,15 +72,18 @@ func TestMDNSBroadcast_TwoNodesDiscovery(t *testing.T) {
 		}
 
 		// Node 2 configuration - also uses 0.0.0.0 for mDNS broadcast discovery
-		node2MemberlistConfig := config.MemberlistSettings{
-			BindAddress:      "0.0.0.0", // Bind to all interfaces
-			BindPort:         port2,
-			AdvertiseAddress: "127.0.0.1", // Advertise specific address
-			AdvertisePort:    port2,
-			GossipInterval:   100 * time.Millisecond,
-			GossipNodes:      3,
-			ProbeInterval:    1 * time.Second,
-			ProbeTimeout:     500 * time.Millisecond,
+		node2MemberlistConfig := cluster.MemberlistConfig{
+			BindAddress:      "0.0.0.0:" + strconv.Itoa(port2),   // Bind to all interfaces
+			AdvertiseAddress: "127.0.0.1:" + strconv.Itoa(port2), // Advertise specific address
+			Peers:            cluster.PeersConfig{},
+			Gossip: cluster.GossipConfig{
+				Interval: 100 * time.Millisecond,
+				Nodes:    3,
+			},
+			Probe: cluster.ProbeConfig{
+				Interval: 1 * time.Second,
+				Timeout:  500 * time.Millisecond,
+			},
 			Metadata: map[string]string{
 				"node_name":   "broadcast-node-2",
 				"role":        "peer",
@@ -83,11 +91,12 @@ func TestMDNSBroadcast_TwoNodesDiscovery(t *testing.T) {
 			},
 		}
 
-		node2DiscoveryConfig := config.DiscoverySettings{
+		node2DiscoveryConfig := cluster.DiscoveryConfig{
 			Enabled:   true,
 			Providers: []string{"mdns"},
 			Interval:  150 * time.Millisecond,
-			MDNS: config.MDNSDiscoveryConfig{
+			MDNS: cluster.MDNSConfig{
+				Enabled:     true,
 				ServiceName: "_broadcast-vm-proxy._tcp", // Same service name
 				Domain:      "local.",
 				Hostname:    "0.0.0.0", // Use broadcast address for mDNS

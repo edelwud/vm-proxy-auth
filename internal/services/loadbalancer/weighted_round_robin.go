@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
@@ -30,16 +31,28 @@ func NewWeightedRoundRobinBalancer(backends []domain.Backend, logger domain.Logg
 	for i, backend := range backends {
 		weight := backend.Weight
 		if weight <= 0 {
-			weight = domain.DefaultBackendWeight // Default weight
+			weight = proxy.DefaultBackendWeight // Default weight
 		}
 		weights[i] = weight
-		if totalWeight > (1<<31-1)-int32(weight) { //nolint:gosec,G115 // Check for int32 overflow
-			logger.Error("Total weight too large for int32",
-				domain.Field{Key: "total_weight", Value: totalWeight},
-				domain.Field{Key: "adding_weight", Value: weight})
-			weight = domain.DefaultBackendWeight // Fallback to prevent overflow
+		// Check for potential int32 overflow before conversion
+		if weight > (1<<31 - 1) {
+			logger.Error("Weight too large for int32",
+				domain.Field{Key: "weight", Value: weight})
+			weight = proxy.DefaultBackendWeight // Fallback to prevent overflow
 		}
-		totalWeight += int32(weight) //nolint:gosec,G115 // already checked for overflow
+
+		// Safe conversion after validation
+		weightInt32 := int32(weight) // #nosec G115 -- weight validated above
+
+		// Check for total weight overflow
+		if totalWeight > (1<<31-1)-weightInt32 {
+			logger.Error("Total weight would overflow int32",
+				domain.Field{Key: "total_weight", Value: totalWeight},
+				domain.Field{Key: "adding_weight", Value: weightInt32})
+			weightInt32 = int32(proxy.DefaultBackendWeight)
+		}
+
+		totalWeight += weightInt32
 	}
 
 	return &WeightedRoundRobinBalancer{
@@ -108,23 +121,32 @@ func (wrr *WeightedRoundRobinBalancer) selectByWeight(healthyIndices []int) int 
 
 	// Calculate total weight of healthy backends
 	for _, idx := range healthyIndices {
-		weight := int32(wrr.weights[idx])          //nolint:gosec,G115 // overflow check
+		// Safe conversion with validation
+		if wrr.weights[idx] > (1<<31 - 1) {
+			continue // Skip invalid weight
+		}
+		weightValue := wrr.weights[idx]
+		weight := int32(weightValue)               // #nosec G115 -- weight validated above
 		if totalHealthyWeight > (1<<31-1)-weight { // Check for overflow
 			wrr.logger.Error("Total healthy weight overflow prevented",
 				domain.Field{Key: "total_weight", Value: totalHealthyWeight})
-			weight = domain.DefaultBackendWeight // Fallback to prevent overflow
+			weight = int32(proxy.DefaultBackendWeight) // Fallback to prevent overflow
 		}
 		totalHealthyWeight += weight
 	}
 
 	// Find the backend with highest current weight after incrementing
 	for _, idx := range healthyIndices {
-		// Increase current weight by static weight
-		weight := int32(wrr.weights[idx])               //nolint:gosec,G115 // overflow check
+		// Increase current weight by static weight with safe conversion
+		if wrr.weights[idx] > (1<<31 - 1) {
+			continue // Skip invalid weight
+		}
+		weightValue := wrr.weights[idx]
+		weight := int32(weightValue)                    // #nosec G115 -- weight validated above
 		if wrr.currentWeights[idx] > (1<<31-1)-weight { // Check for overflow
 			wrr.logger.Error("Current weight overflow prevented",
 				domain.Field{Key: "current_weight", Value: wrr.currentWeights[idx]})
-			weight = domain.DefaultBackendWeight // Fallback to prevent overflow
+			weight = proxy.DefaultBackendWeight // Fallback to prevent overflow
 		}
 		wrr.currentWeights[idx] += weight
 
@@ -146,7 +168,7 @@ func (wrr *WeightedRoundRobinBalancer) selectByWeight(healthyIndices []int) int 
 func (wrr *WeightedRoundRobinBalancer) ReportResult(backend *domain.Backend, err error, statusCode int) {
 	// Weighted round-robin balancer doesn't track individual results,
 	// but we log for debugging purposes
-	backendWeight := domain.DefaultBackendWeight
+	backendWeight := proxy.DefaultBackendWeight
 	for i, b := range wrr.backends {
 		if b.URL == backend.URL {
 			backendWeight = wrr.weights[i]

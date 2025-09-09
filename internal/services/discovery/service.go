@@ -9,7 +9,7 @@ import (
 
 	"github.com/hashicorp/memberlist"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/cluster"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
@@ -35,7 +35,7 @@ type Service struct {
 		TryDelayedBootstrap(discoveredPeers []string) error
 	}
 
-	config  config.DiscoverySettings
+	config  cluster.DiscoveryConfig
 	stopCh  chan struct{}
 	wg      sync.WaitGroup
 	running bool
@@ -43,7 +43,7 @@ type Service struct {
 }
 
 // NewService creates a new discovery service.
-func NewService(cfg config.DiscoverySettings, logger domain.Logger) *Service {
+func NewService(cfg cluster.DiscoveryConfig, logger domain.Logger) *Service {
 	return &Service{
 		logger:  logger.With(domain.Field{Key: "component", Value: "discovery"}),
 		factory: NewFactory(logger),

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/tenant"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 
 	"github.com/edelwud/vm-proxy-auth/internal/services/tenant/filterstrategies"
@@ -14,7 +14,7 @@ import (
 
 // Service implements domain.TenantService using secure tenant filtering.
 type Service struct {
-	tenantConfig   config.TenantFilterSettings
+	tenantConfig   tenant.FilterConfig
 	logger         domain.Logger
 	orQueryBuilder *filterstrategies.ORQueryBuilder
 	metrics        domain.MetricsService
@@ -22,12 +22,12 @@ type Service struct {
 
 // NewService creates a new tenant service.
 func NewService(
-	tenantCfg *config.TenantFilterSettings,
+	tenantCfg tenant.FilterConfig,
 	logger domain.Logger,
 	metrics domain.MetricsService,
 ) domain.TenantService {
 	return &Service{
-		tenantConfig: *tenantCfg,
+		tenantConfig: tenantCfg,
 		logger:       logger.With(domain.Field{Key: "component", Value: "tenant"}),
 		orQueryBuilder: filterstrategies.NewORQueryBuilder(
 			logger.With(domain.Field{Key: "component", Value: "tenant.or_query"}),

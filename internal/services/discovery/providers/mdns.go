@@ -9,6 +9,7 @@ import (
 
 	"github.com/hashicorp/mdns"
 
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/cluster"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
 )
@@ -165,10 +166,10 @@ func (m *MDNSProvider) Discover(ctx context.Context) ([]string, error) {
 	}
 
 	// Create entries channel with buffer
-	entriesCh := make(chan *mdns.ServiceEntry, domain.DefaultDiscoveryBufferSize)
+	entriesCh := make(chan *mdns.ServiceEntry, cluster.DefaultDiscoveryBufferSize)
 
 	// Create lookup context with timeout
-	lookupCtx, cancel := context.WithTimeout(ctx, domain.DefaultMDNSLookupTimeout)
+	lookupCtx, cancel := context.WithTimeout(ctx, cluster.DefaultMDNSLookupTimeout)
 	defer cancel()
 
 	// Start mDNS lookup in goroutine with IPv6 disabled and custom logger
@@ -181,7 +182,7 @@ func (m *MDNSProvider) Discover(ctx context.Context) ([]string, error) {
 		params := &mdns.QueryParam{
 			Service:     m.serviceName,
 			Domain:      m.domainName,
-			Timeout:     domain.DefaultMDNSLookupTimeout,
+			Timeout:     cluster.DefaultMDNSLookupTimeout,
 			Entries:     entriesCh,
 			DisableIPv6: true, // Disable IPv6 to prevent binding errors
 			Logger:      hclogAdapter.StandardLogger(nil),

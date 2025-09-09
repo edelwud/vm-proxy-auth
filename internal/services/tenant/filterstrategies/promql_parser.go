@@ -6,7 +6,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/tenant"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
@@ -26,7 +26,7 @@ func NewPromQLTenantInjector(logger domain.Logger) *PromQLTenantInjector {
 func (p *PromQLTenantInjector) InjectTenantLabels(
 	query string,
 	vmTenants []domain.VMTenant,
-	tenantCfg *config.TenantFilterSettings,
+	tenantCfg *tenant.FilterConfig,
 ) (string, error) {
 	p.logger.Debug("Starting production PromQL tenant injection",
 		domain.Field{Key: "original_query", Value: query},
@@ -74,15 +74,15 @@ func (p *PromQLTenantInjector) InjectTenantLabels(
 func (p *PromQLTenantInjector) injectTenantLabelsToVectorSelector(
 	vs *parser.VectorSelector,
 	vmTenants []domain.VMTenant,
-	tenantCfg *config.TenantFilterSettings,
+	tenantCfg *tenant.FilterConfig,
 ) {
 	// Check if tenant labels already exist
-	tenantLabelName := tenantCfg.Labels.AccountLabel
+	tenantLabelName := tenantCfg.Labels.Account
 	if tenantLabelName == "" {
 		tenantLabelName = "vm_account_id"
 	}
 
-	projectLabelName := tenantCfg.Labels.ProjectLabel
+	projectLabelName := tenantCfg.Labels.Project
 	if projectLabelName == "" {
 		projectLabelName = "vm_project_id"
 	}

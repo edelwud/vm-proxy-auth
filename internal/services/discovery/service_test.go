@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/cluster"
 	"github.com/edelwud/vm-proxy-auth/internal/services/discovery"
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
@@ -15,11 +15,11 @@ import (
 func TestDiscoveryService_StaticProvider(t *testing.T) {
 	logger := testutils.NewMockLogger()
 
-	cfg := config.DiscoverySettings{
+	cfg := cluster.DiscoveryConfig{
 		Enabled:   true,
-		Providers: []string{"static"},
 		Interval:  1 * time.Second,
-		Static: config.StaticDiscoveryConfig{
+		Providers: []string{"static"},
+		Static: &cluster.StaticConfig{
 			Peers: []string{"127.0.0.1:7946", "127.0.0.1:7947"},
 		},
 	}
@@ -52,7 +52,7 @@ func TestDiscoveryService_StaticProvider(t *testing.T) {
 func TestDiscoveryService_Disabled(t *testing.T) {
 	logger := testutils.NewMockLogger()
 
-	cfg := config.DiscoverySettings{
+	cfg := cluster.DiscoveryConfig{
 		Enabled: false,
 	}
 
@@ -72,7 +72,7 @@ func TestDiscoveryService_Disabled(t *testing.T) {
 func TestDiscoveryService_NoProviders(t *testing.T) {
 	logger := testutils.NewMockLogger()
 
-	cfg := config.DiscoverySettings{
+	cfg := cluster.DiscoveryConfig{
 		Enabled:   true,
 		Providers: []string{}, // No providers
 		Interval:  1 * time.Second,

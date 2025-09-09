@@ -13,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/edelwud/vm-proxy-auth/internal/config"
+	serverconfig "github.com/edelwud/vm-proxy-auth/internal/config/modules/server"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/handlers"
 	"github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
@@ -49,8 +50,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Load configuration
-	cfg, err := config.LoadViperConfig(*configPath)
+	// Load configuration using new modular system
+	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
 		// For configuration load errors, we output to stderr before logger initialization
 		// This is necessary as we can't initialize logger without configuration
@@ -78,43 +79,28 @@ func main() {
 		domain.Field{Key: "git_commit", Value: gitCommit},
 		domain.Field{Key: "config_path", Value: *configPath},
 		domain.Field{Key: "server_address", Value: cfg.Server.Address},
-		domain.Field{Key: "backends_count", Value: len(cfg.Backends)},
+		domain.Field{Key: "backends_count", Value: len(cfg.Proxy.Upstreams)},
 		domain.Field{Key: "log_level", Value: cfg.Logging.Level},
+		domain.Field{Key: "node_id", Value: cfg.Metadata.NodeID},
+		domain.Field{Key: "environment", Value: cfg.Metadata.Environment},
 	)
 
 	// Initialize all services using clean architecture
 	metricsService := metrics.NewService(appLogger)
-	authService, err := auth.NewService(cfg.Auth, cfg.TenantMapping, appLogger, metricsService)
+
+	// Use new modular configuration directly
+	authService, err := auth.NewService(cfg.Auth, cfg.Tenants.Mappings, appLogger, metricsService)
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to initialize auth service")
 	}
-	tenantService := tenant.NewService(&cfg.TenantFilter, appLogger, metricsService)
+
+	tenantService := tenant.NewService(cfg.Tenants.Filter, appLogger, metricsService)
 	accessService := access.NewService(appLogger)
 
-	// Initialize enhanced proxy service
-	if validationErr := cfg.ValidateBackends(); validationErr != nil {
-		appLogger.Error("Invalid backend configuration",
-			domain.Field{Key: "error", Value: validationErr.Error()})
-		os.Exit(1)
-	}
-
-	// Convert configuration to proxy service config
-	enhancedConfig, err := cfg.ToProxyServiceConfig()
-	if err != nil {
-		appLogger.Error("Failed to convert proxy configuration",
-			domain.Field{Key: "error", Value: err.Error()})
-		os.Exit(1)
-	}
-
 	// Create state storage based on configuration
-	stateStorageConfig, storageType, err := cfg.ToStateStorageConfig()
-	if err != nil {
-		appLogger.Error("Invalid state storage configuration",
-			domain.Field{Key: "error", Value: err.Error()})
-		os.Exit(1)
-	}
+	stateStorageConfig, storageType := createStateStorageConfig(cfg)
 
-	stateStorage, err := statestorage.NewStateStorage(stateStorageConfig, storageType, "gateway-node", appLogger)
+	stateStorage, err := statestorage.NewStateStorage(stateStorageConfig, storageType, cfg.Metadata.NodeID, appLogger)
 	if err != nil {
 		appLogger.Error("Failed to create state storage",
 			domain.Field{Key: "type", Value: storageType},
@@ -125,11 +111,11 @@ func main() {
 	ctx := context.Background()
 
 	// Initialize memberlist for Raft cluster if using Raft storage
-	if storageType == string(domain.StateStorageTypeRaft) {
+	if cfg.IsClusterEnabled() {
 		initializeMemberlist(ctx, cfg, stateStorage, appLogger)
 	}
 
-	proxyService, err := proxy.NewEnhancedService(enhancedConfig, appLogger, metricsService, stateStorage)
+	proxyService, err := proxy.NewEnhancedService(cfg.Proxy, appLogger, metricsService, stateStorage)
 	if err != nil {
 		appLogger.Error("Failed to create enhanced proxy service",
 			domain.Field{Key: "error", Value: err.Error()})
@@ -144,8 +130,8 @@ func main() {
 	}
 
 	appLogger.Info("Proxy service started",
-		domain.Field{Key: "backends", Value: len(enhancedConfig.Backends)},
-		domain.Field{Key: "strategy", Value: string(enhancedConfig.LoadBalancing.Strategy)})
+		domain.Field{Key: "backends", Value: len(cfg.Proxy.Upstreams)},
+		domain.Field{Key: "strategy", Value: cfg.Proxy.Routing.Strategy})
 
 	// Initialize main gateway handler
 	gatewayHandler := handlers.NewGatewayHandler(
@@ -177,9 +163,9 @@ func main() {
 	server := &http.Server{
 		Addr:         cfg.Server.Address,
 		Handler:      mux,
-		ReadTimeout:  cfg.Server.Timeouts.ReadTimeout,
-		WriteTimeout: cfg.Server.Timeouts.WriteTimeout,
-		IdleTimeout:  cfg.Server.Timeouts.IdleTimeout,
+		ReadTimeout:  cfg.Server.Timeouts.Read,
+		WriteTimeout: cfg.Server.Timeouts.Write,
+		IdleTimeout:  cfg.Server.Timeouts.Idle,
 	}
 
 	// Channel to signal server startup errors
@@ -207,7 +193,7 @@ func main() {
 	}
 
 	// Graceful shutdown
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), domain.DefaultShutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), serverconfig.DefaultShutdownTimeout)
 	defer cancel()
 
 	if shutdownErr := server.Shutdown(shutdownCtx); shutdownErr != nil {
@@ -238,10 +224,22 @@ func showValidationSuccess() {
 	fmt.Println("Configuration is valid")
 }
 
+// createStateStorageConfig creates state storage configuration from new config structure.
+func createStateStorageConfig(cfg *config.Config) (interface{}, string) {
+	switch cfg.Storage.Type {
+	case "redis":
+		return cfg.Storage.Redis, "redis"
+	case "raft":
+		return cfg.Storage.Raft, "raft"
+	default:
+		return nil, "local"
+	}
+}
+
 // initializeMemberlist initializes memberlist service for Raft cluster.
 func initializeMemberlist(
 	ctx context.Context,
-	cfg *config.ViperConfig,
+	cfg *config.Config,
 	stateStorage domain.StateStorage,
 	logger domain.Logger,
 ) {
@@ -256,20 +254,20 @@ func initializeMemberlist(
 
 		// Create node metadata for this instance BEFORE creating memberlist
 		// Convert bind address to advertise address for peer communication
-		raftAdvertiseAddr, addrErr := netutils.ConvertBindToAdvertiseAddress(cfg.StateStorage.Raft.BindAddress)
+		raftAdvertiseAddr, addrErr := netutils.ConvertBindToAdvertiseAddress(cfg.Storage.Raft.BindAddress)
 		if addrErr != nil {
 			logger.Error("Failed to convert Raft bind address to advertise address",
-				domain.Field{Key: "bind_address", Value: cfg.StateStorage.Raft.BindAddress},
+				domain.Field{Key: "bind_address", Value: cfg.Storage.Raft.BindAddress},
 				domain.Field{Key: "error", Value: addrErr.Error()})
 			os.Exit(1)
 		}
 
 		var metaErr error
 		nodeMetadata, metaErr = memberlist.CreateNodeMetadata(
-			cfg.StateStorage.Raft.NodeID,
+			cfg.Metadata.NodeID,
 			cfg.Server.Address,
 			raftAdvertiseAddr,
-			cfg.Memberlist.Metadata,
+			cfg.Cluster.Memberlist.Metadata,
 		)
 		if metaErr != nil {
 			logger.Error("Failed to create node metadata",
@@ -285,7 +283,12 @@ func initializeMemberlist(
 	}
 
 	// Create memberlist service with metadata and Raft manager
-	mlService, mlErr := memberlist.NewMemberlistServiceWithMetadata(cfg.Memberlist, logger, nodeMetadata, raftStorage)
+	mlService, mlErr := memberlist.NewMemberlistServiceWithMetadata(
+		cfg.Cluster.Memberlist,
+		logger,
+		nodeMetadata,
+		raftStorage,
+	)
 	if mlErr != nil {
 		logger.Error("Failed to create memberlist service",
 			domain.Field{Key: "error", Value: mlErr.Error()})
@@ -293,8 +296,8 @@ func initializeMemberlist(
 	}
 
 	// Create discovery service if enabled
-	if cfg.Discovery.Enabled {
-		discoveryService := discovery.NewService(cfg.Discovery, logger)
+	if cfg.Cluster.Discovery.Enabled {
+		discoveryService := discovery.NewService(cfg.Cluster.Discovery, logger)
 		mlService.SetDiscoveryService(discoveryService)
 
 		// Connect discovery service to Raft manager for delayed bootstrap
@@ -304,7 +307,7 @@ func initializeMemberlist(
 		}
 
 		logger.Info("Discovery service configured",
-			domain.Field{Key: "providers", Value: cfg.Discovery.Providers})
+			domain.Field{Key: "providers", Value: cfg.Cluster.Discovery.Providers})
 	}
 
 	// Start memberlist (this will also start discovery if configured)
@@ -315,13 +318,13 @@ func initializeMemberlist(
 	}
 
 	// Join cluster if nodes are explicitly configured (fallback)
-	if len(cfg.Memberlist.JoinNodes) > 0 {
+	if len(cfg.Cluster.Memberlist.Peers.Join) > 0 {
 		logger.Info("Using manual join nodes as fallback",
-			domain.Field{Key: "join_nodes", Value: cfg.Memberlist.JoinNodes})
-		if joinErr := mlService.Join(cfg.Memberlist.JoinNodes); joinErr != nil {
+			domain.Field{Key: "join_nodes", Value: cfg.Cluster.Memberlist.Peers.Join})
+		if joinErr := mlService.Join(cfg.Cluster.Memberlist.Peers.Join); joinErr != nil {
 			logger.Warn("Failed to join memberlist cluster",
 				domain.Field{Key: "error", Value: joinErr.Error()},
-				domain.Field{Key: "join_nodes", Value: cfg.Memberlist.JoinNodes})
+				domain.Field{Key: "join_nodes", Value: cfg.Cluster.Memberlist.Peers.Join})
 		}
 	}
 

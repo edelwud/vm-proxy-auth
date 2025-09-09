@@ -7,16 +7,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/cluster"
 	memberlistpkg "github.com/edelwud/vm-proxy-auth/internal/services/memberlist"
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
 func TestNewRaftDelegate(t *testing.T) {
 	logger := testutils.NewMockLogger()
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 	}
 
 	// Create memberlist service using constructor
@@ -31,9 +30,8 @@ func TestNewRaftDelegate(t *testing.T) {
 
 func TestRaftDelegate_SetRaftManager(t *testing.T) {
 	logger := testutils.NewMockLogger()
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 	}
 
 	service, err := memberlistpkg.NewMemberlistService(config, logger)
@@ -52,9 +50,8 @@ func TestRaftDelegate_SetRaftManager(t *testing.T) {
 
 func TestRaftDelegate_NodeMeta(t *testing.T) {
 	logger := testutils.NewMockLogger()
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 	}
 
 	service, err := memberlistpkg.NewMemberlistService(config, logger)
@@ -95,9 +92,8 @@ func TestRaftDelegate_NodeMeta(t *testing.T) {
 
 func TestRaftDelegate_LocalState(t *testing.T) {
 	logger := testutils.NewMockLogger()
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 	}
 
 	service, err := memberlistpkg.NewMemberlistService(config, logger)
@@ -138,9 +134,8 @@ func TestRaftDelegate_LocalState(t *testing.T) {
 
 func TestRaftDelegate_MergeRemoteState(t *testing.T) {
 	logger := testutils.NewMockLogger()
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 	}
 
 	service, err := memberlistpkg.NewMemberlistService(config, logger)
@@ -176,9 +171,8 @@ func TestRaftDelegate_MergeRemoteState(t *testing.T) {
 
 func TestRaftDelegate_NotifyEvents(t *testing.T) {
 	logger := testutils.NewMockLogger()
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 	}
 
 	service, err := memberlistpkg.NewMemberlistService(config, logger)
@@ -229,9 +223,8 @@ func TestRaftDelegate_NotifyEvents(t *testing.T) {
 
 func TestRaftDelegate_NotifyEventsWithoutRaftManager(t *testing.T) {
 	logger := testutils.NewMockLogger()
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 	}
 
 	service, err := memberlistpkg.NewMemberlistService(config, logger)
@@ -259,9 +252,8 @@ func TestRaftDelegate_NotifyEventsWithoutRaftManager(t *testing.T) {
 
 func TestRaftDelegate_Broadcasts(t *testing.T) {
 	logger := testutils.NewMockLogger()
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 	}
 
 	service, err := memberlistpkg.NewMemberlistService(config, logger)
@@ -308,9 +300,8 @@ func TestRaftDelegate_Broadcasts(t *testing.T) {
 
 func TestRaftDelegate_NotifyMsg(t *testing.T) {
 	logger := testutils.NewMockLogger()
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 	}
 
 	service, err := memberlistpkg.NewMemberlistService(config, logger)

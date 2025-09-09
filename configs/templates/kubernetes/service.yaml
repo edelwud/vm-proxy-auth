@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vm-proxy-auth
+  namespace: monitoring
+  labels:
+    app: vm-proxy-auth
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: http
+    protocol: TCP
+    name: http
+  - port: 7946
+    targetPort: memberlist
+    protocol: TCP
+    name: memberlist
+  selector:
+    app: vm-proxy-auth
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vm-proxy-auth-headless
+  namespace: monitoring
+  labels:
+    app: vm-proxy-auth
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 7946
+    targetPort: memberlist
+    protocol: TCP
+    name: memberlist
+  - port: 9000
+    targetPort: raft
+    protocol: TCP
+    name: raft
+  selector:
+    app: vm-proxy-auth
