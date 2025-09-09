@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/cluster"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/services/discovery/providers"
 )
@@ -22,7 +22,7 @@ func NewFactory(logger domain.Logger) *Factory {
 }
 
 // CreateProviders creates discovery providers based on configuration.
-func (f *Factory) CreateProviders(cfg config.DiscoverySettings) ([]domain.DiscoveryProvider, error) {
+func (f *Factory) CreateProviders(cfg cluster.DiscoveryConfig) ([]domain.DiscoveryProvider, error) {
 	var discoveryProviders []domain.DiscoveryProvider
 
 	for _, providerType := range cfg.Providers {
@@ -46,7 +46,7 @@ func (f *Factory) CreateProviders(cfg config.DiscoverySettings) ([]domain.Discov
 }
 
 // createProvider creates a single discovery provider.
-func (f *Factory) createProvider(providerType string, cfg config.DiscoverySettings) (domain.DiscoveryProvider, error) {
+func (f *Factory) createProvider(providerType string, cfg cluster.DiscoveryConfig) (domain.DiscoveryProvider, error) {
 	switch providerType {
 	case "static":
 		return f.createStaticProvider(cfg)
@@ -58,7 +58,7 @@ func (f *Factory) createProvider(providerType string, cfg config.DiscoverySettin
 }
 
 // createStaticProvider creates a static discovery provider.
-func (f *Factory) createStaticProvider(cfg config.DiscoverySettings) (domain.DiscoveryProvider, error) {
+func (f *Factory) createStaticProvider(cfg cluster.DiscoveryConfig) (domain.DiscoveryProvider, error) {
 	if len(cfg.Static.Peers) == 0 {
 		f.logger.Debug("No static peers configured, skipping static provider")
 		return nil, errors.New("no static peers configured")
@@ -68,7 +68,7 @@ func (f *Factory) createStaticProvider(cfg config.DiscoverySettings) (domain.Dis
 }
 
 // createMDNSProvider creates an mDNS discovery provider.
-func (f *Factory) createMDNSProvider(cfg config.DiscoverySettings) (domain.DiscoveryProvider, error) {
+func (f *Factory) createMDNSProvider(cfg cluster.DiscoveryConfig) (domain.DiscoveryProvider, error) {
 	return providers.NewMDNSProvider(
 		cfg.MDNS.ServiceName,
 		cfg.MDNS.Domain,

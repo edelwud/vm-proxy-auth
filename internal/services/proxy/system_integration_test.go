@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
-	"github.com/edelwud/vm-proxy-auth/internal/services/health"
-	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
+	proxyService "github.com/edelwud/vm-proxy-auth/internal/services/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
@@ -145,37 +145,39 @@ func TestCompleteSystemIntegration(t *testing.T) {
 	t.Cleanup(func() { backend3.Close() })
 
 	// Create comprehensive enhanced service configuration
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backend1.URL, Weight: 3}, // Primary backend
 			{URL: backend2.URL, Weight: 2}, // Secondary backend
 			{URL: backend3.URL, Weight: 1}, // Tertiary backend
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyWeighted,
+		Routing: proxy.RoutingConfig{
+			Strategy: "weighted-round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           100 * time.Millisecond, // Fast for testing
+				Timeout:            1 * time.Second,
+				Endpoint:           "/health",
+				HealthyThreshold:   2,
+				UnhealthyThreshold: 2,
+			},
 		},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval:      100 * time.Millisecond, // Fast for testing
-			Timeout:            1 * time.Second,
-			HealthyThreshold:   2,
-			UnhealthyThreshold: 2,
-			HealthEndpoint:     "/health",
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 30 * time.Second,
+			Retries: 3,
+			Backoff: 100 * time.Millisecond,
+			Queue: proxy.QueueConfig{
+				Enabled: true,
+				MaxSize: 100,
+				Timeout: 1 * time.Second,
+			},
 		},
-		Queue: proxy.QueueConfig{
-			MaxSize: 100,
-			Timeout: 1 * time.Second,
-		},
-		Timeout:        30 * time.Second,
-		MaxRetries:     3,
-		RetryBackoff:   50 * time.Millisecond,
-		EnableQueueing: true,
 	}
 
 	logger := testutils.NewMockLogger()
 	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	t.Cleanup(func() { service.Close() })
 

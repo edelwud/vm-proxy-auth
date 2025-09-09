@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  vm-proxy-auth:
+    image: vm-proxy-auth:latest
+    build: 
+      context: ../../../
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+      - "7946:7946"
+    environment:
+      - VM_PROXY_AUTH_METADATA_NODE_ID=vm-proxy-auth-docker
+      - VM_PROXY_AUTH_STORAGE_REDIS_ADDRESS=redis:6379
+      - VM_PROXY_AUTH_AUTH_JWT_JWKS_URL=https://auth.company.com/.well-known/jwks.json
+    volumes:
+      - ./config.yaml:/etc/vm-proxy-auth/config.yaml:ro
+    depends_on:
+      - redis
+      - victoriametrics
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:latest
+    ports:
+      - "8428:8428"
+    volumes:
+      - vm_data:/storage
+    command:
+      - "--storageDataPath=/storage"
+      - "--httpListenAddr=:8428"
+      - "--retentionPeriod=1d"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8428/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  redis_data:
+  vm_data:
+
+networks:
+  default:
+    name: vm-proxy-auth-network

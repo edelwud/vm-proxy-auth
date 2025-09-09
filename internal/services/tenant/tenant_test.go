@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/tenant"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
-	"github.com/edelwud/vm-proxy-auth/internal/services/tenant"
+	tenantservice "github.com/edelwud/vm-proxy-auth/internal/services/tenant"
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
@@ -20,16 +20,16 @@ func TestService_FilterQuery_ORStrategy(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
-	tenantCfg := &config.TenantFilterSettings{
+	tenantCfg := &tenant.FilterConfig{
 		Strategy: string(domain.TenantFilterStrategyOrConditions),
-		Labels: config.TenantFilterLabels{
-			AccountLabel: "vm_account_id",
-			ProjectLabel: "vm_project_id",
+		Labels: tenant.LabelsConfig{
+			Account:      "vm_account_id",
+			Project:      "vm_project_id",
 			UseProjectID: true,
 		},
 	}
 
-	service := tenant.NewService(tenantCfg, logger, metrics)
+	service := tenantservice.NewService(*tenantCfg, logger, metrics)
 
 	user := &domain.User{
 		ID: "test-user",
@@ -57,16 +57,16 @@ func TestService_FilterQuery_OneTenant(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
-	tenantCfg := &config.TenantFilterSettings{
+	tenantCfg := &tenant.FilterConfig{
 		Strategy: string(domain.TenantFilterStrategyOrConditions),
-		Labels: config.TenantFilterLabels{
-			AccountLabel: "vm_account_id",
-			ProjectLabel: "vm_project_id",
+		Labels: tenant.LabelsConfig{
+			Account:      "vm_account_id",
+			Project:      "vm_project_id",
 			UseProjectID: true,
 		},
 	}
 
-	service := tenant.NewService(tenantCfg, logger, metrics)
+	service := tenantservice.NewService(*tenantCfg, logger, metrics)
 
 	user := &domain.User{
 		ID: "test-user",
@@ -92,16 +92,16 @@ func TestService_FilterQuery_ComplexQuery_ORStrategy(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
-	tenantCfg := &config.TenantFilterSettings{
+	tenantCfg := &tenant.FilterConfig{
 		Strategy: string(domain.TenantFilterStrategyOrConditions),
-		Labels: config.TenantFilterLabels{
-			AccountLabel: "vm_account_id",
-			ProjectLabel: "vm_project_id",
+		Labels: tenant.LabelsConfig{
+			Account:      "vm_account_id",
+			Project:      "vm_project_id",
 			UseProjectID: true,
 		},
 	}
 
-	service := tenant.NewService(tenantCfg, logger, metrics)
+	service := tenantservice.NewService(*tenantCfg, logger, metrics)
 
 	user := &domain.User{
 		ID: "test-user",
@@ -174,16 +174,16 @@ func TestService_CanAccessTenant(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
-	tenantCfg := &config.TenantFilterSettings{
+	tenantCfg := &tenant.FilterConfig{
 		Strategy: string(domain.TenantFilterStrategyOrConditions),
-		Labels: config.TenantFilterLabels{
-			AccountLabel: "vm_account_id",
-			ProjectLabel: "vm_project_id",
+		Labels: tenant.LabelsConfig{
+			Account:      "vm_account_id",
+			Project:      "vm_project_id",
 			UseProjectID: true,
 		},
 	}
 
-	service := tenant.NewService(tenantCfg, logger, metrics)
+	service := tenantservice.NewService(*tenantCfg, logger, metrics)
 
 	t.Run("access_allowed_by_account_id", func(t *testing.T) {
 		t.Parallel()
@@ -252,16 +252,16 @@ func TestService_DetermineTargetTenant(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metrics := &MockMetricsService{}
 
-	tenantCfg := &config.TenantFilterSettings{
+	tenantCfg := &tenant.FilterConfig{
 		Strategy: string(domain.TenantFilterStrategyOrConditions),
-		Labels: config.TenantFilterLabels{
-			AccountLabel: "vm_account_id",
-			ProjectLabel: "vm_project_id",
+		Labels: tenant.LabelsConfig{
+			Account:      "vm_account_id",
+			Project:      "vm_project_id",
 			UseProjectID: true,
 		},
 	}
 
-	service := tenant.NewService(tenantCfg, logger, metrics)
+	service := tenantservice.NewService(*tenantCfg, logger, metrics)
 
 	t.Run("use_tenant_from_header_x_prometheus_tenant", func(t *testing.T) {
 		t.Parallel()

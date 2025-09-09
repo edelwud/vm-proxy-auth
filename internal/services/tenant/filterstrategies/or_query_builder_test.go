@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/tenant"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/services/tenant/filterstrategies"
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
@@ -120,11 +120,11 @@ func TestORQueryBuilder_BuildSecureQuery(t *testing.T) {
 			logger := testutils.NewMockLogger()
 			builder := filterstrategies.NewORQueryBuilder(logger)
 
-			tenantCfg := &config.TenantFilterSettings{
+			tenantCfg := &tenant.FilterConfig{
 				Strategy: string(domain.TenantFilterStrategyOrConditions),
-				Labels: config.TenantFilterLabels{
-					AccountLabel: "vm_account_id",
-					ProjectLabel: "vm_project_id",
+				Labels: tenant.LabelsConfig{
+					Account:      "vm_account_id",
+					Project:      "vm_project_id",
 					UseProjectID: tt.useProject,
 				},
 			}

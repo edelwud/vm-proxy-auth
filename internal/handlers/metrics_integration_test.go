@@ -7,15 +7,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/auth"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/proxy"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/tenant"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/handlers"
 	"github.com/edelwud/vm-proxy-auth/internal/services/access"
-	"github.com/edelwud/vm-proxy-auth/internal/services/auth"
-	"github.com/edelwud/vm-proxy-auth/internal/services/health"
+	authservice "github.com/edelwud/vm-proxy-auth/internal/services/auth"
 	"github.com/edelwud/vm-proxy-auth/internal/services/metrics"
-	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
-	"github.com/edelwud/vm-proxy-auth/internal/services/tenant"
+	proxyservice "github.com/edelwud/vm-proxy-auth/internal/services/proxy"
+	tenantservice "github.com/edelwud/vm-proxy-auth/internal/services/tenant"
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 	"github.com/stretchr/testify/require"
 )
@@ -25,53 +26,61 @@ func TestMetricsIntegration_UnauthenticatedRequest(t *testing.T) {
 	metricsService := metrics.NewService(logger)
 
 	// Create auth service with config
-	authConfig := config.AuthSettings{
-		JWT: config.JWTSettings{
+	authConfig := auth.Config{
+		JWT: auth.JWTConfig{
 			Algorithm: "HS256",
 			Secret:    "test-secret",
+			Cache: auth.CacheConfig{
+				TokenTTL: 15 * time.Minute,
+				JwksTTL:  1 * time.Hour,
+			},
 		},
 	}
-	authService, err := auth.NewService(authConfig, []config.TenantMap{}, logger, metricsService)
+	authService, err := authservice.NewService(authConfig, []tenant.MappingConfig{}, logger, metricsService)
 	require.NoError(t, err)
 
 	// Create other services
-	tenantConfig := config.TenantFilterSettings{
-		Strategy: "or_conditions",
-		Labels: config.TenantFilterLabels{
-			AccountLabel: "vm_account_id",
-			ProjectLabel: "vm_project_id",
+	tenantConfig := tenant.FilterConfig{
+		Strategy: "orConditions",
+		Labels: tenant.LabelsConfig{
+			Account:      "vm_account_id",
+			Project:      "vm_project_id",
 			UseProjectID: true,
 		},
 	}
 
-	tenantService := tenant.NewService(&tenantConfig, logger, metricsService)
+	tenantService := tenantservice.NewService(tenantConfig, logger, metricsService)
 	accessService := access.NewService(logger)
 
 	// Create enhanced proxy service
-	enhancedConfig := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	enhancedConfig := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: "http://localhost:8428", Weight: 1},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{Strategy: domain.LoadBalancingStrategyRoundRobin},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval:      30 * time.Second,
-			Timeout:            10 * time.Second,
-			HealthyThreshold:   2,
-			UnhealthyThreshold: 3,
-			HealthEndpoint:     "/health",
+		Routing: proxy.RoutingConfig{
+			Strategy: "round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           30 * time.Second,
+				Timeout:            10 * time.Second,
+				Endpoint:           "/health",
+				HealthyThreshold:   2,
+				UnhealthyThreshold: 3,
+			},
 		},
-		Queue: proxy.QueueConfig{
-			MaxSize: 1000,
-			Timeout: 5 * time.Second,
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 30 * time.Second,
+			Retries: 3,
+			Backoff: 100 * time.Millisecond,
+			Queue: proxy.QueueConfig{
+				Enabled: false,
+				MaxSize: 1000,
+				Timeout: 5 * time.Second,
+			},
 		},
-		Timeout:        30 * time.Second,
-		MaxRetries:     3,
-		RetryBackoff:   100 * time.Millisecond,
-		EnableQueueing: false,
 	}
 
 	stateStorage := testutils.NewMockStateStorage()
-	proxyService, err := proxy.NewEnhancedService(enhancedConfig, logger, metricsService, stateStorage)
+	proxyService, err := proxyservice.NewEnhancedService(enhancedConfig, logger, metricsService, stateStorage)
 	require.NoError(t, err)
 
 	// Start the service

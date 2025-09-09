@@ -1,0 +1,160 @@
+# vm-proxy-auth Full Configuration Example
+# This is a comprehensive example showing all available configuration options
+
+# Shared metadata (only necessary for inter-service communication)
+metadata:
+  nodeId: "vm-proxy-auth-1"
+  role: "gateway"
+  environment: "production"
+  region: "us-east-1"
+
+# Logging configuration (top level)
+logging:
+  level: "info"               # debug, info, warn, error, fatal
+  format: "json"              # json, text, logfmt, pretty, console
+
+# Metrics configuration (top level)  
+metrics:
+  enabled: true
+  path: "/metrics"
+
+# Server configuration
+server:
+  address: "0.0.0.0:8080"
+  timeouts:
+    read: "30s"
+    write: "30s" 
+    idle: "60s"
+
+# Proxy configuration  
+proxy:
+  upstreams:
+    - url: "http://vm-backend-1:8428"
+      weight: 3
+    - url: "http://vm-backend-2:8428"
+      weight: 2
+    - url: "http://vm-backend-3:8428"
+      weight: 1
+  
+  routing:
+    strategy: "weighted-round-robin"  # round-robin, weighted-round-robin, least-connections
+    healthCheck:
+      interval: "30s"
+      timeout: "10s"
+      endpoint: "/health"
+      healthyThreshold: 2
+      unhealthyThreshold: 3
+    
+  reliability:
+    timeout: "30s"
+    retries: 3
+    backoff: "100ms"
+    queue:
+      enabled: true
+      maxSize: 1000
+      timeout: "5s"
+
+# Authentication configuration
+auth:
+  jwt:
+    algorithm: "RS256"        # RS256, HS256
+    jwksUrl: "https://auth.company.com/.well-known/jwks.json"
+    secret: ""                # Required for HS256, ignored for RS256
+    validation:
+      audience: true
+      issuer: true
+      requiredIssuer: "https://auth.company.com"
+      requiredAudience: ["vm-proxy-auth"]
+    claims:
+      userGroups: "groups"
+    cache:
+      tokenTTL: "1h"
+      jwksTTL: "15m"
+
+# Tenant management configuration
+tenants:
+  filter:
+    strategy: "orConditions"    # orConditions, andConditions
+    labels:
+      account: "vm_account_id"
+      project: "vm_project_id"
+      useProjectId: true
+  mappings:
+    - groups: ["admin", "ops"]
+      vmTenants:
+        - account: "1000"
+          project: "platform"
+      permissions: ["read", "write"]
+    - groups: ["developers"]
+      vmTenants:
+        - account: "2000"
+          project: "app"
+      permissions: ["read"]
+
+# Storage configuration
+storage:
+  type: "raft"                # local, redis, raft
+  
+  # Redis configuration (only if type: redis)
+  redis:
+    address: "redis:6379"
+    password: ""
+    database: 0
+    keyPrefix: "vm-proxy-auth:"
+    pool:
+      size: 20
+      minIdle: 10
+    timeouts:
+      connect: "5s"
+      read: "3s"
+      write: "3s"
+    retry:
+      maxAttempts: 3
+      backoff:
+        min: "100ms"
+        max: "1s"
+  
+  # Raft configuration (only if type: raft)
+  raft:
+    bindAddress: "127.0.0.1:9000"
+    dataDir: "/data/raft"
+    bootstrapExpected: 3
+    # peers: []               # OPTIONAL - can be omitted (filled by memberlist)
+
+# Cluster configuration (active when storage.type: raft)
+cluster:
+  memberlist:
+    bindAddress: "0.0.0.0:7946"
+    advertiseAddress: "10.0.1.5:7946"  # External address for cluster communication
+    peers:
+      join: []                # Filled via environment variables or discovery
+      encryption: ""          # Filled via environment variables
+    gossip:
+      interval: "200ms"
+      nodes: 3
+    probe:
+      interval: "1s"
+      timeout: "500ms"
+    metadata:                 # Optional cluster-specific metadata
+      datacenter: "dc1"
+      version: "1.0.0"
+    
+  discovery:
+    interval: "30s"
+    
+    # Static peers (OPTIONAL section - for fallback or bootstrap)
+    static:
+      peers:
+        - "seed-1.company.com:7946"
+        - "seed-2.company.com:7946"
+    
+    # mDNS auto-discovery
+    mdns:
+      enabled: true
+      serviceName: "_vm-proxy-auth._tcp"
+      domain: "local."
+      hostname: ""            # Uses metadata.nodeId if empty
+      port: 7946
+      txtRecords:
+        version: "1.0"
+        environment: "production"

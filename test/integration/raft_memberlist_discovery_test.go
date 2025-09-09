@@ -11,7 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/cluster"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/storage"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/services/discovery"
 	"github.com/edelwud/vm-proxy-auth/internal/services/memberlist"
@@ -57,8 +58,7 @@ func TestRaftMemberlistDiscoveryIntegration(t *testing.T) {
 		require.NoError(t, memberErr2)
 
 		// Node 1 Raft configuration
-		raftConfig1 := config.RaftSettings{
-			NodeID:            "node-1",
+		raftConfig1 := storage.RaftConfig{
 			BindAddress:       fmt.Sprintf("127.0.0.1:%d", raftPort1),
 			DataDir:           node1DataDir,
 			Peers:             []string{},
@@ -66,8 +66,7 @@ func TestRaftMemberlistDiscoveryIntegration(t *testing.T) {
 		}
 
 		// Node 2 Raft configuration
-		raftConfig2 := config.RaftSettings{
-			NodeID:            "node-2",
+		raftConfig2 := storage.RaftConfig{
 			BindAddress:       fmt.Sprintf("127.0.0.1:%d", raftPort2),
 			DataDir:           node2DataDir,
 			Peers:             []string{},
@@ -123,15 +122,18 @@ func TestRaftMemberlistDiscoveryIntegration(t *testing.T) {
 		require.NoError(t, metaErr2)
 
 		// Node 1 memberlist configuration
-		memberConfig1 := config.MemberlistSettings{
-			BindAddress:      "127.0.0.1",
-			BindPort:         memberPort1,
-			AdvertiseAddress: "127.0.0.1",
-			AdvertisePort:    memberPort1,
-			GossipInterval:   200 * time.Millisecond,
-			GossipNodes:      3,
-			ProbeInterval:    1 * time.Second,
-			ProbeTimeout:     500 * time.Millisecond,
+		memberConfig1 := cluster.MemberlistConfig{
+			BindAddress:      fmt.Sprintf("127.0.0.1:%d", memberPort1),
+			AdvertiseAddress: fmt.Sprintf("127.0.0.1:%d", memberPort1),
+			Peers:            cluster.PeersConfig{},
+			Gossip: cluster.GossipConfig{
+				Interval: 200 * time.Millisecond,
+				Nodes:    3,
+			},
+			Probe: cluster.ProbeConfig{
+				Interval: 1 * time.Second,
+				Timeout:  500 * time.Millisecond,
+			},
 			Metadata: map[string]string{
 				"node_name":   "raft-test-node-1",
 				"role":        "peer",
@@ -140,15 +142,18 @@ func TestRaftMemberlistDiscoveryIntegration(t *testing.T) {
 		}
 
 		// Node 2 memberlist configuration
-		memberConfig2 := config.MemberlistSettings{
-			BindAddress:      "127.0.0.1",
-			BindPort:         memberPort2,
-			AdvertiseAddress: "127.0.0.1",
-			AdvertisePort:    memberPort2,
-			GossipInterval:   200 * time.Millisecond,
-			GossipNodes:      3,
-			ProbeInterval:    1 * time.Second,
-			ProbeTimeout:     500 * time.Millisecond,
+		memberConfig2 := cluster.MemberlistConfig{
+			BindAddress:      fmt.Sprintf("127.0.0.1:%d", memberPort2),
+			AdvertiseAddress: fmt.Sprintf("127.0.0.1:%d", memberPort2),
+			Peers:            cluster.PeersConfig{},
+			Gossip: cluster.GossipConfig{
+				Interval: 200 * time.Millisecond,
+				Nodes:    3,
+			},
+			Probe: cluster.ProbeConfig{
+				Interval: 1 * time.Second,
+				Timeout:  500 * time.Millisecond,
+			},
 			Metadata: map[string]string{
 				"node_name":   "raft-test-node-2",
 				"role":        "peer",
@@ -157,20 +162,20 @@ func TestRaftMemberlistDiscoveryIntegration(t *testing.T) {
 		}
 
 		// Discovery configurations
-		discoveryConfig1 := config.DiscoverySettings{
+		discoveryConfig1 := cluster.DiscoveryConfig{
 			Enabled:   true,
 			Providers: []string{"static"},
 			Interval:  200 * time.Millisecond,
-			Static: config.StaticDiscoveryConfig{
+			Static: &cluster.StaticConfig{
 				Peers: []string{fmt.Sprintf("127.0.0.1:%d", memberPort2)},
 			},
 		}
 
-		discoveryConfig2 := config.DiscoverySettings{
+		discoveryConfig2 := cluster.DiscoveryConfig{
 			Enabled:   true,
 			Providers: []string{"static"},
 			Interval:  200 * time.Millisecond,
-			Static: config.StaticDiscoveryConfig{
+			Static: &cluster.StaticConfig{
 				Peers: []string{fmt.Sprintf("127.0.0.1:%d", memberPort1)},
 			},
 		}

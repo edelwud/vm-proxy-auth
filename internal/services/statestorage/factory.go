@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/storage"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
@@ -21,25 +21,25 @@ func NewStateStorage(
 		return NewLocalStorage(nodeID), nil
 
 	case "redis":
-		redisConfig, ok := storageConfig.(config.RedisSettings)
+		redisConfig, ok := storageConfig.(storage.RedisConfig)
 		if !ok {
 			return nil, fmt.Errorf("invalid Redis configuration type: %T", storageConfig)
 		}
 
-		// Convert config.RedisSettings to RedisStorageConfig
+		// Convert storage.RedisConfig to RedisStorageConfig
 		storageConfigRedis := RedisStorageConfig{
 			Address:         redisConfig.Address,
 			Password:        redisConfig.Password,
 			Database:        redisConfig.Database,
 			KeyPrefix:       redisConfig.KeyPrefix,
-			ConnectTimeout:  redisConfig.ConnectTimeout,
-			ReadTimeout:     redisConfig.ReadTimeout,
-			WriteTimeout:    redisConfig.WriteTimeout,
-			PoolSize:        redisConfig.PoolSize,
-			MinIdleConns:    redisConfig.MinIdleConns,
-			MaxRetries:      redisConfig.MaxRetries,
-			MinRetryBackoff: redisConfig.MinRetryBackoff,
-			MaxRetryBackoff: redisConfig.MaxRetryBackoff,
+			ConnectTimeout:  redisConfig.Timeouts.Connect,
+			ReadTimeout:     redisConfig.Timeouts.Read,
+			WriteTimeout:    redisConfig.Timeouts.Write,
+			PoolSize:        redisConfig.Pool.Size,
+			MinIdleConns:    redisConfig.Pool.MinIdle,
+			MaxRetries:      redisConfig.Retry.MaxAttempts,
+			MinRetryBackoff: redisConfig.Retry.Backoff.Min,
+			MaxRetryBackoff: redisConfig.Retry.Backoff.Max,
 		}
 
 		logger.Info("Creating Redis state storage",
@@ -50,14 +50,14 @@ func NewStateStorage(
 		return NewRedisStorage(storageConfigRedis, nodeID, logger)
 
 	case "raft":
-		raftConfig, ok := storageConfig.(config.RaftSettings)
+		raftConfig, ok := storageConfig.(storage.RaftConfig)
 		if !ok {
 			return nil, fmt.Errorf("invalid Raft configuration type: %T", storageConfig)
 		}
 
-		// Convert config.RaftSettings to RaftStorageConfig with defaults
+		// Convert storage.RaftConfig to RaftStorageConfig with defaults
 		storageConfigRaft := RaftStorageConfig{
-			NodeID:             raftConfig.NodeID,
+			NodeID:             nodeID, // Use provided nodeID
 			BindAddress:        raftConfig.BindAddress,
 			DataDir:            raftConfig.DataDir,
 			Peers:              raftConfig.Peers,
@@ -72,7 +72,7 @@ func NewStateStorage(
 		}
 
 		logger.Info("Creating Raft state storage",
-			domain.Field{Key: "node_id", Value: raftConfig.NodeID},
+			domain.Field{Key: "node_id", Value: nodeID},
 			domain.Field{Key: "data_dir", Value: raftConfig.DataDir},
 			domain.Field{Key: "peers_count", Value: len(raftConfig.Peers)})
 

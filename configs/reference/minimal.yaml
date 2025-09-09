@@ -1,0 +1,39 @@
+# vm-proxy-auth Minimal Configuration
+# Minimum required configuration for single-node development
+
+metadata:
+  nodeId: "vm-proxy-auth-dev"
+  role: "gateway"
+  environment: "development"
+  region: "local"
+
+logging:
+  level: "info"
+  format: "json"
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+server:
+  address: "0.0.0.0:8080"
+
+proxy:
+  upstreams:
+    - url: "http://localhost:8428"
+      weight: 1
+
+auth:
+  jwt:
+    algorithm: "HS256"
+    secret: "dev-secret-key-at-least-32-chars-long"
+
+tenants:
+  mappings:
+    - groups: ["admin"]
+      vmTenants:
+        - account: "0"
+      permissions: ["read", "write"]
+
+storage:
+  type: "local"

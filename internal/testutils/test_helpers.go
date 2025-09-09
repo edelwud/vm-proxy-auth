@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 // GetFreePort returns a free TCP port for testing with proper error handling.
@@ -39,15 +41,27 @@ func GetFreePorts(count int) ([]int, error) {
 	return ports, nil
 }
 
-// CopyFile copies a file from src to dst with comprehensive error handling.
+// CopyFile copies a file from src to dst with comprehensive error handling and security validation.
 func CopyFile(src, dst string) error {
-	srcFile, err := os.Open(src)
+	// Validate paths to prevent directory traversal attacks
+	if err := validateFilePath(src); err != nil {
+		return fmt.Errorf("invalid source path: %w", err)
+	}
+	if err := validateFilePath(dst); err != nil {
+		return fmt.Errorf("invalid destination path: %w", err)
+	}
+
+	// Clean and validate paths
+	src = filepath.Clean(src)
+	dst = filepath.Clean(dst)
+
+	srcFile, err := os.Open(src) // #nosec G304 - path validated above
 	if err != nil {
 		return fmt.Errorf("failed to open source file %s: %w", src, err)
 	}
 	defer srcFile.Close()
 
-	dstFile, err := os.Create(dst)
+	dstFile, err := os.Create(dst) // #nosec G304 - path validated above
 	if err != nil {
 		return fmt.Errorf("failed to create destination file %s: %w", dst, err)
 	}
@@ -58,4 +72,45 @@ func CopyFile(src, dst string) error {
 	}
 
 	return nil
+}
+
+// validateFilePath validates file paths to prevent directory traversal attacks.
+func validateFilePath(path string) error {
+	if path == "" {
+		return errors.New("empty path")
+	}
+
+	// Prevent directory traversal
+	if strings.Contains(path, "..") {
+		return errors.New("path traversal detected")
+	}
+
+	// Clean the path and check if it's absolute or relative to current directory
+	cleanPath := filepath.Clean(path)
+	if filepath.IsAbs(cleanPath) {
+		// For absolute paths, ensure they're within allowed directories
+		// This is a basic check - in production you'd have more specific rules
+		if strings.HasPrefix(cleanPath, "/tmp/") || strings.HasPrefix(cleanPath, "/var/tmp/") {
+			return nil // Allow temp directories for tests
+		}
+
+		// Allow OS temp directory and its subdirectories (for testing)
+		tempDir := os.TempDir()
+		if strings.HasPrefix(cleanPath, tempDir) {
+			return nil
+		}
+
+		// Allow paths within the current working directory tree
+		wd, err := os.Getwd()
+		if err == nil && strings.HasPrefix(cleanPath, wd) {
+			return nil
+		}
+	}
+
+	// For relative paths, ensure they don't escape current directory
+	if !strings.HasPrefix(cleanPath, "/") && !strings.Contains(cleanPath, "..") {
+		return nil
+	}
+
+	return errors.New("potentially unsafe file path")
 }

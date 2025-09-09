@@ -10,14 +10,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/auth"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/tenant"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 )
 
 // Service implements domain.AuthService using clean architecture.
 type Service struct {
-	config     config.AuthSettings
-	tenantMaps []config.TenantMap
+	config     auth.Config
+	tenantMaps []tenant.MappingConfig
 	verifier   *JWTVerifier
 	logger     domain.Logger
 	metrics    domain.MetricsService
@@ -32,8 +33,8 @@ type cachedUser struct {
 
 // NewService creates a new auth service.
 func NewService(
-	cfg config.AuthSettings,
-	tenantMaps []config.TenantMap,
+	cfg auth.Config,
+	tenantMaps []tenant.MappingConfig,
 	logger domain.Logger,
 	metrics domain.MetricsService,
 ) (domain.AuthService, error) {
@@ -46,7 +47,7 @@ func NewService(
 		verifier = NewJWTVerifier(nil, []byte(cfg.JWT.Secret), cfg.JWT.Algorithm)
 	case cfg.JWT.JwksURL != "":
 		// Use JWKS-based verification (typically RS256)
-		verifier = NewJWKSVerifier(cfg.JWT.JwksURL, cfg.JWT.Algorithm, cfg.JWT.CacheTTL)
+		verifier = NewJWKSVerifier(cfg.JWT.JwksURL, cfg.JWT.Algorithm, cfg.JWT.Cache.JwksTTL)
 	default:
 		// Error: must have either secret or JWKS URL
 		return nil, errors.New("jWT authentication requires either jwt_secret or jwks_url to be configured")
@@ -58,7 +59,7 @@ func NewService(
 		verifier:   verifier,
 		logger:     logger.With(domain.Field{Key: "component", Value: "auth"}),
 		metrics:    metrics,
-		cacheTTL:   cfg.JWT.CacheTTL,
+		cacheTTL:   cfg.JWT.Cache.TokenTTL,
 	}, nil
 }
 
@@ -173,13 +174,20 @@ func (s *Service) determineUserPermissions(
 			// Add VictoriaMetrics tenants if specified
 			for _, vmMapping := range mapping.VMTenants {
 				vmTenants = append(vmTenants, domain.VMTenant{
-					AccountID: vmMapping.AccountID,
-					ProjectID: vmMapping.ProjectID,
+					AccountID: vmMapping.Account,
+					ProjectID: vmMapping.Project,
 				})
 			}
 
-			// Set read-only based on mapping
-			if mapping.ReadOnly {
+			// Set read-only based on permissions (if only "read" permission exists)
+			hasWritePermission := false
+			for _, perm := range mapping.Permissions {
+				if perm == "write" {
+					hasWritePermission = true
+					break
+				}
+			}
+			if !hasWritePermission {
 				readOnly = true
 			}
 		}

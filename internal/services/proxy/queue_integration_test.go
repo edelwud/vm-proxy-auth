@@ -13,9 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/edelwud/vm-proxy-auth/internal/domain"
-	"github.com/edelwud/vm-proxy-auth/internal/services/health"
-	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/proxy"
+	proxyService "github.com/edelwud/vm-proxy-auth/internal/services/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
 
@@ -55,33 +54,35 @@ func TestQueueIntegrationWithBackendFailures(t *testing.T) {
 	metricsService := &testutils.MockEnhancedMetricsService{}
 
 	// Create enhanced service config with queueing enabled
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backend.URL, Weight: 1},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyRoundRobin,
+		Routing: proxy.RoutingConfig{
+			Strategy: "round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           200 * time.Millisecond,
+				Timeout:            100 * time.Millisecond,
+				Endpoint:           "/health",
+				HealthyThreshold:   1,
+				UnhealthyThreshold: 1,
+			},
 		},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval:      200 * time.Millisecond,
-			Timeout:            100 * time.Millisecond,
-			HealthyThreshold:   1,
-			UnhealthyThreshold: 1,
-			HealthEndpoint:     "/health",
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 3,
+			Backoff: 100 * time.Millisecond,
+			Queue: proxy.QueueConfig{
+				Enabled: true,
+				MaxSize: 10,
+				Timeout: 2 * time.Second,
+			},
 		},
-		Queue: proxy.QueueConfig{
-			MaxSize: 10,
-			Timeout: 2 * time.Second,
-		},
-		Timeout:        5 * time.Second,
-		MaxRetries:     2,
-		RetryBackoff:   50 * time.Millisecond,
-		EnableQueueing: true,
 	}
 
 	// Create and start service
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metricsService, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metricsService, stateStorage)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -222,32 +223,34 @@ func TestQueueStats(t *testing.T) {
 	logger := testutils.NewMockLogger()
 	metricsService := &testutils.MockEnhancedMetricsService{}
 
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backend.URL, Weight: 1},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyRoundRobin,
+		Routing: proxy.RoutingConfig{
+			Strategy: "round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           100 * time.Millisecond,
+				Timeout:            50 * time.Millisecond,
+				Endpoint:           "/health",
+				HealthyThreshold:   1,
+				UnhealthyThreshold: 1,
+			},
 		},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval:      100 * time.Millisecond,
-			Timeout:            50 * time.Millisecond,
-			HealthyThreshold:   1,
-			UnhealthyThreshold: 1,
-			HealthEndpoint:     "/health",
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 3,
+			Backoff: 100 * time.Millisecond,
+			Queue: proxy.QueueConfig{
+				Enabled: true,
+				MaxSize: 5,
+				Timeout: 200 * time.Millisecond,
+			},
 		},
-		Queue: proxy.QueueConfig{
-			MaxSize: 5,
-			Timeout: 200 * time.Millisecond,
-		},
-		Timeout:        1 * time.Second,
-		MaxRetries:     1,
-		RetryBackoff:   10 * time.Millisecond,
-		EnableQueueing: true,
 	}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metricsService, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metricsService, stateStorage)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())

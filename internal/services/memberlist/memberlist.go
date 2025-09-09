@@ -5,13 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/hashicorp/memberlist"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/cluster"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	infralogger "github.com/edelwud/vm-proxy-auth/internal/infrastructure/logger"
 )
@@ -24,7 +26,7 @@ const (
 // Service implements cluster membership using HashiCorp's memberlist.
 type Service struct {
 	list      *memberlist.Memberlist
-	config    config.MemberlistSettings
+	config    cluster.MemberlistConfig
 	delegate  *RaftDelegate
 	logger    domain.Logger
 	discovery domain.MemberlistDiscoveryService
@@ -37,13 +39,13 @@ type Service struct {
 }
 
 // NewMemberlistService creates a new memberlist service instance.
-func NewMemberlistService(config config.MemberlistSettings, logger domain.Logger) (*Service, error) {
+func NewMemberlistService(config cluster.MemberlistConfig, logger domain.Logger) (*Service, error) {
 	return NewMemberlistServiceWithMetadata(config, logger, nil, nil)
 }
 
 // NewMemberlistServiceWithMetadata creates a new memberlist service instance with optional node metadata and Raft manager.
 func NewMemberlistServiceWithMetadata(
-	config config.MemberlistSettings,
+	config cluster.MemberlistConfig,
 	logger domain.Logger,
 	nodeMetadata *NodeMetadata,
 	raftManager domain.RaftManager,
@@ -109,36 +111,56 @@ func NewMemberlistServiceWithMetadata(
 
 // applyConfig applies custom configuration to memberlist config.
 func (ms *Service) applyConfig(mlConfig *memberlist.Config) error {
-	// Basic network settings
-	mlConfig.BindAddr = ms.config.BindAddress
-	mlConfig.BindPort = ms.config.BindPort
-
-	if ms.config.AdvertiseAddress != "" {
-		mlConfig.AdvertiseAddr = ms.config.AdvertiseAddress
+	// Parse bind address (host:port format)
+	bindHost, bindPortStr, err := net.SplitHostPort(ms.config.BindAddress)
+	if err != nil {
+		return fmt.Errorf("invalid bind address format: %w", err)
 	}
-	if ms.config.AdvertisePort > 0 {
-		mlConfig.AdvertisePort = ms.config.AdvertisePort
+
+	bindPort, err := strconv.Atoi(bindPortStr)
+	if err != nil {
+		return fmt.Errorf("invalid bind port: %w", err)
+	}
+
+	// Basic network settings
+	mlConfig.BindAddr = bindHost
+	mlConfig.BindPort = bindPort
+
+	// Advertise address (if different from bind address)
+	if ms.config.AdvertiseAddress != "" {
+		advHost, advPortStr, advErr := net.SplitHostPort(ms.config.AdvertiseAddress)
+		if advErr != nil {
+			return fmt.Errorf("invalid advertise address format: %w", advErr)
+		}
+
+		advPort, advPortErr := strconv.Atoi(advPortStr)
+		if advPortErr != nil {
+			return fmt.Errorf("invalid advertise port: %w", advPortErr)
+		}
+
+		mlConfig.AdvertiseAddr = advHost
+		mlConfig.AdvertisePort = advPort
 	}
 
 	// Gossip settings
-	if ms.config.GossipInterval > 0 {
-		mlConfig.GossipInterval = ms.config.GossipInterval
+	if ms.config.Gossip.Interval > 0 {
+		mlConfig.GossipInterval = ms.config.Gossip.Interval
 	}
-	if ms.config.GossipNodes > 0 {
-		mlConfig.GossipNodes = ms.config.GossipNodes
+	if ms.config.Gossip.Nodes > 0 {
+		mlConfig.GossipNodes = ms.config.Gossip.Nodes
 	}
-	if ms.config.ProbeInterval > 0 {
-		mlConfig.ProbeInterval = ms.config.ProbeInterval
+	if ms.config.Probe.Interval > 0 {
+		mlConfig.ProbeInterval = ms.config.Probe.Interval
 	}
-	if ms.config.ProbeTimeout > 0 {
-		mlConfig.ProbeTimeout = ms.config.ProbeTimeout
+	if ms.config.Probe.Timeout > 0 {
+		mlConfig.ProbeTimeout = ms.config.Probe.Timeout
 	}
 
 	// Encryption if configured
-	if ms.config.EncryptionKey != "" {
-		key, err := DecodeEncryptionKey(ms.config.EncryptionKey)
-		if err != nil {
-			return fmt.Errorf("invalid encryption key: %w", err)
+	if ms.config.Peers.Encryption != "" {
+		key, keyErr := DecodeEncryptionKey(ms.config.Peers.Encryption)
+		if keyErr != nil {
+			return fmt.Errorf("invalid encryption key: %w", keyErr)
 		}
 		mlConfig.SecretKey = key
 	}

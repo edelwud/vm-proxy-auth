@@ -11,44 +11,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
 	"github.com/edelwud/vm-proxy-auth/internal/services/health"
 	"github.com/edelwud/vm-proxy-auth/internal/services/loadbalancer"
 	"github.com/edelwud/vm-proxy-auth/internal/services/queue"
 )
 
-// EnhancedServiceConfig holds configuration for the enhanced proxy service.
-type EnhancedServiceConfig struct {
-	Backends       []BackendConfig      `yaml:"backends"`
-	LoadBalancing  LoadBalancingConfig  `yaml:"load_balancing"`
-	HealthCheck    health.CheckerConfig `yaml:"health_check"`
-	Queue          QueueConfig          `yaml:"queue"`
-	Timeout        time.Duration        `yaml:"timeout"         default:"30s"`
-	MaxRetries     int                  `yaml:"max_retries"     default:"3"`
-	RetryBackoff   time.Duration        `yaml:"retry_backoff"   default:"100ms"`
-	EnableQueueing bool                 `yaml:"enable_queueing" default:"false"`
-}
-
-// BackendConfig represents configuration for a single backend.
-type BackendConfig struct {
-	URL    string `yaml:"url"`
-	Weight int    `yaml:"weight" default:"1"`
-}
-
-// LoadBalancingConfig holds load balancing configuration.
-type LoadBalancingConfig struct {
-	Strategy domain.LoadBalancingStrategy `yaml:"strategy" default:"round-robin"`
-}
-
-// QueueConfig holds request queue configuration.
-type QueueConfig struct {
-	MaxSize int           `yaml:"max_size" default:"1000"`
-	Timeout time.Duration `yaml:"timeout"  default:"5s"`
-}
-
 // EnhancedService provides enhanced proxy functionality with multiple upstream support.
 type EnhancedService struct {
-	config        EnhancedServiceConfig
+	config        proxy.Config
 	loadBalancer  domain.LoadBalancer
 	healthChecker domain.HealthChecker
 	requestQueue  domain.RequestQueue
@@ -61,36 +33,41 @@ type EnhancedService struct {
 
 // NewEnhancedService creates a new enhanced proxy service with multiple upstream support.
 func NewEnhancedService(
-	config EnhancedServiceConfig,
+	config proxy.Config,
 	logger domain.Logger,
 	metrics domain.MetricsService,
 	stateStorage domain.StateStorage,
 ) (*EnhancedService, error) {
 	// Validate configuration
-	if len(config.Backends) == 0 {
-		return nil, errors.New("at least one backend must be configured")
+	if len(config.Upstreams) == 0 {
+		return nil, errors.New("at least one upstream must be configured")
 	}
 
-	// Set defaults
-	if config.Timeout == 0 {
-		config.Timeout = domain.DefaultProxyTimeoutSeconds * time.Second
-	}
-	if config.MaxRetries == 0 {
-		config.MaxRetries = domain.DefaultProxyMaxRetries
-	}
-	if config.RetryBackoff == 0 {
-		config.RetryBackoff = domain.DefaultRetryBackoffMs * time.Millisecond
+	// Set defaults with fallback values
+	timeout := config.Reliability.Timeout
+	if timeout == 0 {
+		timeout = domain.DefaultProxyTimeoutSeconds * time.Second
 	}
 
-	// Convert backend configs to domain backends
-	backends := make([]domain.Backend, len(config.Backends))
-	for i, backendConfig := range config.Backends {
-		weight := backendConfig.Weight
+	// TODO: Implement retry logic using these values
+	// maxRetries := config.Reliability.Retries
+	// if maxRetries == 0 {
+	// 	maxRetries = domain.DefaultProxyMaxRetries
+	// }
+	// retryBackoff := config.Reliability.Backoff
+	// if retryBackoff == 0 {
+	// 	retryBackoff = domain.DefaultRetryBackoffMs * time.Millisecond
+	// }
+
+	// Convert upstream configs to domain backends
+	backends := make([]domain.Backend, len(config.Upstreams))
+	for i, upstreamConfig := range config.Upstreams {
+		weight := upstreamConfig.Weight
 		if weight <= 0 {
 			weight = domain.DefaultBackendWeight
 		}
 		backends[i] = domain.Backend{
-			URL:    backendConfig.URL,
+			URL:    upstreamConfig.URL,
 			Weight: weight,
 			State:  domain.BackendHealthy, // Start as healthy
 		}
@@ -99,7 +76,7 @@ func NewEnhancedService(
 	service := &EnhancedService{
 		config: config,
 		httpClient: &http.Client{
-			Timeout: config.Timeout,
+			Timeout: timeout,
 		},
 		logger:  logger.With(domain.Field{Key: "component", Value: "enhanced_proxy"}),
 		metrics: metrics,
@@ -107,15 +84,24 @@ func NewEnhancedService(
 
 	// Create load balancer using factory
 	lbFactory := loadbalancer.NewFactory(logger)
-	loadBalancer, err := lbFactory.CreateLoadBalancer(config.LoadBalancing.Strategy, backends)
+	loadBalancer, err := lbFactory.CreateLoadBalancer(domain.LoadBalancingStrategy(config.Routing.Strategy), backends)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create load balancer: %w", err)
 	}
 	service.loadBalancer = loadBalancer
 
+	// Create health checker config
+	healthCheckerConfig := health.CheckerConfig{
+		CheckInterval:      config.Routing.HealthCheck.Interval,
+		Timeout:            config.Routing.HealthCheck.Timeout,
+		HealthyThreshold:   config.Routing.HealthCheck.HealthyThreshold,
+		UnhealthyThreshold: config.Routing.HealthCheck.UnhealthyThreshold,
+		HealthEndpoint:     config.Routing.HealthCheck.Endpoint,
+	}
+
 	// Create health checker
 	healthChecker := health.NewChecker(
-		config.HealthCheck,
+		healthCheckerConfig,
 		backends,
 		service.onBackendStateChange,
 		stateStorage,
@@ -124,10 +110,10 @@ func NewEnhancedService(
 	service.healthChecker = healthChecker
 
 	// Create request queue if enabled
-	if config.EnableQueueing {
+	if config.Reliability.Queue.Enabled {
 		requestQueue := queue.NewMemoryQueue(
-			config.Queue.MaxSize,
-			config.Queue.Timeout,
+			config.Reliability.Queue.MaxSize,
+			config.Reliability.Queue.Timeout,
 			logger,
 		)
 		service.requestQueue = requestQueue
@@ -135,8 +121,8 @@ func NewEnhancedService(
 
 	service.logger.Info("Enhanced proxy service created",
 		domain.Field{Key: "backends", Value: len(backends)},
-		domain.Field{Key: "strategy", Value: string(config.LoadBalancing.Strategy)},
-		domain.Field{Key: "queueing_enabled", Value: config.EnableQueueing})
+		domain.Field{Key: "strategy", Value: config.Routing.Strategy},
+		domain.Field{Key: "queueing_enabled", Value: config.Reliability.Queue.Enabled})
 
 	return service, nil
 }
@@ -170,7 +156,7 @@ func (es *EnhancedService) Forward(ctx context.Context, req *domain.ProxyRequest
 	es.mu.RUnlock()
 
 	// Use queue processing if queueing is enabled
-	if es.config.EnableQueueing && es.requestQueue != nil {
+	if es.config.Reliability.Queue.Enabled && es.requestQueue != nil {
 		return es.forwardWithQueue(ctx, req)
 	}
 
@@ -216,7 +202,7 @@ func (es *EnhancedService) forwardWithQueue(
 	}
 
 	// If direct processing fails and queue has space, queue the request for retry
-	if es.requestQueue.Size() < es.config.Queue.MaxSize {
+	if es.requestQueue.Size() < es.config.Reliability.Queue.MaxSize {
 		es.logger.Debug("Direct processing failed, queueing for retry",
 			domain.Field{Key: "user_id", Value: req.User.ID},
 			domain.Field{Key: "error", Value: err.Error()})
@@ -240,7 +226,7 @@ func (es *EnhancedService) processQueuedRequest(
 	ctx context.Context,
 	originalReq *domain.ProxyRequest,
 ) (*domain.ProxyResponse, error) {
-	maxWaitTime := es.config.Queue.Timeout
+	maxWaitTime := es.config.Reliability.Queue.Timeout
 	startTime := time.Now()
 
 	for time.Since(startTime) < maxWaitTime {
@@ -321,7 +307,7 @@ func (es *EnhancedService) handleProcessingFailure(
 	startTime time.Time,
 	maxWaitTime time.Duration,
 ) {
-	if es.requestQueue.Size() >= es.config.Queue.MaxSize || time.Since(startTime) >= maxWaitTime {
+	if es.requestQueue.Size() >= es.config.Reliability.Queue.MaxSize || time.Since(startTime) >= maxWaitTime {
 		return // Cannot re-queue
 	}
 
@@ -344,9 +330,9 @@ func (es *EnhancedService) forwardToBackendDirect(
 	start := time.Now()
 
 	var lastErr error
-	for attempt := range es.config.MaxRetries {
+	for attempt := range es.config.Reliability.Retries {
 		if attempt > 0 {
-			backoff := time.Duration(attempt) * es.config.RetryBackoff
+			backoff := time.Duration(attempt) * es.config.Reliability.Backoff
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -376,11 +362,11 @@ func (es *EnhancedService) forwardToBackendDirect(
 
 	es.logger.Error("All request attempts failed",
 		domain.Field{Key: "user_id", Value: req.User.ID},
-		domain.Field{Key: "attempts", Value: es.config.MaxRetries},
+		domain.Field{Key: "attempts", Value: es.config.Reliability.Retries},
 		domain.Field{Key: "total_duration", Value: time.Since(start)},
 		domain.Field{Key: "final_error", Value: lastErr.Error()})
 
-	return nil, fmt.Errorf("request failed after %d attempts: %w", es.config.MaxRetries, lastErr)
+	return nil, fmt.Errorf("request failed after %d attempts: %w", es.config.Reliability.Retries, lastErr)
 }
 
 // forwardToBackend forwards a request to a specific backend selected by the load balancer.
@@ -408,7 +394,7 @@ func (es *EnhancedService) forwardToBackend(
 		// Record successful load balancer selection
 		es.metrics.RecordLoadBalancerSelection(
 			ctx,
-			es.config.LoadBalancing.Strategy,
+			domain.LoadBalancingStrategy(es.config.Routing.Strategy),
 			backend.URL,
 			time.Since(start),
 		)

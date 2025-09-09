@@ -1,0 +1,76 @@
+# Development - With Auto-Discovery
+# Development setup with Raft storage and mDNS auto-discovery
+
+metadata:
+  nodeId: "vm-proxy-auth-node-1"
+  role: "gateway"
+  environment: "development"
+  region: "local"
+
+logging:
+  level: "debug"
+  format: "pretty"
+
+metrics:
+  enabled: true
+  path: "/metrics"
+
+server:
+  address: "0.0.0.0:8080"
+
+proxy:
+  upstreams:
+    - url: "http://localhost:8428"
+      weight: 1
+  
+  routing:
+    strategy: "round-robin"
+    healthCheck:
+      interval: "20s"
+      timeout: "8s"
+      endpoint: "/health"
+
+auth:
+  jwt:
+    algorithm: "HS256"
+    secret: "dev-secret-key-at-least-32-characters-long-for-hs256"
+    validation:
+      audience: false
+      issuer: false
+
+tenants:
+  mappings:
+    - groups: ["admin"]
+      vmTenants:
+        - account: "0"
+      permissions: ["read", "write"]
+
+storage:
+  type: "raft"
+  raft:
+    bindAddress: "127.0.0.1:9010"
+    dataDir: "./data/raft-node-1"
+    bootstrapExpected: 2
+
+cluster:
+  memberlist:
+    bindAddress: "127.0.0.1:7946"
+    advertiseAddress: "127.0.0.1:7946"
+    gossip:
+      interval: "200ms"
+      nodes: 3
+    probe:
+      interval: "1s"
+      timeout: "500ms"
+    metadata:
+      node_name: "vm-proxy-auth-1"
+    
+  discovery:
+    interval: "15s"
+    
+    mdns:
+      enabled: true
+      serviceName: "_vm-proxy-auth._tcp"
+      domain: "local."
+      hostname: ""  # Uses metadata.nodeId
+      port: 7946

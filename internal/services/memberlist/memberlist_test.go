@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/edelwud/vm-proxy-auth/internal/config"
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/cluster"
 	memberlistpkg "github.com/edelwud/vm-proxy-auth/internal/services/memberlist"
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
@@ -18,37 +18,40 @@ func TestNewMemberlistService(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		config    config.MemberlistSettings
+		config    cluster.MemberlistConfig
 		wantError bool
 	}{
 		{
 			name: "valid_configuration",
-			config: config.MemberlistSettings{
-				BindAddress:    "127.0.0.1",
-				BindPort:       0, // Use random port
-				GossipInterval: 200 * time.Millisecond,
-				GossipNodes:    3,
-				ProbeInterval:  1 * time.Second,
-				ProbeTimeout:   500 * time.Millisecond,
-				Metadata:       map[string]string{"role": "test"},
+			config: cluster.MemberlistConfig{
+				BindAddress: "127.0.0.1:0", // Use random port
+				Gossip: cluster.GossipConfig{
+					Interval: 200 * time.Millisecond,
+					Nodes:    3,
+				},
+				Probe: cluster.ProbeConfig{
+					Interval: 1 * time.Second,
+					Timeout:  500 * time.Millisecond,
+				},
+				Metadata: map[string]string{"role": "test"},
 			},
 			wantError: false,
 		},
 		{
 			name: "with_encryption",
-			config: config.MemberlistSettings{
-				BindAddress:   "127.0.0.1",
-				BindPort:      0, // Use random port
-				EncryptionKey: "test-key-32-bytes-long-1234567890",
-				Metadata:      map[string]string{"role": "secure"},
+			config: cluster.MemberlistConfig{
+				BindAddress: "127.0.0.1:0", // Use random port
+				Peers: cluster.PeersConfig{
+					Encryption: "test-key-32-bytes-long-1234567890",
+				},
+				Metadata: map[string]string{"role": "secure"},
 			},
 			wantError: false,
 		},
 		{
 			name: "default_values",
-			config: config.MemberlistSettings{
-				BindAddress: "127.0.0.1",
-				BindPort:    0, // Use random port
+			config: cluster.MemberlistConfig{
+				BindAddress: "127.0.0.1:0", // Use random port
 			},
 			wantError: false,
 		},
@@ -80,9 +83,8 @@ func TestMemberlistService_StartStop(t *testing.T) {
 	t.Parallel()
 
 	logger := testutils.NewMockLogger()
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 		Metadata:    map[string]string{"role": "test"},
 	}
 
@@ -118,9 +120,8 @@ func TestMemberlistService_GetMethods(t *testing.T) {
 	t.Parallel()
 
 	logger := testutils.NewMockLogger()
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 	}
 
 	service, err := memberlistpkg.NewMemberlistService(config, logger)
@@ -161,9 +162,8 @@ func TestMemberlistService_ClusterFormation(t *testing.T) {
 	logger := testutils.NewMockLogger()
 
 	// Create single service for basic cluster testing
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 		Metadata:    map[string]string{"role": "leader"},
 	}
 
@@ -366,9 +366,8 @@ func TestMemberlistService_RaftIntegration(t *testing.T) {
 	t.Parallel()
 
 	logger := testutils.NewMockLogger()
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 		Metadata:    map[string]string{"role": "test"},
 	}
 
@@ -399,9 +398,8 @@ func TestMemberlistService_NodeMetadataIntegration(t *testing.T) {
 	t.Parallel()
 
 	logger := testutils.NewMockLogger()
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 		Metadata: map[string]string{
 			"region":  "us-west-2",
 			"zone":    "us-west-2a",
@@ -443,9 +441,8 @@ func TestMemberlistService_JoinCluster(t *testing.T) {
 	t.Parallel()
 
 	logger := testutils.NewMockLogger()
-	config := config.MemberlistSettings{
-		BindAddress: "127.0.0.1",
-		BindPort:    0, // Use random port
+	config := cluster.MemberlistConfig{
+		BindAddress: "127.0.0.1:0", // Use random port
 	}
 
 	service, err := memberlistpkg.NewMemberlistService(config, logger)

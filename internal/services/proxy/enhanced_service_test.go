@@ -16,11 +16,25 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/edelwud/vm-proxy-auth/internal/config/modules/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/domain"
-	"github.com/edelwud/vm-proxy-auth/internal/services/health"
-	"github.com/edelwud/vm-proxy-auth/internal/services/proxy"
+	proxyService "github.com/edelwud/vm-proxy-auth/internal/services/proxy"
 	"github.com/edelwud/vm-proxy-auth/internal/testutils"
 )
+
+// createTestBackend creates a test backend that handles both health checks and actual requests.
+func createTestBackend(handler http.HandlerFunc) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthcheck-disabled" {
+			// Health check endpoint
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("OK"))
+			return
+		}
+		// Delegate to actual handler
+		handler(w, r)
+	}))
+}
 
 func createTestRequest(userID string, query string) *domain.ProxyRequest {
 	path := "/api/v1/query"
@@ -49,7 +63,7 @@ func createTestRequest(userID string, query string) *domain.ProxyRequest {
 
 func TestEnhancedService_BasicForwarding(t *testing.T) {
 	// Create test backend
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	backend := createTestBackend(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/api/v1/query", r.URL.Path)
 		assert.Equal(t, "up", r.URL.Query().Get("query"))
 		assert.Equal(t, "1000", r.Header.Get("X-Prometheus-Tenant"))
@@ -60,24 +74,32 @@ func TestEnhancedService_BasicForwarding(t *testing.T) {
 	}))
 	t.Cleanup(func() { backend.Close() })
 
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backend.URL, Weight: 1},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyRoundRobin,
+		Routing: proxy.RoutingConfig{
+			Strategy: "round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           24 * time.Hour, // Effectively disable checks
+				Timeout:            100 * time.Millisecond,
+				Endpoint:           "/healthcheck-disabled",
+				HealthyThreshold:   1,
+				UnhealthyThreshold: 10,
+			},
 		},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval: -1, // Explicitly disable health checking
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 3,
+			Backoff: 100 * time.Millisecond,
 		},
-		Timeout: 5 * time.Second,
 	}
 
 	logger := testutils.NewMockLogger()
 	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	t.Cleanup(func() { service.Close() })
 
@@ -104,7 +126,7 @@ func TestEnhancedService_LoadBalancing_RoundRobin(t *testing.T) {
 	var backends [3]*httptest.Server
 
 	for i := range 3 {
-		backends[i] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		backends[i] = createTestBackend(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			atomic.AddInt32(&requestCounts[i], 1)
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprintf(w, `{"backend":%d}`, i)
@@ -112,17 +134,26 @@ func TestEnhancedService_LoadBalancing_RoundRobin(t *testing.T) {
 		defer backends[i].Close()
 	}
 
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backends[0].URL, Weight: 1},
 			{URL: backends[1].URL, Weight: 1},
 			{URL: backends[2].URL, Weight: 1},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyRoundRobin,
+		Routing: proxy.RoutingConfig{
+			Strategy: "round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           24 * time.Hour, // Effectively disable checks
+				Timeout:            100 * time.Millisecond,
+				Endpoint:           "/healthcheck-disabled",
+				HealthyThreshold:   1,
+				UnhealthyThreshold: 10,
+			},
 		},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval: -1, // Explicitly disable health checking
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 3,
+			Backoff: 100 * time.Millisecond,
 		},
 	}
 
@@ -130,7 +161,7 @@ func TestEnhancedService_LoadBalancing_RoundRobin(t *testing.T) {
 	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	t.Cleanup(func() { service.Close() })
 
@@ -158,7 +189,7 @@ func TestEnhancedService_LoadBalancing_WeightedRoundRobin(t *testing.T) {
 	var backends [2]*httptest.Server
 
 	for i := range 2 {
-		backends[i] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		backends[i] = createTestBackend(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			atomic.AddInt32(&requestCounts[i], 1)
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprintf(w, `{"backend":%d}`, i)
@@ -166,16 +197,25 @@ func TestEnhancedService_LoadBalancing_WeightedRoundRobin(t *testing.T) {
 		defer backends[i].Close()
 	}
 
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backends[0].URL, Weight: 3}, // Should get 3x more requests
 			{URL: backends[1].URL, Weight: 1},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyWeighted,
+		Routing: proxy.RoutingConfig{
+			Strategy: "weighted-round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           24 * time.Hour, // Effectively disable checks
+				Timeout:            100 * time.Millisecond,
+				Endpoint:           "/healthcheck-disabled",
+				HealthyThreshold:   1,
+				UnhealthyThreshold: 10,
+			},
 		},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval: -1, // Explicitly disable health checking
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 3,
+			Backoff: 100 * time.Millisecond,
 		},
 	}
 
@@ -183,7 +223,7 @@ func TestEnhancedService_LoadBalancing_WeightedRoundRobin(t *testing.T) {
 	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	t.Cleanup(func() { service.Close() })
 
@@ -211,7 +251,7 @@ func TestEnhancedService_LoadBalancing_WeightedRoundRobin(t *testing.T) {
 
 func TestEnhancedService_RetryOnFailure(t *testing.T) {
 	var attemptCount int32
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	backend := createTestBackend(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		count := atomic.AddInt32(&attemptCount, 1)
 		if count <= 2 {
 			// Fail first 2 attempts
@@ -224,17 +264,24 @@ func TestEnhancedService_RetryOnFailure(t *testing.T) {
 	}))
 	t.Cleanup(func() { backend.Close() })
 
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backend.URL, Weight: 1},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyRoundRobin,
+		Routing: proxy.RoutingConfig{
+			Strategy: "round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           24 * time.Hour, // Effectively disable checks
+				Timeout:            100 * time.Millisecond,
+				Endpoint:           "/healthcheck-disabled",
+				HealthyThreshold:   1,
+				UnhealthyThreshold: 10,
+			},
 		},
-		MaxRetries:   3,
-		RetryBackoff: 10 * time.Millisecond,
-		HealthCheck: health.CheckerConfig{
-			CheckInterval: -1, // Explicitly disable health checking
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 3,
+			Backoff: 10 * time.Millisecond,
 		},
 	}
 
@@ -242,7 +289,7 @@ func TestEnhancedService_RetryOnFailure(t *testing.T) {
 	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	t.Cleanup(func() { service.Close() })
 
@@ -265,23 +312,30 @@ func TestEnhancedService_RetryOnFailure(t *testing.T) {
 }
 
 func TestEnhancedService_MaxRetriesExceeded(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	backend := createTestBackend(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Always fail
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	t.Cleanup(func() { backend.Close() })
 
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backend.URL, Weight: 1},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyRoundRobin,
+		Routing: proxy.RoutingConfig{
+			Strategy: "round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           24 * time.Hour, // Effectively disable checks
+				Timeout:            100 * time.Millisecond,
+				Endpoint:           "/healthcheck-disabled",
+				HealthyThreshold:   1,
+				UnhealthyThreshold: 10,
+			},
 		},
-		MaxRetries:   2,
-		RetryBackoff: 1 * time.Millisecond,
-		HealthCheck: health.CheckerConfig{
-			CheckInterval: -1, // Explicitly disable health checking
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 2,
+			Backoff: 1 * time.Millisecond,
 		},
 	}
 
@@ -289,7 +343,7 @@ func TestEnhancedService_MaxRetriesExceeded(t *testing.T) {
 	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	t.Cleanup(func() { service.Close() })
 
@@ -306,17 +360,24 @@ func TestEnhancedService_MaxRetriesExceeded(t *testing.T) {
 
 func TestEnhancedService_NoHealthyBackends(t *testing.T) {
 	// Don't start any backends, so no healthy backends available
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: "http://localhost:99999", Weight: 1}, // Non-existent backend
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyRoundRobin,
+		Routing: proxy.RoutingConfig{
+			Strategy: "round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           50 * time.Millisecond,
+				Timeout:            10 * time.Millisecond,
+				Endpoint:           "/health",
+				HealthyThreshold:   1,
+				UnhealthyThreshold: 1, // Mark unhealthy quickly
+			},
 		},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval:      50 * time.Millisecond,
-			Timeout:            10 * time.Millisecond,
-			UnhealthyThreshold: 1, // Mark unhealthy quickly
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 3,
+			Backoff: 100 * time.Millisecond,
 		},
 	}
 
@@ -324,7 +385,7 @@ func TestEnhancedService_NoHealthyBackends(t *testing.T) {
 	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	t.Cleanup(func() { service.Close() })
 
@@ -343,21 +404,30 @@ func TestEnhancedService_NoHealthyBackends(t *testing.T) {
 }
 
 func TestEnhancedService_MaintenanceMode(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	backend := createTestBackend(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"success"}`))
 	}))
 	t.Cleanup(func() { backend.Close() })
 
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backend.URL, Weight: 1},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyRoundRobin,
+		Routing: proxy.RoutingConfig{
+			Strategy: "round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           24 * time.Hour, // Effectively disable checks
+				Timeout:            100 * time.Millisecond,
+				Endpoint:           "/healthcheck-disabled",
+				HealthyThreshold:   1,
+				UnhealthyThreshold: 10,
+			},
 		},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval: -1, // Explicitly disable health checking
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 3,
+			Backoff: 100 * time.Millisecond,
 		},
 	}
 
@@ -365,7 +435,7 @@ func TestEnhancedService_MaintenanceMode(t *testing.T) {
 	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	t.Cleanup(func() { service.Close() })
 
@@ -394,20 +464,29 @@ func TestEnhancedService_MaintenanceMode(t *testing.T) {
 }
 
 func TestEnhancedService_BackendsStatus(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	backend := createTestBackend(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(func() { backend.Close() })
 
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backend.URL, Weight: 2},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyRoundRobin,
+		Routing: proxy.RoutingConfig{
+			Strategy: "round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           24 * time.Hour, // Effectively disable checks
+				Timeout:            100 * time.Millisecond,
+				Endpoint:           "/healthcheck-disabled",
+				HealthyThreshold:   1,
+				UnhealthyThreshold: 10,
+			},
 		},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval: -1, // Explicitly disable health checking
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 3,
+			Backoff: 100 * time.Millisecond,
 		},
 	}
 
@@ -415,7 +494,7 @@ func TestEnhancedService_BackendsStatus(t *testing.T) {
 	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	t.Cleanup(func() { service.Close() })
 
@@ -429,7 +508,7 @@ func TestEnhancedService_BackendsStatus(t *testing.T) {
 
 func TestEnhancedService_ConcurrentRequests(t *testing.T) {
 	var requestCount int32
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	backend := createTestBackend(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt32(&requestCount, 1)
 		// Add small delay to simulate processing
 		time.Sleep(10 * time.Millisecond)
@@ -438,15 +517,24 @@ func TestEnhancedService_ConcurrentRequests(t *testing.T) {
 	}))
 	t.Cleanup(func() { backend.Close() })
 
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backend.URL, Weight: 1},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyRoundRobin,
+		Routing: proxy.RoutingConfig{
+			Strategy: "round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           24 * time.Hour, // Effectively disable checks
+				Timeout:            100 * time.Millisecond,
+				Endpoint:           "/healthcheck-disabled",
+				HealthyThreshold:   1,
+				UnhealthyThreshold: 10,
+			},
 		},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval: -1, // Explicitly disable health checking
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 3,
+			Backoff: 100 * time.Millisecond,
 		},
 	}
 
@@ -454,7 +542,7 @@ func TestEnhancedService_ConcurrentRequests(t *testing.T) {
 	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	t.Cleanup(func() { service.Close() })
 
@@ -492,22 +580,31 @@ func TestEnhancedService_ConcurrentRequests(t *testing.T) {
 }
 
 func TestEnhancedService_ContextCancellation(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	backend := createTestBackend(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Add delay to allow context cancellation
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(func() { backend.Close() })
 
-	config := proxy.EnhancedServiceConfig{
-		Backends: []proxy.BackendConfig{
+	config := proxy.Config{
+		Upstreams: []proxy.UpstreamConfig{
 			{URL: backend.URL, Weight: 1},
 		},
-		LoadBalancing: proxy.LoadBalancingConfig{
-			Strategy: domain.LoadBalancingStrategyRoundRobin,
+		Routing: proxy.RoutingConfig{
+			Strategy: "round-robin",
+			HealthCheck: proxy.HealthCheckConfig{
+				Interval:           24 * time.Hour, // Effectively disable checks
+				Timeout:            100 * time.Millisecond,
+				Endpoint:           "/healthcheck-disabled",
+				HealthyThreshold:   1,
+				UnhealthyThreshold: 10,
+			},
 		},
-		HealthCheck: health.CheckerConfig{
-			CheckInterval: -1, // Explicitly disable health checking
+		Reliability: proxy.ReliabilityConfig{
+			Timeout: 5 * time.Second,
+			Retries: 3,
+			Backoff: 100 * time.Millisecond,
 		},
 	}
 
@@ -515,7 +612,7 @@ func TestEnhancedService_ContextCancellation(t *testing.T) {
 	metrics := &testutils.MockEnhancedMetricsService{}
 
 	stateStorage := testutils.NewMockStateStorage()
-	service, err := proxy.NewEnhancedService(config, logger, metrics, stateStorage)
+	service, err := proxyService.NewEnhancedService(config, logger, metrics, stateStorage)
 	require.NoError(t, err)
 	t.Cleanup(func() { service.Close() })
 
